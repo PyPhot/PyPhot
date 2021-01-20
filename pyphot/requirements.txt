@@ -1,0 +1,10 @@
+# Required packages for pyphot
+#
+# added here, or add them as submodule dependencies in extern/ directory
+#
+# Users
+numpy>=1.14.3
+scipy>=1.1
+matplotlib>=2.0
+astropy>=4.0
+photutils>=0.
