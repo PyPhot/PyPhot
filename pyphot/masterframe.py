@@ -60,13 +60,17 @@ def combineflat(flatfiles, camera, det, masterbiasimg=None, masterdarkimg=None, 
         for iobj in range(len(sources)):
             xx,yy = sources['xcentroid'][iobj].astype(int), sources['ycentroid'][iobj].astype(int)
             # ToDo: this is a hack, using the shape from daofind to mask, seems x and y are reversed
-            array[np.fmax(yy-5,0):np.fmin(yy+5,array.shape[1]), np.fmax(xx-5,0):np.fmin(xx+5,array.shape[0])] = median
-            starmask[np.fmax(yy-5,0):np.fmin(yy+5,array.shape[1]), np.fmax(xx-5,0):np.fmin(xx+5,array.shape[0])] = 1
+            array[np.fmax(yy-10,0):np.fmin(yy+10,array.shape[1]), np.fmax(xx-10,0):np.fmin(xx+10,array.shape[0])] = median
+            starmask[np.fmax(yy-10,0):np.fmin(yy+10,array.shape[1]), np.fmax(xx-10,0):np.fmin(xx+10,array.shape[0])] = 1
         # further mask hot pixels
         hotmask = array > median+5*std
         array[hotmask] = median
+        # further mask zero pixels
+        zeromask = array == 0.
+        array[zeromask] = median
+
         images.append(array/exptime)
-        masks.append(starmask|hotmask)
+        masks.append(starmask|hotmask|zeromask)
 
     images = np.array(images)
     masks = np.array(masks)
