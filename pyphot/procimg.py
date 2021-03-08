@@ -13,7 +13,9 @@ from IPython import embed
 from pyphot import msgs
 from pyphot import utils
 from pyphot import io
+from pyphot import sex, scamp, swarp
 
+from astropy.io import fits
 from astropy.stats import SigmaClip
 from photutils import Background2D
 from photutils import MeanBackground, MedianBackground, SExtractorBackground
@@ -21,7 +23,9 @@ from photutils import MeanBackground, MedianBackground, SExtractorBackground
 def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
             masterillumflatimg=None,
             background='median', boxsize=(50,50), filter_size=(3, 3),
-            maxiter=1, grow=1.5, remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0):
+            mask_vig=False, minimum_vig=0.5, #mask vignetting
+            mask_cr=True, maxiter=1, grow=1.5, remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0,
+            replace=None):
 
     sci_fits_list = []
     wht_fits_list = []
@@ -34,7 +38,7 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
         # prepare output file names
         sci_fits = rootname.replace('.fits','_det{:02d}_sci.fits'.format(det))
         sci_fits_list.append(sci_fits)
-        wht_fits = rootname.replace('.fits','_det{:02d}_wht.fits'.format(det))
+        wht_fits = rootname.replace('.fits','_det{:02d}_sci.weight.fits'.format(det))
         wht_fits_list.append(wht_fits)
         flag_fits = rootname.replace('.fits','_det{:02d}_flag.fits'.format(det))
         flag_fits_list.append(flag_fits)
@@ -44,7 +48,8 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
         else:
             msgs.info('Processing {:}'.format(ifile))
             detector_par, sci_image, header, exptime, gain_image, rn_image = camera.get_rawimage(ifile, det)
-            saturation, nonlinear = detector_par['det{:02d}'.format(det)]['saturation'], detector_par['det{:02d}'.format(det)]['nonlinear']
+            saturation, nonlinear = detector_par['saturation'], detector_par['nonlinear']
+            #saturation, nonlinear = detector_par['det{:02d}'.format(det)]['saturation'], detector_par['det{:02d}'.format(det)]['nonlinear']
             #darkcurr = detector_par['det{:02d}'.format(det)]['darkcurr']
 
             ## ToDo: fix the bpm function
@@ -53,9 +58,11 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             bpm = np.zeros_like(sci_image,dtype=bool)
 
             # CR mask
-            #crmask = lacosmic(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
-            #                  remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
-            crmask = np.zeros_like(sci_image,dtype=bool)
+            if mask_cr:
+                bpm_cr = lacosmic(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
+                                  remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
+            else:
+                bpm_cr = np.zeros_like(sci_image,dtype=bool)
 
             # CCDPROC
             if masterbiasimg is not None:
@@ -68,6 +75,17 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
                 sci_image /= masterillumflatimg
             sci_image *= gain_image
 
+            # mask Vignetting pixels
+            if mask_vig and (masterillumflatimg is not None):
+                bpm_vig = masterillumflatimg<minimum_vig
+            elif mask_vig and (masterpixflatimg is not None):
+                bpm_vig = masterpixflatimg < minimum_vig
+            else:
+                bpm_vig = np.zeros_like(sci_image, dtype=bool)
+
+            # mask nan values
+            bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
+
             ## Sky background subtraction
             sigma_clip = SigmaClip(sigma=sigclip)
             if background == 'median':
@@ -79,6 +97,19 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             bkg = Background2D(sci_image, boxsize, filter_size=filter_size,sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
             sci_image -= bkg.background
 
+            ## ToDo: use the sigma clip for the statistics
+            bpm_all = bpm | bpm_cr | bpm_vig | bpm_nan
+            if replace == 'zero':
+                sci_image[bpm_all] = 0
+            elif replace == 'median':
+                sci_image[bpm_all] = np.median(sci_image[np.invert(bpm_all)])
+            elif replace == 'mean':
+                sci_image[bpm_all] = np.mean(sci_image[np.invert(bpm_all)])
+            elif replace == 'min':
+                sci_image[bpm_all] = np.min(sci_image[np.invert(bpm_all)])
+            elif replace == 'max':
+                sci_image[bpm_all] = np.max(sci_image[np.invert(bpm_all)])
+
             # Generate weight map used for SExtractor and SWarp (WEIGHT_TYPE = MAP_WEIGHT)
             wht_image = 1.0 / bkg.background
 
@@ -87,19 +118,10 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             msgs.info('Science image {:} saved'.format(sci_fits))
             io.save_fits(wht_fits, wht_image, header, 'WeightImage', overwrite=True)
             msgs.info('Weight image {:} saved'.format(wht_fits))
-            flag_image = bpm*np.int(2) + crmask*np.int(4)
+            flag_image = bpm*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
             io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
             msgs.info('Flag image {:} saved'.format(flag_fits))
 
-            ## ToDo: save processed image into Science folder
-            '''
-            from astropy.io import fits
-            primary_hdu = fits.PrimaryHDU(sci_image,header=header)
-            primary_hdu.writeto('test.fits',overwrite=True)
-    
-            primary_hdu = fits.PrimaryHDU(bkg.background_rms,header=header)
-            primary_hdu.writeto('test_rms.fits',overwrite=True)
-            '''
     return sci_fits_list, wht_fits_list, flag_fits_list
 
 

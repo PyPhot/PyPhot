@@ -5,6 +5,7 @@ from pyphot.cameras import camera
 # compiling of all the available cameras below
 from pyphot.cameras import mmt_mmirs
 from pyphot.cameras import keck_nires
+from pyphot.cameras import magellan_imacs
 
 # Build the list of names for the available cameras
 import numpy as np

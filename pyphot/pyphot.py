@@ -14,7 +14,7 @@ from astropy.io import fits
 from configobj import ConfigObj
 
 from pyphot import msgs
-from pyphot import procimg
+from pyphot import procimg, postproc
 from pyphot import sex, scamp, swarp
 from pyphot import query, crossmatch
 from pyphot.par.util import parse_pyphot_file
@@ -23,7 +23,6 @@ from pyphot.metadata import PyPhotMetaData
 from pyphot.cameras.util import load_camera
 from pyphot import masterframe
 
-from IPython import embed
 
 class PyPhot(object):
     """
@@ -185,12 +184,14 @@ class PyPhot(object):
 
         """
         # Validate the parameter set
-        self.par.validate_keys(required=['rdx', 'calibrations', 'scienceframe', 'reduce',
-                                         'flexure'])
+        self.par.validate_keys(required=['rdx', 'calibrations', 'scienceframe', 'postproc'])
         self.tstart = time.time()
 
         # Find the standard frames
         is_standard = self.fitstbl.find_frames('standard')
+
+        # Find the bias frames
+        is_bias = self.fitstbl.find_frames('bias')
 
         # Find the dark frames
         is_dark = self.fitstbl.find_frames('dark')
@@ -237,8 +238,11 @@ class PyPhot(object):
                         if os.path.exists(masterbias_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterbias_name))
                         else:
-                            msgs.work('Build Master Bias')
-                        masterbiasimg = fits.getdata(masterbias_name,1)
+                            grp_bias = frame_indx[is_bias & in_grp]
+                            biasfiles = self.fitstbl.frame_paths(grp_bias)
+                            masterframe.biasframe(biasfiles, self.camera, self.det, masterbias_name,
+                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
+                        masterbiasimg = fits.getdata(masterbias_name,0) ## ToDo: Change 1 to 0
                     else:
                         masterbiasimg = None
 
@@ -253,7 +257,7 @@ class PyPhot(object):
                             darkfiles = self.fitstbl.frame_paths(grp_dark)
                             masterframe.darkframe(darkfiles, self.camera, self.det, masterdark_name, masterbiasimg=masterbiasimg,
                                                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterdarkimg = fits.getdata(masterdark_name, 1)
+                        masterdarkimg = fits.getdata(masterdark_name, 0) ## ToDo: Change 1 to 0
                     else:
                         masterdarkimg = None
 
@@ -269,7 +273,7 @@ class PyPhot(object):
                             masterframe.pixelflatframe(pixflatfiles, self.camera, self.det, masterpixflat_name,
                                                   masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterpixflatimg = fits.getdata(masterpixflat_name, 1)
+                        masterpixflatimg = fits.getdata(masterpixflat_name, 0) ## ToDo: Change 1 to 0
                     else:
                         masterpixflatimg = None
 
@@ -287,7 +291,7 @@ class PyPhot(object):
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                                        masterpixflatimg=masterpixflatimg,
                                                        cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterillumflatimg = fits.getdata(masterillumflat_name, 1)
+                        masterillumflatimg = fits.getdata(masterillumflat_name, 0) ## ToDo: Change 1 to 0
                     else:
                         masterillumflatimg = None
 
@@ -296,124 +300,174 @@ class PyPhot(object):
                     sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(scifiles, self.camera, self.det,
                                     science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                     masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
-                                    background='median', boxsize=(50, 50), filter_size=(3, 3), #ToDo: add to parset
+                                    background=self.par['scienceframe']['process']['background'],
+                                    boxsize=self.par['scienceframe']['process']['boxsize'],
+                                    filter_size=self.par['scienceframe']['process']['filter_size'],
+                                    mask_vig=self.par['scienceframe']['process']['mask_vig'],
+                                    minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
+                                    mask_cr=self.par['scienceframe']['process']['mask_cr'],
                                     maxiter=self.par['scienceframe']['process']['lamaxiter'],
                                     grow=self.par['scienceframe']['process']['grow'],
                                     remove_compact_obj=self.par['scienceframe']['process']['rmcompact'],
                                     sigclip=self.par['scienceframe']['process']['sigclip'],
                                     sigfrac=self.par['scienceframe']['process']['sigfrac'],
-                                    objlim=self.par['scienceframe']['process']['objlim'])
+                                    objlim=self.par['scienceframe']['process']['objlim'],
+                                    replace=self.par['scienceframe']['process']['replace'])
 
-                    quicklook=False
                     detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), self.det)
-                    pixscale = detector_par['det{:02d}'.format(self.det)]['platescale']
+                    #pixscale = detector_par['det{:02d}'.format(self.det)]['platescale']
+                    pixscale = detector_par['platescale']
 
-                    if quicklook:
-                        msgs.warn('This is quick look, skipping individual image calibrations. Go with luck')
+                    ## Astrometry calibration
+                    #if self.par['postproc']['astrometric']['skip_astrometry']:
+                    if True:
+                        msgs.warn('Skipping astrometry calibrations for individual images. Go with luck')
+                        sci_resample_list, wht_resample_list, flag_resample_list = sci_fits_list, wht_fits_list, flag_fits_list
                     else:
-                        ## Calibrate images
-                        ## ToDo: Add parset for the following parameters
-                        ## ToDo: Not sure why, but the scamp fails for MMIRS data, so I will try to resample it first and then do the following
-                        # configuration for the first swarp run
-                        swarpconfig0 ={"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                                       "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N","COMBINE_TYPE": "MEDIAN",
-                                       "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": "NONE"}
-                        # resample science image
-                        swarp.swarpall(sci_fits_list, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
-                                       coaddroot=None, delete=False, log=True)
-                        # resample weight image
-                        #swarp.swarpall(wht_fits_list, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
-                        #               coaddroot=None, delete=False, log=True)
-                        # resample flag image
-                        #swarp.swarpall(flag_fits_list, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
-                        #               coaddroot=None, delete=False, log=True)
+                        msgs.info('Doing the astrometry calibrations for detector {:}'.format(self.det))
+                        sci_resample_list, wht_resample_list, flag_resample_list = postproc.astrometric(
+                                    sci_fits_list, wht_fits_list, flag_fits_list, pixscale,
+                                    science_path=self.science_path,
+                                    detect_thresh=self.par['postproc']['astrometric']['detect_thresh'],
+                                    analysis_thresh=self.par['postproc']['astrometric']['analysis_thresh'],
+                                    detect_minarea=self.par['postproc']['astrometric']['detect_minarea'],
+                                    crossid_radius=self.par['postproc']['astrometric']['crossid_radius'],
+                                    astref_catalog=self.par['postproc']['astrometric']['astref_catalog'],
+                                    astref_band=self.par['postproc']['astrometric']['astref_band'],
+                                    position_maxerr=self.par['postproc']['astrometric']['position_maxerr'],
+                                    pixscale_maxerr=self.par['postproc']['astrometric']['pixscale_maxerr'],
+                                    mosaic_type=self.par['postproc']['astrometric']['mosaic_type'],
+                                    weight_type=self.par['postproc']['astrometric']['weight_type'],
+                                    delete=self.par['postproc']['astrometric']['delete'],
+                                    log=self.par['postproc']['astrometric']['log'])
 
-                        ## remove useless data
-                        sci_fits_list_resample = []
-                        wht_fits_list_resample = []
-                        flag_fits_list_resample = []
-                        ## rename the resampled images
-                        for i in range(len(sci_fits_list)):
-                            os.system('rm {:}'.format(sci_fits_list[i].replace('.fits','.0001.resamp.weight.fits')))
-                            #os.system('rm {:}'.format(wht_fits_list[i].replace('.fits','.0001.resamp.weight.fits')))
-                            #os.system('rm {:}'.format(flag_fits_list[i].replace('.fits','.0001.resamp.weight.fits')))
-                            os.system('mv {:} {:}'.format(sci_fits_list[i].replace('.fits','.0001.resamp.fits'),
-                                                          sci_fits_list[i].replace('.fits','.resamp.fits')))
-                            #os.system('mv {:} {:}'.format(wht_fits_list[i].replace('.fits','.0001.resamp.fits'),
-                            #                              wht_fits_list[i].replace('.fits','.resamp.fits')))
-                            #os.system('mv {:} {:}'.format(flag_fits_list[i].replace('.fits','.0001.resamp.fits'),
-                            #                              flag_fits_list[i].replace('.fits','.resamp.fits')))
-                            sci_fits_list_resample.append(sci_fits_list[i].replace('.fits','.resamp.fits'))
-                            wht_fits_list_resample.append(wht_fits_list[i].replace('.fits', '.resamp.fits'))
-                            flag_fits_list_resample.append(flag_fits_list[i].replace('.fits', '.resamp.fits'))
-
-                        # configuration for the first SExtractor run
-                        #embed()
-
-                        sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                                      "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH":3.0, "ANALYSIS_THRESH":3.0, "DETECT_MINAREA":5}
-                        sexparams0 = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
-                                     'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE','ELLIPTICITY',
-                                     'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER','MAGERR_APER']
-                        sex.sexall(sci_fits_list_resample, task='sex', config=sexconfig0, workdir=self.science_path, params=sexparams0,
-                                   defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=False, log=True)
-
-                        # configuration for the first scamp run
-                        #
-                        scampconfig0 = {"CROSSID_RADIUS": 2.0, "ASTREF_CATALOG": "GAIA-DR2", "ASTREF_BAND": "DEFAULT",
-                                        "POSITION_MAXERR": 0.5, "PIXSCALE_MAXERR":1.1, "MOSAIC_TYPE": "UNCHANGED"}
-                        #scampconfig0 = {"POSITION_MAXERR": 1.0, "POSANGLE_MAXERR": 10.0, "CROSSID_RADIUS": 2.0,
-                        #                "MOSAIC_TYPE": "LOOSE", "SOLVE_PHOTOM": "N",
-                        #                "MAGZERO_OUT": 0.0, "CHECKPLOT_TYPE": "None", "ASTREF_CATALOG": "GAIA-DR2", "ASTREF_BAND": "DEFAULT"}
-                        scamp.scampall(sci_fits_list_resample, config=scampconfig0, workdir=self.science_path, defaultconfig='pyphot',
-                                       delete=False, log=True)
-
-                        # configuration for the first swarp run
-                        swarpconfig0 ={"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                                       "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N","COMBINE_TYPE": "MEDIAN",
-                                       "RESAMPLE_SUFFIX": ".astrometry.fits", "WEIGHT_TYPE": "NONE"}
-                        swarp.swarpall(sci_fits_list_resample, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
-                                       coaddroot=None, delete=False, log=True)
 
                 ## Coadd images target by target
                 coadddir = os.path.join(self.science_path,'Coadd')
-                #if not os.path.exists(coadddir):
-                #    os.makedirs(coadddir)
-                ## Combine images using combid
-                aper = 3.0 # in units of arcsec, ToDo: parset
-                ndet = np.size(detectors)
+                if not os.path.exists(coadddir):
+                    os.makedirs(coadddir)
+                ## Combine images for each combid
                 objids = np.unique(self.fitstbl['comb_id'][grp_science]) ## number of combine groups
                 for objid in objids:
                     grp_iobj = frame_indx[is_science & in_grp & (self.fitstbl['comb_id']==objid)]
                     iobjfiles = self.fitstbl['filename'][grp_iobj]
                     filter_iobj = self.fitstbl['filter'][grp_iobj][0]
-                    coaddroot = self.fitstbl['target'][grp_iobj][0]+'_coadd_combid{:03d}'.format(objid)
+                    coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_combid{:03d}'.format(filter_iobj,objid)
+
+                    # compile the file list
                     nscifits = np.size(iobjfiles)
-                    #calfiles = np.repeat(iobjfiles.data,ndet)
                     scifiles_iobj= []
+                    flagfiles_iobj= []
+                    whtfiles_iobj= []
                     for idet in detectors:
                         for ii in range(nscifits):
-                            iname = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                 '_det{:02d}_sci.resamp.astrometry.fits'.format(idet)))
-                            scifiles_iobj.append(iname)
+                            if self.par['postproc']['astrometric']['skip_astrometry']:
+                                this_sci = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                     '_det{:02d}_sci.fits'.format(idet)))
+                                this_flag = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                     '_det{:02d}_flag.fits'.format(idet)))
+                                this_wht = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                     '_det{:02d}_sci.weight.fits'.format(idet)))
+                            else:
+                                this_sci = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                     '_det{:02d}_sci.resamp.fits'.format(idet)))
+                                this_flag = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                     '_det{:02d}_flag.resamp.fits'.format(idet)))
+                                this_wht = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                     '_det{:02d}_sci.resamp.weight.fits'.format(idet)))
+                            scifiles_iobj.append(this_sci)
+                            flagfiles_iobj.append(this_flag)
+                            whtfiles_iobj.append(this_wht)
 
-                    # configuration for the swarp run
-                    # ToDo: need flag image
-                    msgs.info('Coadding image for {:}'.format(coaddroot))
-                    swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL",
-                                    "PIXELSCALE_TYPE": "MANUAL",
-                                    "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN",
-                                    "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": "NONE"}
-                    swarp.swarpall(scifiles_iobj, config=swarpconfig, workdir=self.science_path, defaultconfig='pyphot',
-                                   coaddroot=coaddroot, delete=True, log=False)
-
-                    # configuration for the sextractor run
-                    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 2.0, "ANALYSIS_THRESH": 2.0,
+                    ## Do the coadding
+                    '''
+                    coadd_file, coadd_wht_file, coadd_flag_file = postproc.coadd(scifiles_iobj, flagfiles_iobj, coaddroot,
+                                                pixscale, self.science_path, coadddir,
+                                                weight_type=self.par['postproc']['coadd']['weight_type'],
+                                                rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
+                                                combine_type=self.par['postproc']['coadd']['combine_type'],
+                                                clip_ampfrac=self.par['postproc']['coadd']['clip_ampfrac'],
+                                                clip_sigma=self.par['postproc']['coadd']['clip_sigma'],
+                                                blank_badpixels=self.par['postproc']['coadd']['blank_badpixels'],
+                                                subtract_back=self.par['postproc']['coadd']['subtract_back'],
+                                                back_type=self.par['postproc']['coadd']['back_type'],
+                                                back_default=self.par['postproc']['coadd']['back_default'],
+                                                back_size=self.par['postproc']['coadd']['back_size'],
+                                                back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
+                                                back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
+                                                delete=self.par['postproc']['coadd']['delete'],
+                                                log=self.par['postproc']['coadd']['log'])
+                    '''
+                    from IPython import embed
+                    embed()
+                    aper = np.array([1.0, 2.0, 3.0, 4.0, 5.0])  # diameter in units of arcsec, ToDo: parset
+                    ## configuration for the sextractor run
+                    # configuration for the first SExtractor run
+                    sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
+                                  'ERRBWIN_IMAGE',
+                                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE',
+                                  'ELLIPTICITY',
+                                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER(5)',
+                                  'MAGERR_APER(5)',
+                                  'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
+                    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_NAME": "dummy.cat",
+                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
                                   "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale}
-                    sex.sexone(os.path.join(coadddir,coaddroot+'.fits'), task='sex', config=sexconfig, workdir=coadddir, params=None,
-                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
+                    sex.sexone(os.path.join(coadddir,coaddroot+'_sci.fits'),
+                               flag_image=os.path.join(coadddir,coaddroot+'_flag.fits'),
+                               weight_image=os.path.join(coadddir,coaddroot+'_sci.weight.fits'),
+                               task='sex', config=sexconfig, workdir=coadddir, params=sexparams,
+                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
 
+
+                    ## Estimate the magnitude limit
+                    zp = 24.1 # zeropoint for the NB919, calibrated with Legacy survey z-band
+                    from astropy.stats import sigma_clipped_stats
+                    from photutils import CircularAperture, aperture_photometry
+                    par = fits.open(os.path.join(coadddir, coaddroot+'_sci.fits'))
+                    mean, median, rms = sigma_clipped_stats(par[0].data[2000:7000,2000:7000], sigma=3.0)
+                    positions = np.zeros((5000,2))
+                    positions[:,0] = np.random.randint(2000,7000,5000)
+                    positions[:,1] = np.random.randint(2000,7000,5000)
+                    aperture = CircularAperture(positions, r=1.0/pixscale)
+                    maglim1 = zp - 2.5 * np.log10(np.sqrt(rms ** 2 * aperture.area) * 5.0)
+                    msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from variance map is {:0.2f}'.format(maglim1))
+                    phot_table = aperture_photometry(par[0].data, aperture)
+                    maglim2 = zp-2.5*np.log10(phot_table['aperture_sum'].data * 5.0)
+                    mean, median, std = sigma_clipped_stats(maglim2[~np.isnan(maglim2)], sigma=3.0)
+                    msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from random positions is {:0.2f}'.format(mean))
+
+                    ## Source detection with DAOFIND
+                    from photutils import DAOStarFinder
+                    daofind = DAOStarFinder(fwhm=1.0/pixscale, threshold=10.*rms)
+                    sources = daofind(par[0].data)
+
+                    ## Compute a variance map
+                    from astropy.stats import SigmaClip
+                    from photutils import Background2D, MedianBackground
+                    bkg_estimator = MedianBackground()
+                    sigma_clip = SigmaClip(sigma=3.0)
+
+                    par = fits.open(os.path.join(coadddir, coaddroot+'_sci.fits'))
+                    bkg = Background2D(par[0].data, (100,100), filter_size=(3, 3), sigma_clip=sigma_clip,
+                                       bkg_estimator=bkg_estimator)
+                    var_image = np.power(bkg.background_rms, 2)
+                    par[0].data = bkg.background
+                    par.writeto(os.path.join(coadddir, coaddroot+'_sci.bkg.fits'),overwrite=True)
+                    par[0].data = var_image
+                    par.writeto(os.path.join(coadddir, coaddroot+'_sci.var.fits'),overwrite=True)
+
+                    sexconfig = {"CHECKIMAGE_TYPE": "OBJECTS", "WEIGHT_TYPE": "MAP_VAR", "CATALOG_NAME": "dummy.cat",
+                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
+                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "BACKPHOTO_TYPE":"GLOBAL",
+                                  "BACK_SIZE": 100}
+                    sex.sexone(os.path.join(coadddir,coaddroot+'_sci.fits'),
+                               flag_image=os.path.join(coadddir,coaddroot+'_flag.fits'),
+                               weight_image=os.path.join(coadddir,coaddroot+'_sci.var.fits'),
+                               task='sex', config=sexconfig, workdir=coadddir, params=sexparams,
+                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
+
+                    '''
                     # refine the astrometry with the coadded image against with GAIA
                     scampconfig = {"CROSSID_RADIUS": 2.0, "ASTREF_CATALOG": "GAIA-DR2", "ASTREF_BAND": "DEFAULT",
                                     "PIXSCALE_MAXERR": 1.1, "MOSAIC_TYPE": "UNCHANGED"}
@@ -424,6 +478,18 @@ class PyPhot(object):
                     sex.sexone(os.path.join(coadddir,coaddroot+'.resamp.fits'), task='sex', config=sexconfig, workdir=coadddir, params=None,
                                defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
 
+                    # rerun the SExtractor with the zero point
+                    zp = 24.1 # zeropoint for the NB919, calibrated with Legacy survey z-band
+                    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
+                                 "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 2.0, "ANALYSIS_THRESH": 2.0,
+                                 "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "MAG_ZEROPOINT": zp}
+                    sex.sexone(os.path.join(coadddir, coaddroot + '.resamp.fits'), task='sex', config=sexconfig, workdir=coadddir,
+                               params=None, defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
+
+                    '''
+
+
+                '''
                     # calibrate it against with 2MASS
                     sextable = fits.getdata(os.path.join(coadddir,coaddroot+'.resamp.cat'), 2)
                     rasex, decsex= sextable['ALPHA_J2000'], sextable['DELTA_J2000']
@@ -455,7 +521,7 @@ class PyPhot(object):
                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "MAG_ZEROPOINT": zp}
                     sex.sexone(os.path.join(coadddir, coaddroot + '.resamp.fits'), task='sex', config=sexconfig, workdir=coadddir,
                                params=None, defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
-
+                '''
         # Finish
         self.print_end_time()
 

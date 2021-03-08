@@ -170,13 +170,15 @@ class ProcessImagesPar(ParSet):
     def __init__(self, trim=None, apply_gain=None, orient=None,
                  overscan_method=None, overscan_par=None,
                  combine=None, satpix=None,
+                 mask_vig=None, minimum_vig=None,
                  mask_cr=None, clip=None,
-                 cr_sigrej=None, n_lohi=None, replace=None, lamaxiter=None, grow=None,
+                 n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  comb_sigrej=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
                  use_pixelflat=None, use_illumflat=None, use_specillum=None,
-                 use_pattern=None, spat_flexure_correct=None):
+                 use_pattern=None,
+                 background=None, boxsize=None, filter_size=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -252,7 +254,6 @@ class ProcessImagesPar(ParSet):
         descr['use_specillum'] = 'Use the relative spectral illumination profiles to correct the spectral' \
                                  'illumination profile of each slit. This is primarily used for IFUs.'
 
-
         defaults['combine'] = 'weightmean'
         options['combine'] = ProcessImagesPar.valid_combine_methods()
         dtypes['combine'] = str
@@ -274,25 +275,24 @@ class ProcessImagesPar(ParSet):
         descr['satpix'] = 'Handling of saturated pixels.  Options are: {0}'.format(
                                        ', '.join(options['satpix']))
 
-        # TODO -- Make CR Parameters their own ParSet
-        defaults['mask_cr'] = False
-        dtypes['mask_cr'] = bool
-        descr['mask_cr'] = 'Identify CRs and mask them'
+        # Vignetting parameters
+        defaults['mask_vig'] = False
+        dtypes['mask_vig'] = bool
+        descr['mask_vig'] = 'Identify Vignetting pixels and mask them'
 
-        defaults['cr_sigrej'] = 20.0
-        dtypes['cr_sigrej'] = [int, float]
-        descr['cr_sigrej'] = 'Sigma level to reject cosmic rays (<= 0.0 means no CR removal)'
+        defaults['minimum_vig'] = 0.5
+        dtypes['minimum_vig'] = [int, float]
+        descr['minimum_vig'] = 'Sigma level to reject vignetted pixels'
 
+        # CR parameters
         defaults['n_lohi'] = [0, 0]
         dtypes['n_lohi'] = list
         descr['n_lohi'] = 'Number of pixels to reject at the lowest and highest ends of the ' \
                           'distribution; i.e., n_lohi = low, high.  Use None for no limit.'
 
-        defaults['replace'] = 'maxnonsat'
-        options['replace'] = ProcessImagesPar.valid_rejection_replacements()
-        dtypes['replace'] = str
-        descr['replace'] = 'If all pixels are rejected, replace them using this method.  ' \
-                           'Options are: {0}'.format(', '.join(options['replace']))
+        defaults['mask_cr'] = False
+        dtypes['mask_cr'] = bool
+        descr['mask_cr'] = 'Identify CRs and mask them'
 
         defaults['lamaxiter'] = 1
         dtypes['lamaxiter'] = int
@@ -319,6 +319,28 @@ class ProcessImagesPar(ParSet):
         dtypes['objlim'] = [int, float]
         descr['objlim'] = 'Object detection limit in LA cosmics routine'
 
+        ## bad pixel replacement methods
+        defaults['replace'] = 'None'
+        options['replace'] = ProcessImagesPar.valid_rejection_replacements()
+        dtypes['replace'] = str
+        descr['replace'] = 'If all pixels are rejected, replace them using this method.  ' \
+                           'Options are: {0}'.format(', '.join(options['replace']))
+
+        ## Background methods
+        defaults['background'] = 'median'
+        options['background'] = ProcessImagesPar.valid_background_methods()
+        dtypes['background'] = str
+        descr['background'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
+                                       ', '.join(options['background']))
+
+        defaults['boxsize'] = (50,50)
+        dtypes['boxsize'] = [tuple, list]
+        descr['boxsize'] = 'Boxsize for background estimation'
+
+        defaults['filter_size'] = (3,3)
+        dtypes['filter_size'] = [tuple, list]
+        descr['filter_size'] = 'Filter size for background estimation'
+
         # Instantiate the parameter set
         super(ProcessImagesPar, self).__init__(list(pars.keys()),
                                                values=list(pars.values()),
@@ -335,10 +357,10 @@ class ProcessImagesPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['trim', 'apply_gain', 'orient',
                    'use_biasimage', 'use_pattern', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
-                   'spat_flexure_correct', 'use_illumflat', 'use_specillum', 'use_pixelflat',
-                   'combine', 'satpix', 'cr_sigrej', 'n_lohi', 'mask_cr',
-                   'replace', 'lamaxiter', 'grow', 'clip', 'comb_sigrej',
-                   'rmcompact', 'sigclip', 'sigfrac', 'objlim']
+                   'use_illumflat', 'use_specillum', 'use_pixelflat',
+                   'combine', 'satpix', 'n_lohi', 'replace', 'mask_vig','minimum_vig',
+                   'mask_cr','lamaxiter', 'grow', 'clip', 'comb_sigrej','rmcompact', 'sigclip', 'sigfrac', 'objlim',
+                   'background','boxsize','filter_size']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -364,6 +386,13 @@ class ProcessImagesPar(ParSet):
         return ['median', 'weightmean' ]
 
     @staticmethod
+    def valid_background_methods():
+        """
+        Return the valid methods for combining frames.
+        """
+        return ['median', 'mean', 'sextractor' ]
+
+    @staticmethod
     def valid_saturation_handling():
         """
         Return the valid approachs to handling saturated pixels.
@@ -375,7 +404,7 @@ class ProcessImagesPar(ParSet):
         """
         Return the valid replacement methods for rejected pixels.
         """
-        return [ 'min', 'max', 'mean', 'median', 'weightmean', 'maxnonsat' ]
+        return ['zero', 'min', 'max', 'mean', 'median', 'None']
 
     def validate(self):
         """
@@ -709,6 +738,280 @@ class FluxCalibratePar(ParSet):
         """
         pass
 
+class AstrometricPar(ParSet):
+    """
+    A parameter set holding the arguments for how to perform the flux
+    calibration.
+
+    For a table with the current keywords, defaults, and descriptions,
+    see :ref:`pyphotpar`.
+    """
+    def __init__(self, skip_astrometry=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
+                 crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
+                 astref_catalog=None, astref_band=None, weight_type=None, delete=None, log=None):
+
+        # Grab the parameter names and values from the function
+        # arguments
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        pars = OrderedDict([(k,values[k]) for k in args[1:]])
+
+        # Initialize the other used specifications for this parameter
+        # set
+        defaults = OrderedDict.fromkeys(pars.keys())
+        options = OrderedDict.fromkeys(pars.keys())
+        dtypes = OrderedDict.fromkeys(pars.keys())
+        descr = OrderedDict.fromkeys(pars.keys())
+
+        defaults['skip_astrometry'] = False
+        dtypes['skip_astrometry'] = bool
+        descr['skip_astrometry'] = 'Skip the astrometry for individual detector image?'
+
+        defaults['weight_type'] = 'MAP_WEIGHT'
+        options['weight_type'] = AstrometricPar.valid_weight_type()
+        dtypes['weight_type'] = str
+        descr['weight_type'] = 'Background Options are: {0}'.format(', '.join(options['weight_type']))
+
+        defaults['detect_thresh'] = 3.0
+        dtypes['detect_thresh'] = [int, float]
+        descr['detect_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for detection'
+
+        defaults['analysis_thresh'] = 3.0
+        dtypes['analysis_thresh'] = [int, float]
+        descr['analysis_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for analysis'
+
+        defaults['detect_minarea'] = 5
+        dtypes['detect_minarea'] = [int, float]
+        descr['detect_minarea'] = 'min. # of pixels above threshold'
+
+        defaults['crossid_radius'] = 2.
+        dtypes['crossid_radius'] = [int, float]
+        descr['crossid_radius'] = 'Cross-id initial radius (arcsec)'
+
+        defaults['position_maxerr'] = 0.5
+        dtypes['position_maxerr'] = [int, float]
+        descr['position_maxerr'] = 'Max positional uncertainty (arcmin)'
+
+        defaults['pixscale_maxerr'] = 1.1
+        dtypes['pixscale_maxerr'] = [int, float]
+        descr['pixscale_maxerr'] = 'Max scale-factor uncertainty'
+
+        defaults['mosaic_type'] = 'UNCHANGED'
+        options['mosaic_type'] = AstrometricPar.valid_mosaic_methods()
+        dtypes['mosaic_type'] = str
+        descr['mosaic_type'] = 'Reference catalog  Options are: {0}'.format(
+                                       ', '.join(options['mosaic_type']))
+
+        defaults['astref_catalog'] = 'GAIA-DR2'
+        options['astref_catalog'] = AstrometricPar.valid_catalog_methods()
+        dtypes['astref_catalog'] = str
+        descr['astref_catalog'] = 'Reference catalog  Options are: {0}'.format(
+                                       ', '.join(options['astref_catalog']))
+
+        defaults['astref_band'] = 'DEFAULT'
+        dtypes['astref_band'] = str
+        descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
+
+        defaults['delete'] = False
+        dtypes['delete'] = bool
+        descr['delete'] = 'Deletec the configuration files for SExtractor, SCAMP, and SWARP?'
+
+        defaults['log'] = True
+        dtypes['log'] = bool
+        descr['log'] = 'Logging for SExtractor, SCAMP, and SWARP'
+
+        # Instantiate the parameter set
+        super(AstrometricPar, self).__init__(list(pars.keys()),
+                                                 values=list(pars.values()),
+                                                 defaults=list(defaults.values()),
+                                                 dtypes=list(dtypes.values()),
+                                                 descr=list(descr.values()))
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, cfg):
+        k = numpy.array([*cfg.keys()])
+        parkeys = ['skip_astrometry', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
+                   'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
+                   'weight_type', 'delete', 'log']
+
+        badkeys = numpy.array([pk not in parkeys for pk in k])
+        if numpy.any(badkeys):
+            raise ValueError('{0} not recognized key(s) for AstrometricPar.'.format(k[badkeys]))
+
+        kwargs = {}
+        for pk in parkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
+        return cls(**kwargs)
+
+    @staticmethod
+    def valid_weight_type():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['BACKGROUND', 'MAP_RMS', 'MAP_VARIANCE', 'MAP_WEIGHT']
+
+    @staticmethod
+    def valid_mosaic_methods():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['UNCHANGED', 'SAME_CRVAL', 'SHARE_PROJAXIS','FIX_FOCALPLANE','LOOSE']
+
+    @staticmethod
+    def valid_catalog_methods():
+        """
+        Return the valid methods for reference catalog.
+        """
+        return ['NONE', 'FILE', 'USNO-A2','USNO-B1','GSC-2.3','TYCHO-2','UCAC-4','URAT-1','NOMAD-1','PPMX',
+                'CMC-15','2MASS', 'DENIS-3', 'SDSS-R9','SDSS-R12','IGSL','GAIA-DR1','GAIA-DR2','GAIA-EDR3',
+                'PANSTARRS-1','ALLWISE']
+
+    def validate(self):
+        """
+        Check the parameters are valid for the provided method.
+        """
+        pass
+
+class CoaddPar(ParSet):
+    """
+    A parameter set holding the arguments for how to perform the flux
+    calibration.
+
+    For a table with the current keywords, defaults, and descriptions,
+    see :ref:`pyphotpar`.
+    """
+    def __init__(self, skip_coadd=None, weight_type=None, rescale_weights=None, combine_type=None,
+                 clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
+                 back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
+                 delete=None, log=None):
+
+        # Grab the parameter names and values from the function
+        # arguments
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        pars = OrderedDict([(k,values[k]) for k in args[1:]])
+
+        # Initialize the other used specifications for this parameter
+        # set
+        defaults = OrderedDict.fromkeys(pars.keys())
+        options = OrderedDict.fromkeys(pars.keys())
+        dtypes = OrderedDict.fromkeys(pars.keys())
+        descr = OrderedDict.fromkeys(pars.keys())
+
+        defaults['skip_coadd'] = False
+        dtypes['skip_coadd'] = bool
+        descr['skip_coadd'] = 'Skip Coadding science targets?'
+
+        defaults['weight_type'] = 'MAP_WEIGHT'
+        options['weight_type'] = CoaddPar.valid_weight_type()
+        dtypes['weight_type'] = str
+        descr['weight_type'] = 'Background Options are: {0}'.format(', '.join(options['weight_type']))
+
+        defaults['rescale_weights'] = False
+        dtypes['rescale_weights'] = bool
+        descr['rescale_weights'] = 'Rescale input weights/variances?'
+
+        defaults['combine_type'] = 'MEDIAN'
+        options['combine_type'] = CoaddPar.valid_combine_type()
+        dtypes['combine_type'] = str
+        descr['combine_type'] = 'Background Options are: {0}'.format(', '.join(options['combine_type']))
+
+        defaults['clip_ampfrac'] = 0.3
+        dtypes['clip_ampfrac'] = [int, float]
+        descr['clip_ampfrac'] = 'Fraction of flux variation allowed with clipping'
+
+        defaults['clip_sigma'] = 4.0
+        dtypes['clip_sigma'] = [int, float]
+        descr['clip_sigma'] = 'RMS error multiple variation allowed with clipping'
+
+        defaults['blank_badpixels'] = False
+        dtypes['blank_badpixels'] = bool
+        descr['blank_badpixels'] = 'Set to 0 pixels having a weight of 0?'
+
+        defaults['subtract_back'] = False
+        dtypes['subtract_back'] = bool
+        descr['subtract_back'] = 'Subtract skybackground with Swarp before coadding?'
+
+        defaults['back_type'] = 'AUTO'
+        options['back_type'] = CoaddPar.valid_back_type()
+        dtypes['back_type'] = str
+        descr['back_type'] = 'Background Options are: {0}'.format(', '.join(options['back_type']))
+
+        defaults['back_default'] = 0.0
+        dtypes['back_default'] = [int, float]
+        descr['back_default'] = 'Default background value in MANUAL'
+
+        defaults['back_size'] = 200
+        dtypes['back_size'] = [int, float]
+        descr['back_size'] = 'Default background value in MANUAL'
+
+        defaults['back_filtersize'] = 3
+        dtypes['back_filtersize'] = [int, float]
+        descr['back_filtersize'] = 'Background map filter range (meshes)'
+
+        defaults['back_filtthresh'] = 0.0
+        dtypes['back_filtthresh'] = [int, float]
+        descr['back_filtthresh'] = 'Threshold above which the background map filter operates'
+
+        defaults['delete'] = False
+        dtypes['delete'] = bool
+        descr['delete'] = 'Delete the configuration files for SWARP?'
+
+        defaults['log'] = True
+        dtypes['log'] = bool
+        descr['log'] = 'Logging for SWARP'
+
+        # Instantiate the parameter set
+        super(CoaddPar, self).__init__(list(pars.keys()),
+                                                 values=list(pars.values()),
+                                                 defaults=list(defaults.values()),
+                                                 dtypes=list(dtypes.values()),
+                                                 descr=list(descr.values()))
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, cfg):
+        k = numpy.array([*cfg.keys()])
+        parkeys = ['skip_coadd', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
+                   'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
+                   'back_filtthresh', 'delete', 'log']
+
+        badkeys = numpy.array([pk not in parkeys for pk in k])
+        if numpy.any(badkeys):
+            raise ValueError('{0} not recognized key(s) for AstrometricPar.'.format(k[badkeys]))
+
+        kwargs = {}
+        for pk in parkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
+        return cls(**kwargs)
+
+    @staticmethod
+    def valid_weight_type():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['BACKGROUND', 'MAP_RMS', 'MAP_VARIANCE', 'MAP_WEIGHT']
+
+    @staticmethod
+    def valid_back_type():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['AUTO', 'MANUAL']
+
+    @staticmethod
+    def valid_combine_type():
+        """
+        Return the valid methods for reference catalog.
+        """
+        return ['MEDIAN', 'AVERAGE', 'MIN','MAX','WEIGHTED','CLIPPED','CHI-OLD','CHI-MODE','CHI-MEAN','SUM',
+                'WEIGHTED_WEIGHT','MEDIAN_WEIGHT', 'AND', 'NAND','OR','NOR']
+
+    def validate(self):
+        """
+        Check the parameters are valid for the provided method.
+        """
+        pass
+
 class ReduxPar(ParSet):
     """
     The parameter set used to hold arguments for functionality relevant
@@ -826,7 +1129,7 @@ class ReduxPar(ParSet):
         pass
 
 
-class ReducePar(ParSet):
+class PostProcPar(ParSet):
     """
     The parameter set used to hold arguments for sky subtraction, object
     finding and extraction in the Reduce class
@@ -835,8 +1138,7 @@ class ReducePar(ParSet):
     see :ref:`pyphotpar`.
     """
 
-    def __init__(self, findobj=None, skysub=None, extraction=None,
-                 cube=None, trim_edge=None, slitmask=None):
+    def __init__(self, astrometric=None, coadd=None, photometric=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -850,12 +1152,16 @@ class ReducePar(ParSet):
         dtypes = OrderedDict.fromkeys(pars.keys())
         descr = OrderedDict.fromkeys(pars.keys())
 
-        defaults['skysub'] = SkySubPar()
-        dtypes['skysub'] = [ ParSet, dict ]
-        descr['skysub'] = 'Parameters for sky subtraction algorithms'
+        defaults['astrometric'] = AstrometricPar()
+        dtypes['astrometric'] = [ParSet, dict]
+        descr['astrometric'] = 'Parameters for solving astrometric solutions.'
+
+        defaults['coadd'] = CoaddPar()
+        dtypes['coadd'] = [ParSet, dict]
+        descr['coadd'] = 'Parameters for coadding science images.'
 
         # Instantiate the parameter set
-        super(ReducePar, self).__init__(list(pars.keys()),
+        super(PostProcPar, self).__init__(list(pars.keys()),
                                              values=list(pars.values()),
                                              defaults=list(defaults.values()),
                                              options=list(options.values()),
@@ -867,7 +1173,7 @@ class ReducePar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['findobj', 'skysub', 'extraction', 'cube', 'trim_edge', 'slitmask']
+        allkeys = ['astrometric', 'coadd', 'photometric']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))
@@ -1158,7 +1464,7 @@ class PyPhotPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, rdx=None, calibrations=None, scienceframe=None, reduce=None,
+    def __init__(self, rdx=None, calibrations=None, scienceframe=None, postproc=None,
                  flexure=None, fluxcalib=None, coadd1d=None, coadd2d=None, sensfunc=None, tellfit=None):
 
         # Grab the parameter names and values from the function
@@ -1191,10 +1497,9 @@ class PyPhotPar(ParSet):
         dtypes['scienceframe'] = [ ParSet, dict ]
         descr['scienceframe'] = 'The frames and combination rules for the science observations'
 
-        defaults['reduce'] = ReducePar()
-        dtypes['reduce'] = [ParSet, dict]
-        descr['reduce'] = 'Parameters determining sky-subtraction, object finding, and ' \
-                                'extraction'
+        defaults['postproc'] = PostProcPar()
+        dtypes['postproc'] = [ParSet, dict]
+        descr['postproc'] = 'Parameters for astrometric, coadding, and photometry.'
 
         # Flux calibration is turned OFF by default
         defaults['fluxcalib'] = FluxCalibratePar()
@@ -1403,7 +1708,7 @@ class PyPhotPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['rdx', 'calibrations', 'scienceframe', 'reduce', 'flexure', 'fluxcalib',
+        allkeys = ['rdx', 'calibrations', 'scienceframe', 'postproc', 'flexure', 'fluxcalib',
                    'coadd1d', 'coadd2d', 'sensfunc', 'baseprocess', 'tellfit']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
@@ -1420,8 +1725,8 @@ class PyPhotPar(ParSet):
         pk = 'scienceframe'
         kwargs[pk] = FrameGroupPar.from_dict('science', cfg[pk]) if pk in k else None
 
-        pk = 'reduce'
-        kwargs[pk] = ReducePar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'postproc'
+        kwargs[pk] = PostProcPar.from_dict(cfg[pk]) if pk in k else None
 
         # Allow flux calibration to be turned on using cfg['rdx']
         pk = 'fluxcalib'

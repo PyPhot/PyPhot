@@ -68,6 +68,8 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
     configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
 
     ## append your configuration
+    ## ToDO: Not sure why set the weightout_name does not work
+    #config['WEIGHTOUT_NAME'] = imgname.replace('.fits','.wht.fits')
     configapp = get_config(config=config)
 
     comd = ["swarp"] + [os.path.join(workdir, imgname)] + configcomd + configapp + \
@@ -88,8 +90,8 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         logfile.close()
         msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
         if delete:
-            os.system("rm " + os.paht.join(workdir,"*.swarp"))
-            os.system("rm " + os.paht.join(workdir,"swarp.xml"))
+            os.system("rm " + os.path.join(workdir,"*.swarp"))
+            os.system("rm " + os.path.join(workdir,"swarp.xml"))
 
 
 def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddroot=None, delete=False, log=False):
@@ -119,7 +121,7 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddro
         configapp = get_config(config=config)
         comd = ["swarp"] + ["@" + os.path.join(workdir, "tmplist.txt")] + configcomd + configapp + \
                ["-COMBINE"] + ["Y"] + ["-IMAGEOUT_NAME"] + [os.path.join(coadddir, coaddroot + ".fits")] + \
-               ["-WEIGHTOUT_NAME"] + [os.path.join(coadddir, coaddroot + ".wht.fits")] + \
+               ["-WEIGHTOUT_NAME"] + [os.path.join(coadddir, coaddroot + ".weight.fits")] + \
                ["-RESAMPLE_DIR"] + [coadddir] + ["-XML_NAME"] + [os.path.join(coadddir, coaddroot + ".swarp.xml")]
 
         # Set the max number of opened files by your computer
@@ -127,7 +129,7 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddro
 
         p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = p.communicate()
-        os.system("rm " + workdir + "tmplist.txt")
+        os.system("rm {:}".format(os.path.join(workdir, "tmplist.txt")))
 
         if log:
             logfile = open(os.path.join(coadddir, coaddroot+".scamp.log"), "w")
@@ -140,6 +142,10 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddro
             logfile.write("\n")
             logfile.close()
             msgs.info("Processing log generated: " + os.path.join(coadddir, coaddroot+".scamp.log"))
+            if delete:
+                os.system("rm " + os.path.join(workdir, "*.swarp"))
+                os.system("rm " + os.path.join(workdir, "swarp.xml"))
+
     else:
         for imgname in imglist:
             swarpone(imgname,config=config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log)

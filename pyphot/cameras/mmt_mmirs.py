@@ -110,7 +110,8 @@ class MMTMMIRSCamera(camera.Camera):
             datasec=np.atleast_1d('[:,:]'),
             oscansec=np.atleast_1d('[:,:]')
         )
-        return dict(det01=detector_dict)
+        #return dict(det01=detector_dict)
+        return detector_dict
 
     @classmethod
     def default_pyphot_par(cls):
@@ -136,9 +137,6 @@ class MMTMMIRSCamera(camera.Camera):
         par['calibrations']['standardframe']['exprng'] = [None, 2]
         par['calibrations']['darkframe']['exprng'] = [None, None]
         par['scienceframe']['exprng'] = [2, None]
-
-        # dark
-        par['calibrations']['darkframe']['process']['apply_gain'] = True
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0

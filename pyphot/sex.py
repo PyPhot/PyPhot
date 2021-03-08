@@ -1,5 +1,5 @@
 import os,re,subprocess
-
+import numpy as np
 from pyphot import msgs
 from pkg_resources import resource_filename
 config_dir = resource_filename('pyphot', '/config/')
@@ -9,8 +9,8 @@ defaultparams = ['NUMBER','X_IMAGE', 'Y_IMAGE','XWIN_IMAGE','YWIN_IMAGE','ERRAWI
                  'KRON_RADIUS','FWHM_IMAGE','CLASS_STAR','FLAGS',
                  'BACKGROUND','FLUX_MAX','MAG_ISO','MAGERR_ISO',
                  'FLUX_ISO','FLUXERR_ISO','MAG_AUTO','MAGERR_AUTO','FLUX_AUTO','FLUXERR_AUTO','MAG_BEST',
-                 'MAGERR_BEST','FLUX_BEST','FLUXERR_BEST','FLUX_RADIUS','MAG_APER(1)','MAGERR_APER(1)',
-                 'FLUX_APER(1)','FLUXERR_APER(1)']
+                 'MAGERR_BEST','FLUX_BEST','FLUXERR_BEST','FLUX_RADIUS','MAG_APER(5)','MAGERR_APER(5)',
+                 'FLUX_APER(5)','FLUXERR_APER(5)']
 
 def get_version(task='sex'):
     """
@@ -84,7 +84,11 @@ def get_config(config=None, workdir="./", dual=False):
         configapp = []
         for (key, value) in config.items():
             configapp.append("-" + str(key))
-            configapp.append(str(value).replace(' ', ''))
+            if (key == 'PHOT_APERTURES') and (np.size(config['PHOT_APERTURES'])>1):
+                separator = ','
+                configapp.append(separator.join(config['PHOT_APERTURES'].astype('str')))
+            else:
+                configapp.append(str(value).replace(' ', ''))
 
     return configapp
 
@@ -145,7 +149,8 @@ def get_params(params=None, workdir='./'):
     return comd
 
 
-def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot', conv=None, nnw=None, dual=False,
+def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
+           conv=None, nnw=None, dual=False, flag_image=None, weight_image=None,
            delete=True, log=False):
 
     ## Get the version of your SExtractor
@@ -169,6 +174,11 @@ def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultc
         config = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
                   "CATALOG_TYPE": "FITS_LDAC", "BACK_TYPE ": "MANUAL", "BACK_VALUE": 0.0}
     config['CATALOG_NAME'] = imgname[:-5]+'.cat'
+    if flag_image is not None:
+        config['FLAG_IMAGE'] = flag_image
+    if weight_image is not None:
+        config['WEIGHT_IMAGE'] = weight_image
+
     configapp = get_config(config=config, workdir=workdir, dual=dual)
 
     if dual:
@@ -195,12 +205,25 @@ def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultc
         logfile.close()
         msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5] + ".sex.log"))
     if delete:
-        os.system("rm " + workdir + "*.sex")
+        os.system("rm {:}".format(os.path.join(workdir,"*.sex")))
 
 def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
-           conv=None, nnw=None, dual=False, delete=True, log=False):
+           conv=None, nnw=None, dual=False, flag_image_list=None, weight_image_list=None, delete=True, log=False):
 
-    for imgname in imglist:
+    if flag_image_list is not None:
+        assert len(imglist) == len(flag_image_list), "flag_image_list should have the same length with imglist"
+    if weight_image_list is not None:
+        assert len(imglist) == len(weight_image_list), "weight_image_list should have the same length with imglist"
+
+    for ii, imgname in enumerate(imglist):
+        if flag_image_list is not None:
+            flag_image = flag_image_list[ii]
+        else:
+            flag_image = None
+        if weight_image_list is not None:
+            weight_image = weight_image_list[ii]
+        else:
+            weight_image = None
         sexone(imgname, task=task, config=config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
-               nnw=nnw, dual=dual, delete=delete, log=log)
+               nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log)
 

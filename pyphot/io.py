@@ -48,16 +48,17 @@ def initialize_header(hdr=None, primary=False):
 
 def save_fits(fitsname, data, header, img_type, overwrite=True):
 
-    #hdu = fits.PrimaryHDU(data, header=header)
-    #hdu.writeto(fitsname, overwrite=overwrite)
 
-
-    # primary Header
+    # Add some Header card
     hdr = initialize_header(hdr=None, primary=True)
     hdr['IMGTYP'] = (img_type, 'PyPhot image type')
-    primary_hdu = fits.PrimaryHDU(header=hdr)
+    for i in range(len(hdr)):
+        header.append(hdr.cards[i])
+
+    hdu = fits.PrimaryHDU(data, header=header)
+    hdu.writeto(fitsname, overwrite=overwrite)
 
     # Image header
-    img_hdu = fits.ImageHDU(data, header=header)
-    hdulist = fits.HDUList([primary_hdu,img_hdu])
-    hdulist.writeto(fitsname,overwrite=overwrite)
+    #img_hdu = fits.ImageHDU(data, header=header)
+    #hdulist = fits.HDUList([primary_hdu,img_hdu])
+    #hdulist.writeto(fitsname,overwrite=overwrite)
