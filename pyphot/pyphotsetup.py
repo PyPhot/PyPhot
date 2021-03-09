@@ -360,7 +360,7 @@ class PyPhotSetup:
 
     # TODO: Check if user_header_id is ever actually used.
     def run(self, setup_only=False, use_header_id=False, sort_dir=None,
-            write_bkg_pairs=False, clean_config=True):
+            clean_config=True):
         """
         Once instantiated, this is the main method used to construct the
         object.
@@ -396,10 +396,6 @@ class PyPhotSetup:
                 in the metadata table (:attr:`fitstbl`).
             sort_dir (:obj:`str`, optional):
                 The directory to put the '.sorted' file.
-            write_bkg_pairs (:obj:`bool`, optional):
-                Include columns with the (unassigned) background
-                image pairs. This is a convenience so that users can
-                more easily add/edit the background pair ID numbers.
             clean_config (:obj:`bool`, optional):
                 Remove files with metadata that indicate an
                 instrument configuration that ``PyPhot`` cannot
@@ -440,7 +436,7 @@ class PyPhotSetup:
         # Assign frames to calibration groups
         self.fitstbl.set_calibration_groups() #global_frames=['bias', 'dark'])
 
-        # Set default comb_id
+        # Set default coadd_id
         self.fitstbl.set_combination_groups()
 
         # TODO: Are we planning to do this?
@@ -455,7 +451,7 @@ class PyPhotSetup:
                                 else pyphot_file.replace('.pyphot', '.sorted')
             if sort_dir is not None:
                 sorted_file = os.path.join(sort_dir, os.path.split(sorted_file)[1])
-            self.fitstbl.write_sorted(sorted_file, write_bkg_pairs=write_bkg_pairs)
+            self.fitstbl.write_sorted(sorted_file)
             msgs.info("Wrote sorted file data to {:s}".format(sorted_file))
 
         else:

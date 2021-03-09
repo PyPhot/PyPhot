@@ -109,7 +109,7 @@ class PyPhotMetaData:
             self.merge(usrdata)
 
         # Impose types on specific columns
-        self._impose_types(['comb_id', 'bkg_id'], [int, int])
+        self._impose_types(['coadd_id'], [int])
 
         # Initialize internal attributes
         self.configs = None
@@ -319,7 +319,7 @@ class PyPhotMetaData:
             - sets all the configurations to the provided `setup`
             - assigns all frames to a single calibration group, if the
               'calib' column does not exist
-            - if the 'comb_id' column does not exist, this sets the
+            - if the 'coadd_id' column does not exist, this sets the
               combination groups to be either undefined or to be unique
               for each science or standard frame, see
               :func:`set_combination_groups`.
@@ -1213,15 +1213,13 @@ class PyPhotMetaData:
         msgs.info("Typing completed!")
         return self.set_frame_types(type_bits, merge=merge)
 
-    def set_pyphot_cols(self, write_bkg_pairs=False):
+    def set_pyphot_cols(self):
         """
         Generate the list of columns to be included in the fitstbl
         (nearly the complete list).
 
         Args:
-            write_bkg_pairs (:obj:`bool`, optional):
-                Add additional ``PyPhot`` columns for calib, comb_id
-                and bkg_id
+                Add additional ``PyPhot`` columns for calib and coadd_id
 
         Returns:
             `numpy.ndarray`_: Array of columns to be used in the fits
@@ -1232,10 +1230,9 @@ class PyPhotMetaData:
 
         # comb, bkg columns
         # TODO -- SHOULD BE RENAMED TO write_extras
-        if write_bkg_pairs:
-            for key in ['calib', 'comb_id', 'bkg_id']:
-                if key not in columns:
-                    columns += [key]
+        for key in ['calib', 'coadd_id']:
+            if key not in columns:
+                columns += [key]
 
         # Take only those present
         output_cols = np.array(columns)
@@ -1253,20 +1250,17 @@ class PyPhotMetaData:
         groups to the set of objects (science or standard frames) to a
         unique integer.
 
-        If the 'comb_id' or 'bkg_id' columns do not exist, they're set
-        to -1.
+        If the 'coadd_id' column does not exist, they're set to -1.
 
         Args:
             assign_objects (:obj:`bool`, optional):
-                If all of 'comb_id' values are less than 0 (meaning
+                If all of 'coadd_id' values are less than 0 (meaning
                 they're unassigned), the combination groups are set to
                 be unique for each standard and science frame.
         """
-        if 'comb_id' not in self.keys():
-            self['comb_id'] = -1
-        if 'bkg_id' not in self.keys():
-            self['bkg_id'] = -1
-        if assign_objects and np.all(self['comb_id'] < 0):
+        if 'coadd_id' not in self.keys():
+            self['coadd_id'] = -1
+        if assign_objects and np.all(self['coadd_id'] < 0):
             # find_frames will throw an exception if framebit is not
             # set...
             sci_std_idx = np.where(np.any([self.find_frames('science'),
@@ -1275,10 +1269,9 @@ class PyPhotMetaData:
             targets = np.unique(self['target'][sci_std_idx])
             for ii, itarget in enumerate(targets):
                 this_idx = np.intersect1d(sci_std_idx, np.where(self['target']==itarget))
-                self['comb_id'][this_idx] = ii+1
-            #self['comb_id'][sci_std_idx] = np.arange(len(sci_std_idx), dtype=int) + 1
+                self['coadd_id'][this_idx] = ii+1
 
-    def write_sorted(self, ofile, overwrite=True, ignore=None, write_bkg_pairs=False):
+    def write_sorted(self, ofile, overwrite=True, ignore=None):
         """
         Write the sorted file.
 
@@ -1310,7 +1303,7 @@ class PyPhotMetaData:
             msgs.error('{0} already exists.  Use ovewrite=True to overwrite.'.format(ofile))
 
         # Grab output columns
-        output_cols = self.set_pyphot_cols(write_bkg_pairs=write_bkg_pairs)
+        output_cols = self.set_pyphot_cols()
 
         cfgs = self.unique_configurations(copy=ignore is not None)
         if ignore is not None:
@@ -1341,8 +1334,7 @@ class PyPhotMetaData:
         ff.close()
 
 
-    def write_pyphot(self, output_path=None, cfg_lines=None,
-                     write_bkg_pairs=False, configs=None):
+    def write_pyphot(self, output_path=None, cfg_lines=None, configs=None):
         """
         Write a pyphot file in data-table format.
 
@@ -1362,11 +1354,6 @@ class PyPhotMetaData:
                 The list of configuration lines to include in the file.
                 If None are provided, the vanilla configuration is
                 included.
-            write_bkg_pairs (:obj:`bool`, optional):
-                When constructing the
-                :class:`pyphot.metadata.PyPhotMetaData` object, include
-                two columns called `comb_id` and `bkg_id` that identify
-                object and background frame pairs.  
             configs (:obj:`str`, :obj:`list`, optional):
                 One or more strings used to select the configurations
                 to include in the returned objects. If ``'all'``,
@@ -1401,7 +1388,7 @@ class PyPhotMetaData:
             msgs.error('No setups to write!')
 
         # Grab output columns
-        output_cols = self.set_pyphot_cols(write_bkg_pairs=write_bkg_pairs)
+        output_cols = self.set_pyphot_cols()
 
         # Write the pyphot files
         ofiles = [None]*len(cfg_keys)

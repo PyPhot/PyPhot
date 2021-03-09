@@ -811,11 +811,11 @@ class AstrometricPar(ParSet):
         dtypes['astref_band'] = str
         descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
 
-        defaults['delete'] = False
+        defaults['delete'] = True
         dtypes['delete'] = bool
         descr['delete'] = 'Deletec the configuration files for SExtractor, SCAMP, and SWARP?'
 
-        defaults['log'] = True
+        defaults['log'] = False
         dtypes['log'] = bool
         descr['log'] = 'Logging for SExtractor, SCAMP, and SWARP'
 
@@ -1025,7 +1025,7 @@ class ReduxPar(ParSet):
     see :ref:`pyphotpar`.
     """
     def __init__(self, camera=None, detnum=None, sortroot=None, calwin=None, scidir=None,
-                 qadir=None, redux_path=None, ignore_bad_headers=None, slitspatnum=None):
+                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, slitspatnum=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1081,6 +1081,10 @@ class ReduxPar(ParSet):
         dtypes['scidir'] = str
         descr['scidir'] = 'Directory relative to calling directory to write science files.'
 
+        defaults['coadddir'] = 'Coadd'
+        dtypes['coadddir'] = str
+        descr['coadddir'] = 'Directory relative to calling directory to write science files.'
+
         defaults['qadir'] = 'QA'
         dtypes['qadir'] = str
         descr['qadir'] = 'Directory relative to calling directory to write quality ' \
@@ -1105,7 +1109,7 @@ class ReduxPar(ParSet):
         k = numpy.array([*cfg.keys()])
 
         # Basic keywords
-        parkeys = [ 'camera', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir',
+        parkeys = [ 'camera', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
                     'redux_path', 'ignore_bad_headers', 'slitspatnum']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])

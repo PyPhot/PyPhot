@@ -89,19 +89,20 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         logfile.write("\n")
         logfile.close()
         msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
-        if delete:
-            os.system("rm " + os.path.join(workdir,"*.swarp"))
+    if delete:
+        os.system("rm " + os.path.join(workdir,"*.swarp"))
+        if os.path.exists(os.path.join(workdir,"swarp.xml")):
             os.system("rm " + os.path.join(workdir,"swarp.xml"))
 
 
-def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddroot=None, delete=False, log=False):
+def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None, delete=False, log=False):
 
     if coaddroot is not None:
 
-        if not os.path.exists(os.path.join(workdir, "Coadd")):
-            os.mkdir(os.path.join(workdir, "Coadd"))
-        coadddir = os.path.join(workdir, "Coadd")
-
+        if coadddir is None:
+            coadddir = os.path.join(workdir, "Coadd")
+        if not os.path.exists(coadddir):
+            os.mkdir(coadddir)
         msgs.info("Coadded images are stored at {:}".format(coadddir))
 
         ## Generate a tmp list to store the imagename with path
@@ -142,8 +143,9 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddro
             logfile.write("\n")
             logfile.close()
             msgs.info("Processing log generated: " + os.path.join(coadddir, coaddroot+".scamp.log"))
-            if delete:
-                os.system("rm " + os.path.join(workdir, "*.swarp"))
+        if delete:
+            os.system("rm " + os.path.join(workdir, "*.swarp"))
+            if os.path.exists(os.path.join(workdir, "swarp.xml")):
                 os.system("rm " + os.path.join(workdir, "swarp.xml"))
 
     else:

@@ -8,6 +8,7 @@ Main driver class for PyPhot run
 import time
 import os
 import numpy as np
+from astropy import wcs
 from astropy import stats
 from astropy.io import fits
 
@@ -133,18 +134,21 @@ class PyPhot(object):
         # Set paths
         self.calibrations_path = os.path.join(self.par['rdx']['redux_path'], self.par['calibrations']['master_dir'])
 
+        if self.qa_path is not None and not os.path.isdir(self.qa_path):
+            os.makedirs(self.qa_path)
         if self.calibrations_path is not None and not os.path.isdir(self.calibrations_path):
             os.makedirs(self.calibrations_path)
         if self.science_path is not None and not os.path.isdir(self.science_path):
             os.makedirs(self.science_path)
-        if self.qa_path is not None and not os.path.isdir(self.qa_path):
-            os.makedirs(self.qa_path)
+        if self.coadd_path is not None and not os.path.isdir(self.coadd_path):
+            os.makedirs(self.coadd_path)
 
         # Report paths
         msgs.info('Setting reduction path to {0}'.format(self.par['rdx']['redux_path']))
+        msgs.info('Quality assessment plots output to: {0}'.format(self.qa_path))
         msgs.info('Master calibration data output to: {0}'.format(self.calibrations_path))
         msgs.info('Science data output to: {0}'.format(self.science_path))
-        msgs.info('Quality assessment plots output to: {0}'.format(self.qa_path))
+        msgs.info('Coadded data output to: {0}'.format(self.coadd_path))
         # TODO: Is anything written to the qa dir or only to qa/PNGs?
         # Should we have separate calibration and science QA
         # directories?
@@ -169,6 +173,11 @@ class PyPhot(object):
     def qa_path(self):
         """Return the path to the top-level QA directory."""
         return os.path.join(self.par['rdx']['redux_path'], self.par['rdx']['qadir'])
+
+    @property
+    def coadd_path(self):
+        """Return the path to the top-level QA directory."""
+        return os.path.join(self.par['rdx']['redux_path'], self.par['rdx']['coadddir'])
 
     def build_qa(self):
         """
@@ -342,14 +351,10 @@ class PyPhot(object):
                                     log=self.par['postproc']['astrometric']['log'])
 
 
-                ## Coadd images target by target
-                coadddir = os.path.join(self.science_path,'Coadd')
-                if not os.path.exists(coadddir):
-                    os.makedirs(coadddir)
-                ## Combine images for each combid
-                objids = np.unique(self.fitstbl['comb_id'][grp_science]) ## number of combine groups
+                ## Coadd images target by target, combine images based on coadd_id
+                objids = np.unique(self.fitstbl['coadd_id'][grp_science]) ## number of combine groups
                 for objid in objids:
-                    grp_iobj = frame_indx[is_science & in_grp & (self.fitstbl['comb_id']==objid)]
+                    grp_iobj = frame_indx[is_science & in_grp & (self.fitstbl['coadd_id']==objid)]
                     iobjfiles = self.fitstbl['filename'][grp_iobj]
                     filter_iobj = self.fitstbl['filter'][grp_iobj][0]
                     coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_combid{:03d}'.format(filter_iobj,objid)
@@ -382,7 +387,7 @@ class PyPhot(object):
                     ## Do the coadding
                     '''
                     coadd_file, coadd_wht_file, coadd_flag_file = postproc.coadd(scifiles_iobj, flagfiles_iobj, coaddroot,
-                                                pixscale, self.science_path, coadddir,
+                                                pixscale, self.science_path, self.coadd_path,
                                                 weight_type=self.par['postproc']['coadd']['weight_type'],
                                                 rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
                                                 combine_type=self.par['postproc']['coadd']['combine_type'],
@@ -398,44 +403,100 @@ class PyPhot(object):
                                                 delete=self.par['postproc']['coadd']['delete'],
                                                 log=self.par['postproc']['coadd']['log'])
                     '''
+
+                    ## detection with photoutils
+                    data = fits.getdata(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
+                    flag = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_flag.fits'))
+                    mask = flag>0.
+                    header = fits.getheader(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
+                    wcs_info = wcs.WCS(header)
+                    effective_gain = header['EXPTIME']
+
+                    ## ToDo: parset
+                    ## background parameters
+                    back_nsigma = 3.
+                    back_maxiters = 10
+                    back_type = 'Median'
+                    back_rms_type = 'Std'
+                    back_filter = (200, 200)
+                    back_filter_size = (3,3)
+
+                    ## detection parameters
+                    nsigma = 1.5 # how many sigma
+                    npixels = 3 # Let’s find sources that have 3 connected pixels that are each greater than the
+                                # corresponding pixel-wise threshold level defined above
+                                # (i.e., 1.5 sigma per pixel above the background noise)
+
+                    fwhm = 5 # seeing in units of pixel
+                    nlevels = 32
+                    contrast = 0.001
+
+                    ## source properties
+                    morp_filter=True # whether you want to use the kernel filter when measuring morphology and centroid
+                                      # If set true, it should be similar with SExtractor. False gives a better morphology
+
+                    phot_apertures = [1.0, 2.0, 3.0, 4.0, 5.0]
+
+                    phot_table = postproc.detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=mask,
+                                                 effective_gain=effective_gain, nsigma=nsigma, npixels=npixels,
+                                                 fwhm=fwhm, nlevels=nlevels, contrast=contrast,
+                                                 back_nsigma=back_nsigma, back_maxiters=back_maxiters, back_type=back_type,
+                                                 back_rms_type=back_rms_type, back_filter=back_filter,
+                                                 back_filter_size=back_filter_size, morp_filter=morp_filter,
+                                                 phot_apertures=phot_apertures)
+                    phot_table.write(os.path.join(self.coadd_path, coaddroot + '_sci.cat.fits'), overwrite=True)
                     from IPython import embed
                     embed()
-                    aper = np.array([1.0, 2.0, 3.0, 4.0, 5.0])  # diameter in units of arcsec, ToDo: parset
-                    ## configuration for the sextractor run
-                    # configuration for the first SExtractor run
-                    sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
-                                  'ERRBWIN_IMAGE',
-                                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE',
-                                  'ELLIPTICITY',
-                                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER(5)',
-                                  'MAGERR_APER(5)',
-                                  'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
-                    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_NAME": "dummy.cat",
-                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
-                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale}
-                    sex.sexone(os.path.join(coadddir,coaddroot+'_sci.fits'),
-                               flag_image=os.path.join(coadddir,coaddroot+'_flag.fits'),
-                               weight_image=os.path.join(coadddir,coaddroot+'_sci.weight.fits'),
-                               task='sex', config=sexconfig, workdir=coadddir, params=sexparams,
-                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
 
 
-                    ## Estimate the magnitude limit
-                    zp = 24.1 # zeropoint for the NB919, calibrated with Legacy survey z-band
+
+
+
+
+
+
+
+
+
+
+
+                    ## Estimate Map rms
+                    zp = 24.1
                     from astropy.stats import sigma_clipped_stats
                     from photutils import CircularAperture, aperture_photometry
-                    par = fits.open(os.path.join(coadddir, coaddroot+'_sci.fits'))
-                    mean, median, rms = sigma_clipped_stats(par[0].data[2000:7000,2000:7000], sigma=3.0)
+                    mean, median, std = sigma_clipped_stats(data[flag==0.], sigma=3.0, maxiters=10)
                     positions = np.zeros((5000,2))
                     positions[:,0] = np.random.randint(2000,7000,5000)
                     positions[:,1] = np.random.randint(2000,7000,5000)
                     aperture = CircularAperture(positions, r=1.0/pixscale)
                     maglim1 = zp - 2.5 * np.log10(np.sqrt(rms ** 2 * aperture.area) * 5.0)
-                    msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from variance map is {:0.2f}'.format(maglim1))
+                    msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from variance map is {:0.2f}'.format(rms))
                     phot_table = aperture_photometry(par[0].data, aperture)
                     maglim2 = zp-2.5*np.log10(phot_table['aperture_sum'].data * 5.0)
                     mean, median, std = sigma_clipped_stats(maglim2[~np.isnan(maglim2)], sigma=3.0)
                     msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from random positions is {:0.2f}'.format(mean))
+
+
+
+                    ## detection with SExtractor
+                    aper = np.array([1.0, 2.0, 3.0, 4.0, 5.0])  # diameter in units of arcsec, ToDo: parset
+                    ## configuration for the sextractor run
+                    # configuration for the first SExtractor run
+                    sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
+                                  'ERRBWIN_IMAGE', 'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE',
+                                  'ISOAREA_IMAGE', 'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO',
+                                  'FLUXERR_AUTO', 'MAG_APER({:})'.format(len(aper)), 'MAGERR_APER({:})'.format(len(aper)),
+                                  'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
+                    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_NAME": "dummy.cat",
+                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
+                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale}
+                    sex.sexone(os.path.join(self.coadd_path,coaddroot+'_sci.fits'),
+                               flag_image=os.path.join(self.coadd_path,coaddroot+'_flag.fits'),
+                               weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.weight.fits'),
+                               task='sex', config=sexconfig, workdir=self.coadd_path, params=sexparams,
+                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
+
+
 
                     ## Source detection with DAOFIND
                     from photutils import DAOStarFinder
@@ -448,34 +509,34 @@ class PyPhot(object):
                     bkg_estimator = MedianBackground()
                     sigma_clip = SigmaClip(sigma=3.0)
 
-                    par = fits.open(os.path.join(coadddir, coaddroot+'_sci.fits'))
+                    par = fits.open(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
                     bkg = Background2D(par[0].data, (100,100), filter_size=(3, 3), sigma_clip=sigma_clip,
                                        bkg_estimator=bkg_estimator)
                     var_image = np.power(bkg.background_rms, 2)
                     par[0].data = bkg.background
-                    par.writeto(os.path.join(coadddir, coaddroot+'_sci.bkg.fits'),overwrite=True)
+                    par.writeto(os.path.join(self.coadd_path, coaddroot+'_sci.bkg.fits'),overwrite=True)
                     par[0].data = var_image
-                    par.writeto(os.path.join(coadddir, coaddroot+'_sci.var.fits'),overwrite=True)
+                    par.writeto(os.path.join(self.coadd_path, coaddroot+'_sci.var.fits'),overwrite=True)
 
                     sexconfig = {"CHECKIMAGE_TYPE": "OBJECTS", "WEIGHT_TYPE": "MAP_VAR", "CATALOG_NAME": "dummy.cat",
                                   "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
                                   "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "BACKPHOTO_TYPE":"GLOBAL",
                                   "BACK_SIZE": 100}
-                    sex.sexone(os.path.join(coadddir,coaddroot+'_sci.fits'),
-                               flag_image=os.path.join(coadddir,coaddroot+'_flag.fits'),
-                               weight_image=os.path.join(coadddir,coaddroot+'_sci.var.fits'),
-                               task='sex', config=sexconfig, workdir=coadddir, params=sexparams,
+                    sex.sexone(os.path.join(self.coadd_path,coaddroot+'_sci.fits'),
+                               flag_image=os.path.join(self.coadd_path,coaddroot+'_flag.fits'),
+                               weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.var.fits'),
+                               task='sex', config=sexconfig, workdir=self.coadd_path, params=sexparams,
                                defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
 
                     '''
                     # refine the astrometry with the coadded image against with GAIA
                     scampconfig = {"CROSSID_RADIUS": 2.0, "ASTREF_CATALOG": "GAIA-DR2", "ASTREF_BAND": "DEFAULT",
                                     "PIXSCALE_MAXERR": 1.1, "MOSAIC_TYPE": "UNCHANGED"}
-                    scamp.scampone(os.path.join(coadddir,coaddroot+'.fits'), config=scampconfig, workdir=coadddir, defaultconfig='pyphot',
+                    scamp.scampone(os.path.join(self.coadd_path,coaddroot+'.fits'), config=scampconfig, workdir=self.coadd_path, defaultconfig='pyphot',
                                    delete=False, log=True)
-                    swarp.swarpone(os.path.join(coadddir,coaddroot+'.fits'), config=swarpconfig, workdir=coadddir, defaultconfig='pyphot',
+                    swarp.swarpone(os.path.join(self.coadd_path,coaddroot+'.fits'), config=swarpconfig, workdir=self.coadd_path, defaultconfig='pyphot',
                                    delete=True, log=False)
-                    sex.sexone(os.path.join(coadddir,coaddroot+'.resamp.fits'), task='sex', config=sexconfig, workdir=coadddir, params=None,
+                    sex.sexone(os.path.join(self.coadd_path,coaddroot+'.resamp.fits'), task='sex', config=sexconfig, workdir=self.coadd_path, params=None,
                                defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
 
                     # rerun the SExtractor with the zero point
@@ -483,7 +544,7 @@ class PyPhot(object):
                     sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 2.0, "ANALYSIS_THRESH": 2.0,
                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "MAG_ZEROPOINT": zp}
-                    sex.sexone(os.path.join(coadddir, coaddroot + '.resamp.fits'), task='sex', config=sexconfig, workdir=coadddir,
+                    sex.sexone(os.path.join(self.coadd_path, coaddroot + '.resamp.fits'), task='sex', config=sexconfig, workdir=self.coadd_path,
                                params=None, defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
 
                     '''
@@ -491,7 +552,7 @@ class PyPhot(object):
 
                 '''
                     # calibrate it against with 2MASS
-                    sextable = fits.getdata(os.path.join(coadddir,coaddroot+'.resamp.cat'), 2)
+                    sextable = fits.getdata(os.path.join(self.coadd_path,coaddroot+'.resamp.cat'), 2)
                     rasex, decsex= sextable['ALPHA_J2000'], sextable['DELTA_J2000']
                     magsex, magerrsex = sextable['MAG_AUTO'],sextable['MAGERR_AUTO']
                     possex = np.zeros((len(rasex), 2))
@@ -519,7 +580,7 @@ class PyPhot(object):
                     sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 2.0, "ANALYSIS_THRESH": 2.0,
                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "MAG_ZEROPOINT": zp}
-                    sex.sexone(os.path.join(coadddir, coaddroot + '.resamp.fits'), task='sex', config=sexconfig, workdir=coadddir,
+                    sex.sexone(os.path.join(self.coadd_path, coaddroot + '.resamp.fits'), task='sex', config=sexconfig, workdir=self.coadd_path,
                                params=None, defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
                 '''
         # Finish

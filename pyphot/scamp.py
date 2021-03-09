@@ -90,9 +90,9 @@ def scampone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         logfile.write("\n")
         logfile.close()
         msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".scamp.log"))
-        if delete:
-            os.system("rm " + os.path.join(workdir,"*.scamp"))
-            os.system("rm " + "*.ps")
+    if delete:
+        os.system("rm " + os.path.join(workdir,"*.scamp"))
+        os.system("rm " + "*.ps")
 
 def scampall(imglist, config=None, workdir='./', defaultconfig='pyphot', delete=False, log=True):
 

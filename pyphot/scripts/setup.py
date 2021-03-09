@@ -37,8 +37,6 @@ def parse_args(options=None, return_parser=False):
                              'write all unique configurations identifed, use \'all\', otherwise '
                              'provide the list of configuration letters; e.g., \'A,B\' or '
                              '\'B,D,E\' or \'E\'.')
-    parser.add_argument('-b', '--background', default=False, action='store_true',
-                        help='Include the background-pair columns for the user to edit')
     parser.add_argument('-v', '--verbosity', type=int, default=2,
                         help='Level of verbosity from 0 to 2.')
 
@@ -71,11 +69,10 @@ def main(args):
     ps = PyPhotSetup.from_file_root(args.root, args.camera, extension=args.extension,
                                     output_path=sort_dir)
     # Run the setup
-    ps.run(setup_only=True, sort_dir=sort_dir, write_bkg_pairs=args.background)
+    ps.run(setup_only=True, sort_dir=sort_dir)
 
     # Use PyPhotMetaData to write the complete PyPhot file
     if args.cfg_split is not None:
         ps.fitstbl.write_pyphot(args.output_path, cfg_lines=ps.user_cfg,
-                                write_bkg_pairs=args.background,
                                 configs=[item.strip() for item in args.cfg_split.split(',')])
 
