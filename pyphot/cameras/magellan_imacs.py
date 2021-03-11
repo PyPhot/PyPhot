@@ -164,7 +164,7 @@ class MagellanIMACSCamera(camera.Camera):
         w = wcs.WCS(naxis=2)
         w.wcs.crpix = [crpix1, crpix2]
         w.wcs.cdelt = np.array([cdelt1, cdelt2])
-        w.wcs.crval = [head1['RA-D']+head1['CHOFFX']/3600., head1['DEC-D']-head1['CHOFFY']/3600.]
+        w.wcs.crval = [head1['RA-D']+head1['CHOFFX']/np.cos(head1['DEC-D']/180.*np.pi)/3600., head1['DEC-D']-head1['CHOFFY']/3600.]
         w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
         header_wcs = w.to_header()
         for i in range(len(header_wcs)):
@@ -332,16 +332,19 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
 
         # astrometry
         par['postproc']['astrometric']['skip_astrometry'] = False
+        par['postproc']['astrometric']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometric']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometric']['detect_thresh'] = 10
+        par['postproc']['astrometric']['analysis_thresh'] = 10
+        par['postproc']['astrometric']['detect_minarea'] = 7
+        par['postproc']['astrometric']['crossid_radius'] = 5
         par['postproc']['astrometric']['delete'] = True
-        par['postproc']['astrometric']['log'] = False
+        par['postproc']['astrometric']['log'] = True
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['standardframe']['exprng'] = [None, 10]
         par['calibrations']['darkframe']['exprng'] = [None, None]
         par['scienceframe']['exprng'] = [10, None]
-
-
 
         return par
 

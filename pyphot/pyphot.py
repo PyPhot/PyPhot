@@ -76,7 +76,7 @@ class PyPhot(object):
         self.pyphot_file = pyphot_file
         
         self.msgs_reset()
-        
+
         # Load
         cfg_lines, data_files, frametype, usrdata, setups \
                 = parse_pyphot_file(pyphot_file, runtime=True)
@@ -336,7 +336,7 @@ class PyPhot(object):
                         msgs.info('Doing the astrometry calibrations for detector {:}'.format(self.det))
                         sci_resample_list, wht_resample_list, flag_resample_list = postproc.astrometric(
                                     sci_fits_list, wht_fits_list, flag_fits_list, pixscale,
-                                    science_path=self.science_path,
+                                    science_path=self.science_path, qa_path=self.qa_path,
                                     task=self.par['rdx']['sextractor'],
                                     detect_thresh=self.par['postproc']['astrometric']['detect_thresh'],
                                     analysis_thresh=self.par['postproc']['astrometric']['analysis_thresh'],
@@ -406,6 +406,9 @@ class PyPhot(object):
                                                 delete=self.par['postproc']['coadd']['delete'],
                                                 log=self.par['postproc']['coadd']['log'])
 
+                    from IPython import embed
+                    embed()
+
                     ## Detection
                     if self.par['postproc']['detection']['detection_method'] == 'Photutils':
                         # detection with photoutils
@@ -429,7 +432,7 @@ class PyPhot(object):
                                                      back_type=self.par['postproc']['detection']['back_type'],
                                                      back_rms_type=self.par['postproc']['detection']['back_rms_type'],
                                                      back_filter=self.par['postproc']['detection']['back_size'],
-                                                     back_filter_size=self.par['postproc']['detection']['back_filter_size'],
+                                                     back_filter_size=self.par['postproc']['detection']['back_filtersize'],
                                                      morp_filter=self.par['postproc']['detection']['morp_filter'],
                                                      phot_apertures=self.par['postproc']['detection']['phot_apertures'])
                         phot_table.write(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'), overwrite=True)
@@ -452,7 +455,7 @@ class PyPhot(object):
                                      "BACK_TYPE": self.par['postproc']['detection']['back_type'],
                                      "BACK_VALUE": self.par['postproc']['detection']['back_default'],
                                      "BACK_SIZE": self.par['postproc']['detection']['back_size'],
-                                     "BACK_FILTERSIZE": self.par['postproc']['detection']['back_filter_size'],
+                                     "BACK_FILTERSIZE": self.par['postproc']['detection']['back_filtersize'],
                                      "BACKPHOTO_TYPE": self.par['postproc']['detection']['backphoto_type'],
                                      "BACKPHOTO_THICK": self.par['postproc']['detection']['backphoto_thick'],
                                      "WEIGHT_TYPE": self.par['postproc']['detection']['weight_type'],

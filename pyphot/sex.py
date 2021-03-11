@@ -115,7 +115,7 @@ def get_conv(conv=None, workdir='./'):
     if conv == None:
         os.system("cp " + os.path.join(config_dir,"sex.conv") + ' ' + os.path.join(workdir,"conv.sex"))
         msgs.info("conv.sex using 3x3 ``all-ground'' convolution mask with FWHM = 2 pixels")
-    elif conv == "995":
+    elif conv == "sex995":
         os.system("cp " + os.path.join(config_dir, "sex995.conv") + ' ' + os.path.join(workdir, "conv.sex"))
         msgs.info("conv.sex using 9x9 convolution mask of a gaussian PSF with FWHM = 5.0 pixels")
     else:

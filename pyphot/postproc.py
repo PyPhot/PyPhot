@@ -20,7 +20,7 @@ from pyphot import msgs
 from pyphot import sex, scamp, swarp
 
 
-def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',
+def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
                 detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=2.0,
                 astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=0.5,
                 pixscale_maxerr=1.1, mosaic_type='UNCHANGED',task='sex',
@@ -31,8 +31,9 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     # configuration for the first swarp run
     # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
     swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                    "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT":1.0,
-                    "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type}
+                   "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT":1.0,
+                   "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
+                   "HEADER_SUFFIX":"_cat.head"}
     # resample science image
     swarp.swarpall(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                    coaddroot=None, delete=delete, log=log)
@@ -41,7 +42,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
     swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
     swarp.swarpall(flag_fits_list, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                   coaddroot=None, delete=delete, log=log)
+                   coaddroot=None, delete=delete, log=False)
 
     ## remove useless data and change flag image type to int32
     sci_fits_list_resample = []
@@ -65,26 +66,28 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     sexparams0 = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
                   'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
                   'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
-                  'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
+                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
     sex.sexall(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=delete, log=log,
+               defaultconfig='pyphot', conv='sex995', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
 
     # configuration for the first scamp run
     #
-    scampconfig0 = {"CROSSID_RADIUS": crossid_radius,
+    scampconfig0 = {"CROSSID_RADIUS": 1.0,
                     "ASTREF_CATALOG": astref_catalog,
                     "ASTREF_BAND": astref_band,
                     "POSITION_MAXERR": position_maxerr,
                     "PIXSCALE_MAXERR": pixscale_maxerr,
-                    "MOSAIC_TYPE": mosaic_type}
-    scamp.scampall(sci_fits_list_resample, config=scampconfig0, workdir=science_path, defaultconfig='pyphot',
-                   delete=delete, log=log)
+                    "MOSAIC_TYPE": mosaic_type,
+                    "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
+                    "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
+    scamp.scampall(sci_fits_list_resample, config=scampconfig0, workdir=science_path, QAdir=qa_path,
+                   defaultconfig='pyphot', delete=delete, log=log)
 
     ## copy the .head for flag images
     for i in range(len(sci_fits_list_resample)):
-        os.system('cp {:} {:}'.format(sci_fits_list_resample[i].replace('.fits', '.head'),
-                                      flag_fits_list_resample[i].replace('.fits', '.head')))
+        os.system('cp {:} {:}'.format(sci_fits_list_resample[i].replace('.fits', '_cat.head'),
+                                      flag_fits_list_resample[i].replace('.fits', '_cat.head')))
 
     # configuration for the second swarp run
     swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
@@ -94,14 +97,14 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     # resample the flag image
     swarpconfig_flag['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
     swarp.swarpall(flag_fits_list_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                   coaddroot=None, delete=delete, log=log)
+                   coaddroot=None, delete=delete, log=True)
 
     # delete unnecessary weight maps and head
     for i in range(len(sci_fits_list)):
         os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
-        os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp.cat')))
-        os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp.head')))
-        os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.head')))
+        os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.fits')))
+        os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.head')))
+        os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp_cat.head')))
 
     # change flag image type to int32
     for i in range(len(sci_fits_list)):
@@ -291,7 +294,7 @@ def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=N
     tbl['FLUXERR_AUTO'] = tbl['source_sum_err']
 
     ## Perform Aperture photometry
-    msgs.info('Perforing Aperture photometry')
+    msgs.info('Performing Aperture photometry')
     positions = tbl['sky_centroid']
     apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
     tbl_aper = aperture_photometry(data, apertures, error=error, mask=mask, method='exact', wcs=wcs_info)

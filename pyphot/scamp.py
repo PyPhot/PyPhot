@@ -61,7 +61,7 @@ def get_config(config=None, workdir="./"):
     return configapp
 
 
-def scampone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=True, log=False):
+def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=True, log=False):
 
     ## Get the version of your SCAMP
     scampversion = get_version()
@@ -71,6 +71,14 @@ def scampone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
     configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
 
     ## append your configuration
+    if 'CHECKPLOT_NAME' in config:
+        checkplot_name = config['CHECKPLOT_NAME'].split(',')
+        checkplot_name_new = []
+        for iname in checkplot_name:
+            checkplot_name_new.append(os.path.join(QAdir,'{:}_{:}'.format(os.path.split(imgname)[1].replace('.fits',''),iname)))
+        separator = ','
+        config['CHECKPLOT_NAME'] = separator.join(checkplot_name_new)
+
     configapp = get_config(config=config)
 
     catname = imgname.replace('.fits','_cat.fits')
@@ -92,9 +100,8 @@ def scampone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".scamp.log"))
     if delete:
         os.system("rm " + os.path.join(workdir,"*.scamp"))
-        os.system("rm " + "*.ps")
 
-def scampall(imglist, config=None, workdir='./', defaultconfig='pyphot', delete=False, log=True):
+def scampall(imglist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
 
     for imgname in imglist:
-        scampone(imgname, config=config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log)
+        scampone(imgname, config=config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig, delete=delete, log=log)

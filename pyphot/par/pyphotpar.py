@@ -1024,7 +1024,7 @@ class DetectionPar(ParSet):
     def __init__(self, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None,
                  back_default=None, back_size=None, back_filtersize=None, detect_minarea=None,
                  weight_type=None, backphoto_type=None, backphoto_thick=None, conv=None, nnw=None, delete=None, log=None,
-                 back_nsigma=None,back_maxiters=None,fwhm=None,nlevels=None,contrast=None,morp_filter=None):
+                 back_rms_type=None, back_nsigma=None,back_maxiters=None,fwhm=None,nlevels=None,contrast=None,morp_filter=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1089,7 +1089,7 @@ class DetectionPar(ParSet):
         dtypes['backphoto_thick'] = [int, float]
         descr['backphoto_thick'] = 'Thickness of the background LOCAL annulus'
 
-        defaults['conv'] = '995'
+        defaults['conv'] = 'sex995'
         dtypes['conv'] = str
         descr['conv'] = 'Convolution matrix, either 995 or you can provide the full path of your conv file'
 
@@ -1150,7 +1150,7 @@ class DetectionPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default',
                    'back_size', 'back_filtersize', 'detect_minarea', 'weight_type','backphoto_type',
-                   'backphoto_thick','conv','nnw', 'delete', 'log','back_nsigma','back_maxiters',
+                   'backphoto_thick','conv','nnw', 'delete', 'log','back_rms_type','back_nsigma','back_maxiters',
                    'fwhm','nlevels','contrast','morp_filter']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -1218,7 +1218,7 @@ class ReduxPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, camera=None, detnum=None, sortroot=None, calwin=None, scidir=None,
+    def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
                  qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, slitspatnum=None):
 
         # Grab the parameter names and values from the function
@@ -1308,7 +1308,7 @@ class ReduxPar(ParSet):
         k = numpy.array([*cfg.keys()])
 
         # Basic keywords
-        parkeys = [ 'camera', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
+        parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
                     'redux_path', 'ignore_bad_headers', 'slitspatnum']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -1387,6 +1387,8 @@ class PostProcPar(ParSet):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))
 
         kwargs = {}
+        for pk in allkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
 
         return cls(**kwargs)
 
@@ -1927,8 +1929,8 @@ class PyPhotPar(ParSet):
         pk = 'rdx'
         kwargs[pk] = ReduxPar.from_dict(cfg[pk]) if pk in k else None
 
-        pk = 'calibrations'
-        kwargs[pk] = CalibrationsPar.from_dict(cfg[pk]) if pk in k else None
+        #pk = 'calibrations'
+        #kwargs[pk] = CalibrationsPar.from_dict(cfg[pk]) if pk in k else None
 
         pk = 'scienceframe'
         kwargs[pk] = FrameGroupPar.from_dict('science', cfg[pk]) if pk in k else None
