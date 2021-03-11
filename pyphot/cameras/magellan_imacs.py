@@ -5,12 +5,10 @@ Module for Magellan IMACS
 import glob
 
 import numpy as np
-from scipy.signal import savgol_filter
 
 from astropy import wcs
 from astropy.time import Time
 from astropy.io import fits
-from astropy.stats import sigma_clipped_stats
 
 from pyphot import msgs
 from pyphot import parse
@@ -22,7 +20,7 @@ from pyphot.cameras import camera
 
 class MagellanIMACSCamera(camera.Camera):
     """
-    Child to handle MMT/MMIRS specific code
+    Child to handle Magellan/IMACS specific code
     """
     ndet = 8
     name = 'magellan_imacs'
@@ -324,7 +322,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = True
-        par['scienceframe']['process']['minimum_vig'] = 0.5
+        par['scienceframe']['process']['minimum_vig'] = 0.7
         par['scienceframe']['process']['replace'] = 'zero'
 
         # cosmic ray rejection

@@ -96,7 +96,7 @@ def combineflat(flatfiles, camera, det, masterbiasimg=None, masterdarkimg=None, 
         zeromask = array == 0.
         array[zeromask] = median
 
-        images.append(array/exptime)
+        images.append(array/median)
         masks.append(starmask|hotmask|zeromask)
 
     images = np.array(images)

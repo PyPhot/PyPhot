@@ -73,7 +73,7 @@ def scampone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
     ## append your configuration
     configapp = get_config(config=config)
 
-    catname = imgname[:-5] + ".cat"
+    catname = imgname.replace('.fits','_cat.fits')
     comd = ["scamp"] + [os.path.join(workdir, catname)] + configcomd + configapp
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()

@@ -23,7 +23,7 @@ from pyphot import sex, scamp, swarp
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',
                 detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=2.0,
                 astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=0.5,
-                pixscale_maxerr=1.1, mosaic_type='UNCHANGED',
+                pixscale_maxerr=1.1, mosaic_type='UNCHANGED',task='sex',
                 weight_type='MAP_WEIGHT',delete=False, log=True):
 
     ## ToDo: Not sure why, but the scamp fails for MMIRS and IMACS, so I will try to resample it with swarp
@@ -66,7 +66,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                   'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
                   'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
                   'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
-    sex.sexall(sci_fits_list_resample, task='sex', config=sexconfig0, workdir=science_path, params=sexparams0,
+    sex.sexall(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
                defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
 

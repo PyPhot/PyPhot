@@ -1012,6 +1012,200 @@ class CoaddPar(ParSet):
         """
         pass
 
+
+class DetectionPar(ParSet):
+    """
+    A parameter set holding the arguments for how to perform the flux
+    calibration.
+
+    For a table with the current keywords, defaults, and descriptions,
+    see :ref:`pyphotpar`.
+    """
+    def __init__(self, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None,
+                 back_default=None, back_size=None, back_filtersize=None, detect_minarea=None,
+                 weight_type=None, backphoto_type=None, backphoto_thick=None, conv=None, nnw=None, delete=None, log=None,
+                 back_nsigma=None,back_maxiters=None,fwhm=None,nlevels=None,contrast=None,morp_filter=None):
+
+        # Grab the parameter names and values from the function
+        # arguments
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        pars = OrderedDict([(k,values[k]) for k in args[1:]])
+
+        # Initialize the other used specifications for this parameter
+        # set
+        defaults = OrderedDict.fromkeys(pars.keys())
+        options = OrderedDict.fromkeys(pars.keys())
+        dtypes = OrderedDict.fromkeys(pars.keys())
+        descr = OrderedDict.fromkeys(pars.keys())
+
+        defaults['detection_method'] = 'SExtractor'
+        options['detection_method'] = DetectionPar.valid_detection_method()
+        dtypes['detection_method'] = str
+        descr['detection_method'] = 'Background Options are: {0}'.format(', '.join(options['detection_method']))
+
+        ## parameters for all methods
+        defaults['phot_apertures'] = [1.0, 2.0, 3.0, 4.0, 5.0]
+        dtypes['phot_apertures'] = [int, float, list]
+        descr['phot_apertures'] = 'Photometric apertures in units of arcsec'
+
+        defaults['detect_thresh'] = 2.0
+        dtypes['detect_thresh'] = [int, float]
+        descr['detect_thresh'] = ' <sigmas> or <threshold> for detection'
+
+        defaults['back_type'] = 'AUTO'
+        options['back_type'] = DetectionPar.valid_back_type()
+        dtypes['back_type'] = str
+        descr['back_type'] = 'Background Options are: {0}'.format(', '.join(options['back_type']))
+
+        defaults['back_default'] = 0.0
+        dtypes['back_default'] = [int, float]
+        descr['back_default'] = 'Default background value in MANUAL'
+
+        defaults['back_size'] = 200
+        dtypes['back_size'] = [int, float, tuple]
+        descr['back_size'] = 'Default background value in MANUAL, int for SExtractor and tuple for Others'
+
+        defaults['back_filtersize'] = 3
+        dtypes['back_filtersize'] = [int, float, tuple]
+        descr['back_filtersize'] = 'Background map filter range (meshes), int for SExtractor and tuple for Others'
+
+        ## parameters used by SExtractor or Photoutils
+        defaults['detect_minarea'] = 3
+        dtypes['detect_minarea'] = [int, float]
+        descr['detect_minarea'] = 'min. # of pixels above threshold'
+
+        ## parameters used by SExtractor only
+        defaults['weight_type'] = 'MAP_WEIGHT'
+        options['weight_type'] = DetectionPar.valid_weight_type()
+        dtypes['weight_type'] = str
+        descr['weight_type'] = 'Background Options are: {0}'.format(', '.join(options['weight_type']))
+
+        defaults['backphoto_type'] = 'GLOBAL'
+        options['backphoto_type'] = DetectionPar.valid_backphoto_type()
+        dtypes['backphoto_type'] = str
+        descr['backphoto_type'] = 'Background Options are: {0}'.format(', '.join(options['backphoto_type']))
+
+        defaults['backphoto_thick'] = 100
+        dtypes['backphoto_thick'] = [int, float]
+        descr['backphoto_thick'] = 'Thickness of the background LOCAL annulus'
+
+        defaults['conv'] = '995'
+        dtypes['conv'] = str
+        descr['conv'] = 'Convolution matrix, either 995 or you can provide the full path of your conv file'
+
+        defaults['nnw'] = 'sex'
+        dtypes['nnw'] = str
+        descr['nnw'] = 'Use SExtractor default configuration file or you can provide the full path of your nnw file'
+
+        defaults['delete'] = True
+        dtypes['delete'] = bool
+        descr['delete'] = 'Deletec the configuration files for SExtractor?'
+
+        defaults['log'] = False
+        dtypes['log'] = bool
+        descr['log'] = 'Logging for SExtractor?'
+
+        ## parameters used by Photutils only
+        defaults['back_rms_type'] = 'STD'
+        options['back_rms_type'] = DetectionPar.valid_backrms_type()
+        dtypes['back_rms_type'] = str
+        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_type']))
+
+        defaults['back_nsigma'] = 3
+        dtypes['back_nsigma'] = [int, float]
+        descr['back_nsigma'] = 'nsigma for sigma clipping background, used by Photutils only'
+
+        defaults['back_maxiters'] = 10
+        dtypes['back_maxiters'] = int
+        descr['back_maxiters'] = 'maxiters for sigma clipping backgroun, used by Photutils only'
+
+        defaults['fwhm'] = 5
+        dtypes['fwhm'] = [int, float]
+        descr['fwhm'] = '# of pixels of seeing, used by Photutils only'
+
+        defaults['nlevels'] = 32
+        dtypes['nlevels'] = int
+        descr['nlevels'] = 'Nlevel for deblending, used by Photutils only'
+
+        defaults['contrast'] =  0.001
+        dtypes['contrast'] = float
+        descr['contrast'] = 'Contrast for deblending, used by Photutils only'
+
+        defaults['morp_filter'] = False
+        dtypes['morp_filter'] = bool
+        descr['morp_filter'] = 'Whether you want to use the kernel filter when measuring morphology and centroid?'\
+                               'If set true, it should be similar with SExtractor. False gives a better morphology.'
+
+
+        # Instantiate the parameter set
+        super(DetectionPar, self).__init__(list(pars.keys()),
+                                                 values=list(pars.values()),
+                                                 defaults=list(defaults.values()),
+                                                 dtypes=list(dtypes.values()),
+                                                 descr=list(descr.values()))
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, cfg):
+        k = numpy.array([*cfg.keys()])
+        parkeys = ['detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default',
+                   'back_size', 'back_filtersize', 'detect_minarea', 'weight_type','backphoto_type',
+                   'backphoto_thick','conv','nnw', 'delete', 'log','back_nsigma','back_maxiters',
+                   'fwhm','nlevels','contrast','morp_filter']
+
+        badkeys = numpy.array([pk not in parkeys for pk in k])
+        if numpy.any(badkeys):
+            raise ValueError('{0} not recognized key(s) for DetectionPar.'.format(k[badkeys]))
+
+        kwargs = {}
+        for pk in parkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
+        return cls(**kwargs)
+
+    @staticmethod
+    def valid_detection_method():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['Photutils', 'SExtractor', 'DAOStar', 'IRAFStar', 'Skip']
+
+    @staticmethod
+    def valid_back_type():
+        """
+        Return the valid methods for mosaic method.
+        AUTO and MANUAL for SExtractor while others for photutils
+        """
+        return ['AUTO', 'MANUAL', 'MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE']
+
+    @staticmethod
+    def valid_weight_type():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['BACKGROUND', 'MAP_RMS', 'MAP_VARIANCE', 'MAP_WEIGHT']
+
+    @staticmethod
+    def valid_backrms_type():
+        """
+        Return the valid methods for mosaic method.
+        AUTO and MANUAL for SExtractor while others for photutils
+        """
+        return ['STD', 'MAD', 'BIWEIGHT']
+
+    @staticmethod
+    def valid_backphoto_type():
+        """
+        Return the valid methods for reference catalog.
+        """
+        return ['GLOBAL', 'LOCAL']
+
+    def validate(self):
+        """
+        Check the parameters are valid for the provided method.
+        """
+        pass
+
+
 class ReduxPar(ParSet):
     """
     The parameter set used to hold arguments for functionality relevant
@@ -1050,6 +1244,11 @@ class ReduxPar(ParSet):
         descr['camera'] = 'Spectrograph that provided the data to be reduced.  ' \
                                 'See :ref:`instruments` for valid options.'
 #                                'Options are: {0}'.format(', '.join(options['camera']))
+
+        defaults['sextractor'] = 'sex'
+        dtypes['sextractor'] = str
+        descr['sextractor'] = "The commond for calling SExtractor. In most cases, you should use 'sex' " \
+                              "For some rare cases you need to use 'sextractor', depends on how you installed it."
 
         dtypes['detnum'] = [int, list]
         descr['detnum'] = 'Restrict reduction to a list of detector indices.' \
@@ -1142,7 +1341,7 @@ class PostProcPar(ParSet):
     see :ref:`pyphotpar`.
     """
 
-    def __init__(self, astrometric=None, coadd=None, photometric=None):
+    def __init__(self, astrometric=None, coadd=None, detection=None, photometric=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1164,6 +1363,11 @@ class PostProcPar(ParSet):
         dtypes['coadd'] = [ParSet, dict]
         descr['coadd'] = 'Parameters for coadding science images.'
 
+        defaults['detection'] = DetectionPar()
+        dtypes['detection'] = [ParSet, dict]
+        descr['detection'] = 'Parameters for solving detections.'
+
+
         # Instantiate the parameter set
         super(PostProcPar, self).__init__(list(pars.keys()),
                                              values=list(pars.values()),
@@ -1177,7 +1381,7 @@ class PostProcPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['astrometric', 'coadd', 'photometric']
+        allkeys = ['astrometric', 'coadd', 'detection', 'photometric']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))

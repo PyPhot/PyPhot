@@ -97,7 +97,7 @@ def get_nnw(nnw=None, workdir='./'):
     """
     To get the default SExtractor configuration file
     """
-    if nnw == None:
+    if (nnw == None) or (nnw=='sex'):
         os.system("cp " + os.path.join(config_dir,"sex.nnw") + ' ' + os.path.join(workdir,"nnw.sex"))
         msgs.info("nnw.sex generated from PyPhot default NNW")
     else:
@@ -173,7 +173,7 @@ def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultc
     if config is None:
         config = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
                   "CATALOG_TYPE": "FITS_LDAC", "BACK_TYPE ": "MANUAL", "BACK_VALUE": 0.0}
-    config['CATALOG_NAME'] = imgname[:-5]+'.cat'
+    config['CATALOG_NAME'] = imgname.replace('.fits','_cat.fits')
     if flag_image is not None:
         config['FLAG_IMAGE'] = flag_image
     if weight_image is not None:
