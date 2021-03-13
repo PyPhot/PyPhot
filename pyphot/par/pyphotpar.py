@@ -746,7 +746,7 @@ class AstrometricPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip_astrometry=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
+    def __init__(self, skip=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, weight_type=None, delete=None, log=None):
 
@@ -762,9 +762,9 @@ class AstrometricPar(ParSet):
         dtypes = OrderedDict.fromkeys(pars.keys())
         descr = OrderedDict.fromkeys(pars.keys())
 
-        defaults['skip_astrometry'] = False
-        dtypes['skip_astrometry'] = bool
-        descr['skip_astrometry'] = 'Skip the astrometry for individual detector image?'
+        defaults['skip'] = False
+        dtypes['skip'] = bool
+        descr['skip'] = 'Skip the astrometry for individual detector image?'
 
         defaults['weight_type'] = 'MAP_WEIGHT'
         options['weight_type'] = AstrometricPar.valid_weight_type()
@@ -830,7 +830,7 @@ class AstrometricPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip_astrometry', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
+        parkeys = ['skip', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
                    'weight_type', 'delete', 'log']
 
@@ -880,7 +880,7 @@ class CoaddPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip_coadd=None, weight_type=None, rescale_weights=None, combine_type=None,
+    def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None,
                  clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
                  back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
                  delete=None, log=None):
@@ -897,9 +897,9 @@ class CoaddPar(ParSet):
         dtypes = OrderedDict.fromkeys(pars.keys())
         descr = OrderedDict.fromkeys(pars.keys())
 
-        defaults['skip_coadd'] = False
-        dtypes['skip_coadd'] = bool
-        descr['skip_coadd'] = 'Skip Coadding science targets?'
+        defaults['skip'] = False
+        dtypes['skip'] = bool
+        descr['skip'] = 'Skip Coadding science targets?'
 
         defaults['weight_type'] = 'MAP_WEIGHT'
         options['weight_type'] = CoaddPar.valid_weight_type()
@@ -971,7 +971,7 @@ class CoaddPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip_coadd', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
+        parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
                    'back_filtthresh', 'delete', 'log']
 
@@ -1021,8 +1021,8 @@ class DetectionPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None,
-                 back_default=None, back_size=None, back_filtersize=None, detect_minarea=None,
+    def __init__(self, skip=None, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None,
+                 back_default=None, back_size=None, back_filtersize=None, detect_minarea=None,check_type=None,
                  weight_type=None, backphoto_type=None, backphoto_thick=None, conv=None, nnw=None, delete=None, log=None,
                  back_rms_type=None, back_nsigma=None,back_maxiters=None,fwhm=None,nlevels=None,contrast=None,morp_filter=None):
 
@@ -1038,6 +1038,10 @@ class DetectionPar(ParSet):
         dtypes = OrderedDict.fromkeys(pars.keys())
         descr = OrderedDict.fromkeys(pars.keys())
 
+        defaults['skip'] = False
+        dtypes['skip'] = bool
+        descr['skip'] = 'Skip detecting sources?'
+
         defaults['detection_method'] = 'SExtractor'
         options['detection_method'] = DetectionPar.valid_detection_method()
         dtypes['detection_method'] = str
@@ -1048,7 +1052,7 @@ class DetectionPar(ParSet):
         dtypes['phot_apertures'] = [int, float, list]
         descr['phot_apertures'] = 'Photometric apertures in units of arcsec'
 
-        defaults['detect_thresh'] = 2.0
+        defaults['detect_thresh'] = 1.5
         dtypes['detect_thresh'] = [int, float]
         descr['detect_thresh'] = ' <sigmas> or <threshold> for detection'
 
@@ -1074,7 +1078,24 @@ class DetectionPar(ParSet):
         dtypes['detect_minarea'] = [int, float]
         descr['detect_minarea'] = 'min. # of pixels above threshold'
 
+        defaults['fwhm'] = 5
+        dtypes['fwhm'] = [int, float]
+        descr['fwhm'] = '# of pixels of seeing'
+
+        defaults['nlevels'] = 32
+        dtypes['nlevels'] = int
+        descr['nlevels'] = 'Number of deblending sub-thresholds'
+
+        defaults['contrast'] =  0.001
+        dtypes['contrast'] = float
+        descr['contrast'] = ' Minimum contrast parameter for deblending'
+
         ## parameters used by SExtractor only
+        defaults['check_type'] = 'BACKGROUND_RMS'
+        options['check_type'] = DetectionPar.valid_check_type()
+        dtypes['check_type'] = str
+        descr['check_type'] = 'Background Options are: {0}'.format(', '.join(options['check_type']))
+
         defaults['weight_type'] = 'MAP_WEIGHT'
         options['weight_type'] = DetectionPar.valid_weight_type()
         dtypes['weight_type'] = str
@@ -1089,19 +1110,19 @@ class DetectionPar(ParSet):
         dtypes['backphoto_thick'] = [int, float]
         descr['backphoto_thick'] = 'Thickness of the background LOCAL annulus'
 
-        defaults['conv'] = 'sex995'
+        defaults['conv'] = 'sex'
         dtypes['conv'] = str
-        descr['conv'] = 'Convolution matrix, either 995 or you can provide the full path of your conv file'
+        descr['conv'] = 'Convolution matrix, either default sex, or sex995 or you can provide the full path of your conv file'
 
         defaults['nnw'] = 'sex'
         dtypes['nnw'] = str
         descr['nnw'] = 'Use SExtractor default configuration file or you can provide the full path of your nnw file'
 
-        defaults['delete'] = True
+        defaults['delete'] = False
         dtypes['delete'] = bool
         descr['delete'] = 'Deletec the configuration files for SExtractor?'
 
-        defaults['log'] = False
+        defaults['log'] = True
         dtypes['log'] = bool
         descr['log'] = 'Logging for SExtractor?'
 
@@ -1118,18 +1139,6 @@ class DetectionPar(ParSet):
         defaults['back_maxiters'] = 10
         dtypes['back_maxiters'] = int
         descr['back_maxiters'] = 'maxiters for sigma clipping backgroun, used by Photutils only'
-
-        defaults['fwhm'] = 5
-        dtypes['fwhm'] = [int, float]
-        descr['fwhm'] = '# of pixels of seeing, used by Photutils only'
-
-        defaults['nlevels'] = 32
-        dtypes['nlevels'] = int
-        descr['nlevels'] = 'Nlevel for deblending, used by Photutils only'
-
-        defaults['contrast'] =  0.001
-        dtypes['contrast'] = float
-        descr['contrast'] = 'Contrast for deblending, used by Photutils only'
 
         defaults['morp_filter'] = False
         dtypes['morp_filter'] = bool
@@ -1148,8 +1157,8 @@ class DetectionPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default',
-                   'back_size', 'back_filtersize', 'detect_minarea', 'weight_type','backphoto_type',
+        parkeys = ['skip','detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default',
+                   'back_size', 'back_filtersize', 'detect_minarea', 'check_type','weight_type','backphoto_type',
                    'backphoto_thick','conv','nnw', 'delete', 'log','back_rms_type','back_nsigma','back_maxiters',
                    'fwhm','nlevels','contrast','morp_filter']
 
@@ -1167,7 +1176,14 @@ class DetectionPar(ParSet):
         """
         Return the valid methods for mosaic method.
         """
-        return ['Photutils', 'SExtractor', 'DAOStar', 'IRAFStar', 'Skip']
+        return ['Photutils', 'SExtractor', 'DAOStar', 'IRAFStar']
+
+    @staticmethod
+    def valid_check_type():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['NONE', 'BACKGROUND', 'BACKGROUND_RMS','MINIBACKGROUND','SEXTRACTOR', 'MINIBACK_RMS', ' -BACKGROUND']
 
     @staticmethod
     def valid_back_type():
@@ -1205,6 +1221,91 @@ class DetectionPar(ParSet):
         """
         pass
 
+class PhotometryPar(ParSet):
+    """
+    A parameter set holding the arguments for how to perform the flux
+    calibration.
+
+    For a table with the current keywords, defaults, and descriptions,
+    see :ref:`pyphotpar`.
+    """
+    def __init__(self, skip=None, cal_zpt=None, photref_catalog=None, zpt=None, primary=None, secondary=None, coefficients=None):
+
+        # Grab the parameter names and values from the function
+        # arguments
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        pars = OrderedDict([(k,values[k]) for k in args[1:]])
+
+        # Initialize the other used specifications for this parameter
+        # set
+        defaults = OrderedDict.fromkeys(pars.keys())
+        options = OrderedDict.fromkeys(pars.keys())
+        dtypes = OrderedDict.fromkeys(pars.keys())
+        descr = OrderedDict.fromkeys(pars.keys())
+
+        defaults['skip'] = False
+        dtypes['skip'] = bool
+        descr['skip'] = 'Skip detecting sources?'
+
+        defaults['cal_zpt'] = False
+        dtypes['cal_zpt'] = bool
+        descr['cal_zpt'] = 'Calibrating the zeropoint before photometry'
+
+        defaults['photref_catalog'] = 'PS1'
+        options['photref_catalog'] = PhotometryPar.valid_catalog_methods()
+        dtypes['photref_catalog'] = str
+        descr['photref_catalog'] = 'Background Options are: {0}'.format(', '.join(options['photref_catalog']))
+
+        defaults['zpt'] = 0.
+        dtypes['zpt'] = [int, float]
+        descr['zpt'] = 'Zero point'
+
+        defaults['primary'] = 'r'
+        dtypes['primary'] = str
+        descr['primary'] = 'Primary calibration filter'
+
+        defaults['secondary'] = 'i'
+        dtypes['secondary'] = str
+        descr['secondary'] = 'Secondary calibration filter'
+
+        defaults['coefficients'] = [0.,0.,0.]
+        dtypes['coefficients'] = [tuple, list]
+        descr['coefficients'] = 'Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2'
+
+        # Instantiate the parameter set
+        super(PhotometryPar, self).__init__(list(pars.keys()),
+                                                 values=list(pars.values()),
+                                                 defaults=list(defaults.values()),
+                                                 dtypes=list(dtypes.values()),
+                                                 descr=list(descr.values()))
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, cfg):
+        k = numpy.array([*cfg.keys()])
+        parkeys = ['skip', 'cal_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary', 'coefficients']
+
+        badkeys = numpy.array([pk not in parkeys for pk in k])
+        if numpy.any(badkeys):
+            raise ValueError('{0} not recognized key(s) for DetectionPar.'.format(k[badkeys]))
+
+        kwargs = {}
+        for pk in parkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
+        return cls(**kwargs)
+
+    @staticmethod
+    def valid_catalog_methods():
+        """
+        Return the valid methods for reference catalog.
+        """
+        return ['Twomass', 'SDSS', 'Gaia', 'Panstarrs', 'LEGACY', 'ALLWISE']
+
+    def validate(self):
+        """
+        Check the parameters are valid for the provided method.
+        """
+        pass
 
 class ReduxPar(ParSet):
     """
@@ -1341,7 +1442,7 @@ class PostProcPar(ParSet):
     see :ref:`pyphotpar`.
     """
 
-    def __init__(self, astrometric=None, coadd=None, detection=None, photometric=None):
+    def __init__(self, astrometry=None, coadd=None, detection=None, photometry=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1355,9 +1456,9 @@ class PostProcPar(ParSet):
         dtypes = OrderedDict.fromkeys(pars.keys())
         descr = OrderedDict.fromkeys(pars.keys())
 
-        defaults['astrometric'] = AstrometricPar()
-        dtypes['astrometric'] = [ParSet, dict]
-        descr['astrometric'] = 'Parameters for solving astrometric solutions.'
+        defaults['astrometry'] = AstrometricPar()
+        dtypes['astrometry'] = [ParSet, dict]
+        descr['astrometry'] = 'Parameters for solving astrometric solutions.'
 
         defaults['coadd'] = CoaddPar()
         dtypes['coadd'] = [ParSet, dict]
@@ -1367,6 +1468,9 @@ class PostProcPar(ParSet):
         dtypes['detection'] = [ParSet, dict]
         descr['detection'] = 'Parameters for solving detections.'
 
+        defaults['photometry'] = PhotometryPar()
+        dtypes['photometry'] = [ParSet, dict]
+        descr['photometry'] = 'Parameters for solving photometry.'
 
         # Instantiate the parameter set
         super(PostProcPar, self).__init__(list(pars.keys()),
@@ -1381,7 +1485,7 @@ class PostProcPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['astrometric', 'coadd', 'detection', 'photometric']
+        allkeys = ['astrometry', 'coadd', 'detection', 'photometry']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))
@@ -1709,7 +1813,7 @@ class PyPhotPar(ParSet):
 
         defaults['postproc'] = PostProcPar()
         dtypes['postproc'] = [ParSet, dict]
-        descr['postproc'] = 'Parameters for astrometric, coadding, and photometry.'
+        descr['postproc'] = 'Parameters for astrometry, coadding, and photometry.'
 
         # Flux calibration is turned OFF by default
         defaults['fluxcalib'] = FluxCalibratePar()

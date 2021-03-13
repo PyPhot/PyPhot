@@ -75,7 +75,8 @@ def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         checkplot_name = config['CHECKPLOT_NAME'].split(',')
         checkplot_name_new = []
         for iname in checkplot_name:
-            checkplot_name_new.append(os.path.join(QAdir,'{:}_{:}'.format(os.path.split(imgname)[1].replace('.fits',''),iname)))
+            tmp = os.path.join(QAdir,'{:}_{:}'.format(os.path.split(imgname)[1].replace('.fits',''),iname))
+            checkplot_name_new.append(tmp.replace('.','_'))
         separator = ','
         config['CHECKPLOT_NAME'] = separator.join(checkplot_name_new)
 

@@ -331,15 +331,14 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometric']['skip_astrometry'] = False
-        par['postproc']['astrometric']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometric']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometric']['detect_thresh'] = 10
-        par['postproc']['astrometric']['analysis_thresh'] = 10
-        par['postproc']['astrometric']['detect_minarea'] = 7
-        par['postproc']['astrometric']['crossid_radius'] = 5
-        par['postproc']['astrometric']['delete'] = True
-        par['postproc']['astrometric']['log'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['detect_thresh'] = 10
+        par['postproc']['astrometry']['analysis_thresh'] = 10
+        par['postproc']['astrometry']['detect_minarea'] = 7
+        par['postproc']['astrometry']['crossid_radius'] = 5
+        par['postproc']['astrometry']['delete'] = True
+        par['postproc']['astrometry']['log'] = False
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['standardframe']['exprng'] = [None, 10]
@@ -367,10 +366,39 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             adjusted for configuration specific parameter values.
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
+        par['postproc']['photometry']['cal_zpt'] = True
 
-        if self.get_meta_value(scifile, 'dispname') == 'G670L':
-            par['calibrations']['wavelengths']['method'] = 'full_template'
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'lbt_mods1r_red.fits'
+        if self.get_meta_value(scifile, 'filter') == 'NB919':
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'z'
+            par['postproc']['photometry']['secondary'] = 'y'
+            par['postproc']['photometry']['zpt'] = 24.2 # Meausred from observations of J1526-2050 without correcting the extinction
+            # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
+            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+        elif self.get_meta_value(scifile, 'filter') == 'Sloan_g':
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'g'
+            par['postproc']['photometry']['secondary'] = 'r'
+            par['postproc']['photometry']['zpt'] = 27.72
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+        elif self.get_meta_value(scifile, 'filter') == 'Sloan_r':
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'r'
+            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['zpt'] = 27.77
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+        elif self.get_meta_value(scifile, 'filter') == 'Sloan_i':
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'i'
+            par['postproc']['photometry']['secondary'] = 'z'
+            par['postproc']['photometry']['zpt'] = 27.53 # I measured 27.25 without correcting the extinction
+            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+        elif self.get_meta_value(scifile, 'filter') == 'Sloan_z':
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'z'
+            par['postproc']['photometry']['secondary'] = 'y'
+            par['postproc']['photometry']['zpt'] = 26.97 # I measured 26.71 without correcting the extinction
+            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
 
         return par
 

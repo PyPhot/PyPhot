@@ -112,7 +112,7 @@ def get_conv(conv=None, workdir='./'):
     """
     Get the default convolution matrix, if needed.
     """
-    if conv == None:
+    if (conv == None) or (conv == "sex"):
         os.system("cp " + os.path.join(config_dir,"sex.conv") + ' ' + os.path.join(workdir,"conv.sex"))
         msgs.info("conv.sex using 3x3 ``all-ground'' convolution mask with FWHM = 2 pixels")
     elif conv == "sex995":

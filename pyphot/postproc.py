@@ -1,10 +1,16 @@
 import os
 import numpy as np
+import matplotlib.pyplot as plt
+
+from astropy import wcs
 from astropy import units as u
 from astropy.io import fits
+from astropy.table import Table, vstack
+from astropy import stats
 from astropy.stats import SigmaClip
 from astropy.convolution import Gaussian2DKernel
 from astropy.stats import gaussian_fwhm_to_sigma
+from astropy.coordinates import SkyCoord
 
 from photutils import detect_sources
 from photutils import deblend_sources
@@ -18,6 +24,7 @@ from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBa
 
 from pyphot import msgs
 from pyphot import sex, scamp, swarp
+from pyphot import query, crossmatch
 
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
@@ -97,7 +104,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     # resample the flag image
     swarpconfig_flag['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
     swarp.swarpall(flag_fits_list_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                   coaddroot=None, delete=delete, log=True)
+                   coaddroot=None, delete=delete, log=False)
 
     # delete unnecessary weight maps and head
     for i in range(len(sci_fits_list)):
@@ -315,3 +322,185 @@ def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=N
     ## ToDo: Add PSF photometry
 
     return tbl, rmsmap, bkgmap
+
+def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], outqa=None):
+
+    try:
+        catalog = Table.read(catalogfits)
+        good_cat = catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>5
+        catalog = catalog[good_cat]
+        ra, dec = catalog['sky_centroid_icrs.ra'], catalog['sky_centroid_icrs.dec']
+    except:
+        catalog = Table.read(catalogfits, 2)
+        good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['NIMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & (catalog['CLASS_STAR']>0.5)
+        good_cat &= catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>5
+        catalog = catalog[good_cat]
+        ra, dec = catalog['ALPHA_J2000'], catalog['DELTA_J2000']
+
+    pos = np.zeros((len(ra), 2))
+    pos[:,0], pos[:,1] = ra, dec
+
+    ra_cen, dec_cen = np.median(ra), np.median(dec)
+    distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
+    radius = np.nanmax(distance)
+
+    ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+    good_ref = (1.0857/ref_data['e_{:}mag'.format(primary)]>5) & (1.0857/ref_data['e_{:}mag'.format(secondary)]>5)
+    try:
+        ref_data = ref_data[good_ref.data]
+    except:
+        ref_data = ref_data[good_ref]
+
+    ref_mag = ref_data['{:}mag'.format(primary)] + coefficients[0] + \
+              coefficients[1]*(ref_data['{:}mag'.format(primary)]-ref_data['{:}mag'.format(secondary)])+ \
+              coefficients[2] * (ref_data['{:}mag'.format(primary)] - ref_data['{:}mag'.format(secondary)])**2
+
+    ref_ra, ref_dec = ref_data['RAJ2000'], ref_data['DEJ2000']
+    ref_pos = np.zeros((len(ref_ra), 2))
+    ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
+
+    ## cross-match with 1 arcsec
+    dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
+    matched = np.invert(np.isinf(dist))
+
+    matched_cat_mag = catalog['MAG_AUTO'][matched]
+    matched_ref_mag = ref_mag[ind[matched]]
+    nstar = np.sum(matched)
+
+    _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
+                                              sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
+
+    if outqa is not None:
+        msgs.info('Make a histogram plot for the zpt')
+        zp0 = zp - 7*zp_std
+        zp1 = zp + 7*zp_std
+        num = plt.hist(matched_ref_mag - matched_cat_mag, bins=np.linspace(zp0,zp1,int(nstar/100)))
+        nmax = np.max(num[0]*1.1)
+        plt.vlines(zp,0,nmax, linestyles='--', colors='r')
+        plt.vlines(zp+zp_std,0,nmax, linestyles=':', colors='r')
+        plt.vlines(zp-zp_std,0,nmax, linestyles=':', colors='r')
+        plt.ylim(0,nmax)
+        plt.xlabel('Zero point',fontsize=14)
+        plt.ylabel('# stars used for the calibration',fontsize=14)
+        plt.text(zp-6.5*zp_std,0.8*nmax,r'{:0.3f}$\pm${:0.3f}'.format(zp,zp_std),fontsize=14)
+        plt.savefig(outqa)
+    # rerun the SExtractor with the zero point
+    msgs.warn('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
+
+    return zp, zp_std, nstar
+
+def ForcedAperPhot(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):
+
+    ncat = np.size(catalogs)
+    if cat_ids is None:
+        cat_ids = (np.arange(ncat)+1).astype('U').tolist()
+    assert ncat == np.size(images), 'The numbers of images and catalogs should be the same'
+    assert ncat == np.size(cat_ids), 'The numbers of cat_ids and catalogs should be the same'
+
+    if rmsmaps is not None:
+        assert ncat == np.size(rmsmaps), 'The numbers of images and rmsmaps should be the same'
+    if flagmaps is not None:
+        assert ncat == np.size(flagmaps), 'The numbers of images and flagmaps should be the same'
+
+    ## Merge catalogs
+    Table_Merged= Table.read(catalogs[0], 2)
+    Table_Merged['CAT_ID'] = cat_ids[0]
+    for icat in range(1,ncat):
+        table_icat = Table.read(catalogs[icat], 2)
+        table_icat['CAT_ID'] = cat_ids[icat]
+
+        pos1 = np.zeros((len(Table_Merged), 2))
+        try:
+            pos1[:, 0], pos1[:, 1] = Table_Merged['ALPHA_J2000'],Table_Merged['DELTA_J2000']
+        except:
+            pos1[:, 0], pos1[:, 1] = Table_Merged['sky_centroid_icrs.ra'],Table_Merged['sky_centroid_icrs.dec']
+
+        pos2 = np.zeros((len(table_icat), 2))
+        try:
+            pos2[:, 0], pos2[:, 1] = table_icat['ALPHA_J2000'],table_icat['DELTA_J2000']
+        except:
+            pos2[:, 0], pos2[:, 1] = table_icat['sky_centroid_icrs.ra'],table_icat['sky_centroid_icrs.dec']
+
+        ## cross-match with 1 arcsec
+        dist, ind = crossmatch.crossmatch_angular(pos2, pos1, max_distance=unique_dist / 3600.)
+        no_match = np.isinf(dist)
+        Table_Merged =vstack([Table_Merged, table_icat[no_match]])
+
+    ## Prepare the output forced photometry catalog
+    ## ToDo: Currently only used the posotions and flags of the merged catalog is included.
+    ##       Next step is to keep all the origin columns of the input catalog
+    Table_Forced = Table()
+    Table_Forced['CAT_ID'] = Table_Merged['CAT_ID']
+    Table_Forced['FORCED_ID'] = (np.arange(len(Table_Forced))+1).astype('int32')
+    try:
+        Table_Forced['RA'], Table_Forced['DEC']= Table_Merged['ALPHA_J2000'],Table_Merged['DELTA_J2000']
+    except:
+        Table_Forced['RA'], Table_Forced['DEC'] = Table_Merged['sky_centroid_icrs.ra'], Table_Merged['sky_centroid_icrs.dec']
+
+    if 'CLASS_STAR' in Table_Merged.keys():
+        Table_Forced['CLASS_STAR'] = Table_Merged['CLASS_STAR']
+    if 'FLAGS' in Table_Merged.keys():
+        Table_Forced['FLAGS'] = Table_Merged['FLAGS']
+    if 'IMAFLAGS_ISO' in Table_Merged.keys():
+        Table_Forced['IMAFLAGS_ISO'] = Table_Merged['IMAFLAGS_ISO']
+    if 'NIMAFLAGS_ISO' in Table_Merged.keys():
+        Table_Forced['NIMAFLAGS_ISO'] = Table_Merged['NIMAFLAGS_ISO']
+
+    ## Let's perform the forced aperture photometry on each image
+    positions = SkyCoord(ra=Table_Forced['RA'], dec=Table_Forced['DEC'], unit=(u.deg, u.deg))
+
+    ## Perform aperture photometry for all merged sources
+    for ii, this_image in enumerate(images):
+        msgs.info('Performing forced aperture photometry on {:}'.format(this_image))
+        data = fits.getdata(this_image)
+        header = fits.getheader(this_image)
+        wcs_info = wcs.WCS(header)
+
+        try:
+            zpt = header['ZP']
+        except:
+            zpt = 0.
+
+        if flagmaps is not None:
+            ## good pixels with flag==0
+            flag = fits.getdata(flagmaps[ii])
+            mask = flag > 0.
+        else:
+            mask = None
+
+        if rmsmaps is not None:
+            error = fits.getdata(rmsmaps[ii])
+        else:
+            error = None
+
+        apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
+        tbl_aper = aperture_photometry(data, apertures, error=error, mask=mask, method='exact', wcs=wcs_info)
+        flux_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)))
+        fluxerr_aper = np.zeros_like(flux_aper)
+        mag_aper = np.zeros_like(flux_aper)
+        magerr_aper = np.zeros_like(flux_aper)
+        for jj in range(np.size(phot_apertures)):
+            flux_aper[:,jj] = tbl_aper['aperture_sum_{:d}'.format(jj)]
+            fluxerr_aper[:,jj] = tbl_aper['aperture_sum_err_{:d}'.format(jj)]
+            mag_aper[:,jj] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(jj)])
+            magerr_aper[:,jj] = 2.5/np.log(10)*tbl_aper['aperture_sum_err_{:d}'.format(jj)]/tbl_aper['aperture_sum_{:d}'.format(jj)]
+
+        Table_Forced['FORCED_XCENTER_{:}'.format(cat_ids[ii])] = tbl_aper['xcenter']
+        Table_Forced['FORCED_YCENTER_{:}'.format(cat_ids[ii])] = tbl_aper['ycenter']
+        #Table_Forced['FORCED_SKY_CENTER_{:}'.format(cat_ids[ii])] = tbl_aper['sky_center']
+        Table_Forced['FORCED_MAG_APER_{:}'.format(cat_ids[ii])] = mag_aper + zpt
+        Table_Forced['FORCED_MAGERR_APER_{:}'.format(cat_ids[ii])] = magerr_aper
+        Table_Forced['FORCED_FLUX_APER_{:}'.format(cat_ids[ii])] = flux_aper
+        Table_Forced['FORCED_FLUXERR_APER_{:}'.format(cat_ids[ii])] = fluxerr_aper
+
+        badmag = np.isinf(mag_aper) | np.isnan(mag_aper)
+        Table_Forced['FORCED_MAG_APER_{:}'.format(cat_ids[ii])][badmag] = 99.
+        Table_Forced['FORCED_MAGERR_APER_{:}'.format(cat_ids[ii])][badmag] = 99.
+
+        badphot = (flux_aper == 0.)
+        Table_Forced['FORCED_FLAG_APER_{:}'.format(cat_ids[ii])] = np.sum(badphot,axis=1)
+
+    if outfile is not None:
+        Table_Forced.write(outfile,format='fits', overwrite=True)
+
+    return Table_Forced
