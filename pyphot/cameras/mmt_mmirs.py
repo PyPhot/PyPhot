@@ -130,7 +130,7 @@ class MMTMMIRSCamera(camera.Camera):
         par.reset_all_processimages_par(**turn_off)
         par['scienceframe']['process']['use_darkimage'] = True
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_illumflat'] = False
 
 
         # Set the default exposure time ranges for the frame typing
@@ -144,6 +144,49 @@ class MMTMMIRSCamera(camera.Camera):
         par['scienceframe']['process']['grow'] = 0.5
 
         return par
+
+    def config_specific_par(self, scifile, inp_par=None):
+        """
+        Modify the ``PypeIt`` parameters to hard-wired values used for
+        specific instrument configurations.
+
+        Args:
+            scifile (:obj:`str`):
+                File to use when determining the configuration and how
+                to adjust the input parameters.
+            inp_par (:class:`~pypeit.par.parset.ParSet`, optional):
+                Parameter set used for the full run of PypeIt.  If None,
+                use :func:`default_pypeit_par`.
+
+        Returns:
+            :class:`~pypeit.par.parset.ParSet`: The PypeIt parameter set
+            adjusted for configuration specific parameter values.
+        """
+        par = super().config_specific_par(scifile, inp_par=inp_par)
+        par['postproc']['photometry']['cal_zpt'] = True
+
+        if self.get_meta_value(scifile, 'filter') == 'J':
+            par['postproc']['photometry']['photref_catalog'] = 'Twomass'
+            par['postproc']['photometry']['primary'] = 'J'
+            par['postproc']['photometry']['secondary'] = 'H'
+            par['postproc']['photometry']['zpt'] = 21.0
+            # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
+            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+        elif self.get_meta_value(scifile, 'filter') == 'H':
+            par['postproc']['photometry']['photref_catalog'] = 'Twomass'
+            par['postproc']['photometry']['primary'] = 'H'
+            par['postproc']['photometry']['secondary'] = 'K'
+            par['postproc']['photometry']['zpt'] = 21.0
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+        elif self.get_meta_value(scifile, 'filter') == 'K':
+            par['postproc']['photometry']['photref_catalog'] = 'Twomass'
+            par['postproc']['photometry']['primary'] = 'K'
+            par['postproc']['photometry']['secondary'] = 'H'
+            par['postproc']['photometry']['zpt'] = 21.0
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+
+        return par
+
 
     def check_frame_type(self, ftype, fitstbl, exprng=None):
         """
@@ -285,8 +328,8 @@ class MMTMMIRSCamera(camera.Camera):
 
         array = data[x1 - 1:x2, y1 - 1:y2]
 
-        gainimage = np.ones_like(array) * detector_par['det01']['gain'][0]
-        rnimage = np.ones_like(array) * detector_par['det01']['ronoise'][0]
+        gainimage = np.ones_like(array) * detector_par['gain'][0]
+        rnimage = np.ones_like(array) * detector_par['ronoise'][0]
 
         # Need the exposure time
         try:
