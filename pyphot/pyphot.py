@@ -327,6 +327,8 @@ class PyPhot(object):
                     #pixscale = detector_par['det{:02d}'.format(self.det)]['platescale']
                     pixscale = detector_par['platescale']
 
+                    ## ToDo: Remove fringing here.
+
                     ## Astrometry calibration
                     if self.par['postproc']['astrometry']['skip']:
                         msgs.warn('Skipping astrometry calibrations for individual images. Go with luck')
@@ -361,6 +363,9 @@ class PyPhot(object):
                     iobjfiles = self.fitstbl['filename'][grp_iobj]
                     filter_iobj = self.fitstbl['filter'][grp_iobj][0]
                     coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_combid{:03d}'.format(filter_iobj,objid)
+                    if '.gz' in iobjfiles[0]:
+                        for ii in range(len(iobjfiles)):
+                            iobjfiles[ii] = iobjfiles[ii].replace('.gz','')
 
                     # compile the file list
                     nscifits = np.size(iobjfiles)

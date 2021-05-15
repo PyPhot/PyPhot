@@ -33,6 +33,7 @@ def main(args):
 
     from pyphot.cameras import mmt_mmirs
     from pyphot.cameras import magellan_imacs
+    from pyphot.cameras import lbt_lbc
 
 
     # List only?
@@ -48,6 +49,12 @@ def main(args):
     elif args.camera == 'magellan_imacsf2':
         gen_imacs = magellan_imacs.MagellanIMACSF2Camera()
         img = gen_imacs.get_rawimage(args.file, args.det)[1]
+    elif args.camera == 'lbt_lbcb':
+        gen_lbcb = lbt_lbc.LBTLBCBCamera()
+        img = gen_lbcb.get_rawimage(args.file, args.det)[1]
+    elif args.camera == 'lbt_lbcr':
+        gen_lbcr = lbt_lbc.LBTLBCRCamera()
+        img = gen_lbcr.get_rawimage(args.file, args.det)[1]
     else:
         hdu = fits.open(args.file)
         img = hdu[args.exten].data
