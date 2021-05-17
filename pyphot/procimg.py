@@ -13,15 +13,14 @@ from IPython import embed
 from pyphot import msgs
 from pyphot import utils
 from pyphot import io
-from pyphot import sex, scamp, swarp
 
-from astropy.io import fits
+from astropy import stats
 from astropy.stats import SigmaClip
 from photutils import Background2D
 from photutils import MeanBackground, MedianBackground, SExtractorBackground
 
 def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
-            masterillumflatimg=None,
+            masterillumflatimg=None, maskproc=None,
             background='median', boxsize=(50,50), filter_size=(3, 3),
             mask_vig=False, minimum_vig=0.5, #mask vignetting
             mask_cr=True, maxiter=1, grow=1.5, remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0,
@@ -51,17 +50,19 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             msgs.info('Processing {:}'.format(ifile))
             detector_par, sci_image, header, exptime, gain_image, rn_image = camera.get_rawimage(ifile, det)
             saturation, nonlinear = detector_par['saturation'], detector_par['nonlinear']
-            #saturation, nonlinear = detector_par['det{:02d}'.format(det)]['saturation'], detector_par['det{:02d}'.format(det)]['nonlinear']
             #darkcurr = detector_par['det{:02d}'.format(det)]['darkcurr']
 
-            ## ToDo: fix the bpm function
             # bad pixel mask
-            #bpm = camera.bpm(ifile, det, shape=None, msbias=None)
-            bpm = np.zeros_like(sci_image,dtype=bool)
+            bpm = camera.bpm(ifile, det, shape=None, msbias=None)>0.
 
             # CR mask
             if mask_cr:
-                bpm_cr = lacosmic(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
+                ## ToDo: This does not work well. Need to tweak both algorithm and figure out which one is better
+                #from pyphot.lacosmic import lacosmic
+                #bpm_cr = lacosmic(sci_image, 2, sigclip, sigclip,
+                #                  error=None, mask=None, background=None, effective_gain=detector_par['gain'][0],
+                #                  readnoise=detector_par['ronoise'][0], maxiter=maxiter, border_mode='mirror')
+                bpm_cr = lacosmic_pypeit(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
                                   remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
             else:
                 bpm_cr = np.zeros_like(sci_image,dtype=bool)
@@ -76,6 +77,8 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             if masterillumflatimg is not None:
                 sci_image /= masterillumflatimg
             sci_image *= gain_image
+            if maskproc is None:
+                maskproc = np.ones_like(sci_image,dtype='bool')
 
             # mask Vignetting pixels
             if mask_vig and (masterillumflatimg is not None):
@@ -88,6 +91,9 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             # mask nan values
             bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
 
+            ## master BPM mask
+            bpm_all = bpm | bpm_cr | bpm_vig | bpm_nan | maskproc
+
             ## Sky background subtraction
             sigma_clip = SigmaClip(sigma=sigclip)
             if background == 'median':
@@ -96,21 +102,22 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
                 bkg_estimator = MeanBackground()
             else:
                 bkg_estimator = SExtractorBackground()
-            bkg = Background2D(sci_image, boxsize, filter_size=filter_size,sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+            bkg = Background2D(sci_image, boxsize, mask=bpm_all, filter_size=filter_size,sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
             sci_image -= bkg.background
 
-            ## ToDo: use the sigma clip for the statistics
-            bpm_all = bpm | bpm_cr | bpm_vig | bpm_nan
+            ## replace bad pixel values
             if replace == 'zero':
                 sci_image[bpm_all] = 0
             elif replace == 'median':
-                sci_image[bpm_all] = np.median(sci_image[np.invert(bpm_all)])
+                _,sci_image[bpm_all],_ = stats.sigma_clipped_stats(sci_image, bpm_all, sigma=3, maxiters=5)
             elif replace == 'mean':
-                sci_image[bpm_all] = np.mean(sci_image[np.invert(bpm_all)])
+                sci_image[bpm_all],_,_ = stats.sigma_clipped_stats(sci_image, bpm_all, sigma=3, maxiters=5)
             elif replace == 'min':
                 sci_image[bpm_all] = np.min(sci_image[np.invert(bpm_all)])
             elif replace == 'max':
                 sci_image[bpm_all] = np.max(sci_image[np.invert(bpm_all)])
+            else:
+                msgs.info('Not replacing bad pixel values')
 
             # Generate weight map used for SExtractor and SWarp (WEIGHT_TYPE = MAP_WEIGHT)
             wht_image = 1.0 / bkg.background
@@ -120,14 +127,15 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             msgs.info('Science image {:} saved'.format(sci_fits))
             io.save_fits(wht_fits, wht_image, header, 'WeightImage', overwrite=True)
             msgs.info('Weight image {:} saved'.format(wht_fits))
-            flag_image = bpm*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
-            io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
+            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
+            io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
+            #io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
             msgs.info('Flag image {:} saved'.format(flag_fits))
 
     return sci_fits_list, wht_fits_list, flag_fits_list
 
 
-def lacosmic(sciframe, saturation, nonlinear, varframe=None, maxiter=1, grow=1.5,
+def lacosmic_pypeit(sciframe, saturation, nonlinear, varframe=None, maxiter=1, grow=1.5,
              remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0):
     """
     Identify cosmic rays using the L.A.Cosmic algorithm

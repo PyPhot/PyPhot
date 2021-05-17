@@ -23,20 +23,23 @@ def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc=
         images.append(array)
 
     images = np.array(images)
-    gpms = np.ones_like(images, dtype=bool)
+    bpm = camera.bpm(biasfiles[0], det, shape=None, msbias=None).astype('bool')
+    bpms = np.repeat(bpm[np.newaxis, :, :], images.shape[0], axis=0)
 
     ## ToDo: Add weighted mean
-    mean, median, stddev = stats.sigma_clipped_stats(images, np.invert(gpms), sigma=sigma, maxiters=maxiters,
+    mean, median, stddev = stats.sigma_clipped_stats(images, bpms, sigma=sigma, maxiters=maxiters,
                                                      cenfunc=cenfunc, stdfunc=stdfunc, axis=0)
+    ## ToDo: identify bad pixels from masterbias
 
-    if cenfunc == 'medina':
+    if cenfunc == 'median':
         stack = median
     else:
         stack = mean
 
-    header['OLDTIME'] = (header['EXPTIME'], 'Original exposure time')
+    header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 0.0
-    io.save_fits(masterbias_name, stack, header, 'MasterBias', overwrite=True)
+
+    io.save_fits(masterbias_name, stack, header, 'MasterBias', mask=bpm.astype('int16'), overwrite=True)
 
 
 def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfunc='median', stdfunc='std',
@@ -50,23 +53,27 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
         images.append(array/exptime)
 
     images = np.array(images)
-    gpms = np.ones_like(images, dtype=bool)
+
+    bpm = camera.bpm(darkfiles[0], det, shape=None, msbias=None).astype('bool')
+    bpms = np.repeat(bpm[np.newaxis, :, :], images.shape[0], axis=0)
 
     ## ToDo: Add weighted mean
-    mean, median, stddev = stats.sigma_clipped_stats(images, np.invert(gpms), sigma=sigma, maxiters=maxiters,
+    mean, median, stddev = stats.sigma_clipped_stats(images, bpms, sigma=sigma, maxiters=maxiters,
                                                      cenfunc=cenfunc, stdfunc=stdfunc, axis=0)
+    ## ToDo: identify bad pixels from masterdark
 
-    if cenfunc == 'medina':
+    if cenfunc == 'median':
         stack = median
     else:
         stack = mean
 
-    header['OLDTIME'] = (header['EXPTIME'], 'Original exposure time')
+    header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 1.0
-    io.save_fits(masterdark_name, stack, header, 'MasterDark', overwrite=True)
+    io.save_fits(masterdark_name, stack, header, 'MasterDark', mask=bpm.astype('int16'), overwrite=True)
+
 
 def combineflat(flatfiles, camera, det, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
-                   stdfunc='std', sigma=5, maxiters=5):
+                   stdfunc='std', sigma=5, maxiters=5, window_size=50, maskillum=0.3):
 
     images = []
     masks = []
@@ -112,25 +119,60 @@ def combineflat(flatfiles, camera, det, masterbiasimg=None, masterdarkimg=None, 
 
     stack[np.isnan(stack)] = np.nanmedian(stack)
 
-    return stack, header
+    ## mask bad pixels (i.e. pixel variance greater than XX% using maskbad)
+    illum = gaussian_filter(stack, sigma=window_size)
+    bpm_illum = abs(1-stack/illum)>maskillum
 
-def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
-                   stdfunc='std', sigma=3, maxiters=5):
+    ## add bpm and masks into the flat
+    bpm = camera.bpm(flatfiles[0], det, shape=None, msbias=None).astype('bool')
+    stack_bpm = (bpm_illum | bpm | (np.isnan(stack))).astype('int16')
 
-    stack, header = combineflat(flatfiles, camera, det, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg, cenfunc=cenfunc,
-                   stdfunc=stdfunc, sigma=sigma, maxiters=maxiters)
+    return header, stack, stack_bpm
 
-    io.save_fits(masterpixflat_name, stack, header, 'MasterPixelFlat', overwrite=True)
+def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=None, masterdarkimg=None,
+                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5, window_size=51, maskillum=0.3):
 
-def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
-                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5, window_size=50):
+    header, stack, bpm = combineflat(flatfiles, camera, det, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg, cenfunc=cenfunc,
+                         stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size, maskillum=maskillum)
 
-    stack, header = combineflat(flatfiles, camera, det, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg, cenfunc=cenfunc,
-                   stdfunc=stdfunc, sigma=sigma, maxiters=maxiters)
+    flat = gaussian_filter(stack, sigma=window_size)
+    io.save_fits(masterillumflat_name, flat, header, 'MasterIllumFlat', mask=bpm, overwrite=True)
 
-    if masterpixflatimg is None:
-        masterpixflatimg = np.ones_like(stack)
+def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=None, masterdarkimg=None, masterillumflatimg=None,
+                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5, window_size=51, maskillum=0.3):
 
-    flat = gaussian_filter(stack/masterpixflatimg, sigma=window_size)
+    header, stack, bpm = combineflat(flatfiles, camera, det, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg, cenfunc=cenfunc,
+                         stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size, maskillum=maskillum)
 
-    io.save_fits(masterillumflat_name, flat, header, 'MasterIllumFlat', overwrite=True)
+    if masterillumflatimg is None:
+        masterillumflatimg = np.ones_like(stack)
+
+    flat = stack / masterillumflatimg
+
+    io.save_fits(masterpixflat_name, flat, header, 'MasterPixelFlat', mask=bpm, overwrite=True)
+
+def fringeframe(fringefiles, masterfringe_name, mask=None, cenfunc='median', stdfunc='std',
+              sigma=3, maxiters=5):
+
+    data0, header = io.load_fits(fringefiles[0])
+    nx, ny, nz = data0.shape[0], data0.shape[1], len(fringefiles)
+    data3D = np.zeros((nx, ny, nz))
+    for iimg in range(nz):
+        this_data, this_header = io.load_fits(fringefiles[iimg])
+        data3D[:, :, iimg] = this_data / this_header['EXPTIME']
+
+    mean, median, stddev = stats.sigma_clipped_stats(data3D, mask=mask, sigma=sigma, maxiters=maxiters,
+                                                     cenfunc=cenfunc, stdfunc=stdfunc, axis=2)
+
+    if cenfunc == 'median':
+        stack = median
+    else:
+        stack = mean
+
+
+    bpm = (np.isnan(stack)).astype('int16')
+
+    header['OLDTIME'] = (header['EXPTIME'], 'Original exposure time')
+    header['EXPTIME'] = 1.0
+
+    io.save_fits(masterfringe_name, stack, header, 'MasterFringe', mask=bpm, overwrite=True)

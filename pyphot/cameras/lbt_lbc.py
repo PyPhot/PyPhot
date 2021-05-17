@@ -168,6 +168,9 @@ class LBTLBCCamera(camera.Camera):
         datasec = head_det['DATASEC']
         x1, x2, y1, y2 = np.array(parse.load_sections(datasec, fmt_iraf=True)).flatten()
 
+        if x2>4608: # LBC occationally has reading out problem and would result in some bad rows.
+            x2=4608
+
         data = hdu[det].data*1.0
         array = data[x1:x2,y1:y2]
 
@@ -283,7 +286,10 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_biasimage'] = True
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = False
+        par['scienceframe']['process']['use_illumflat'] = True
+
+        # Background
+        par['scienceframe']['process']['boxsize'] = (251,251)
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
@@ -334,38 +340,38 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['photometry']['cal_zpt'] = True
 
         if self.get_meta_value(scifile, 'filter') == 'SDT_Uspec':
-            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 27.33
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'U-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 26.23
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'B-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.93
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'V-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 28.13
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'g-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 28.31
             par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.75
@@ -508,7 +514,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_biasimage'] = True
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = False
+        par['scienceframe']['process']['use_illumflat'] = True
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
@@ -566,31 +572,31 @@ class LBTLBCRCamera(LBTLBCCamera):
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'R-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.86
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'I-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 27.59
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 28.03
             par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
         elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 27.57
             par['postproc']['photometry']['coefficients'] = [0.,-0.072, 0.]
         elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['zpt'] = 27.20
@@ -629,7 +635,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on MMIRS")
+        msgs.info("Using hard-coded BPM for det=1 on LBC")
 
         # Get the binning
         #hdu = fits.open(filename)

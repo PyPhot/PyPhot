@@ -14,7 +14,7 @@ from astropy.table import Table
 
 from configobj import ConfigObj
 
-from pyphot import msgs
+from pyphot import msgs, io
 from pyphot import procimg, postproc
 from pyphot import sex, scamp, swarp
 from pyphot import query, crossmatch
@@ -240,7 +240,11 @@ class PyPhot(object):
                     this_det = self.det
                     this_name = '{:}_{:02d}.fits'.format(this_setup,this_det)
 
+                    scifiles = self.fitstbl.frame_paths(grp_science)
+                    raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
+
                     ### Build Calibrations
+                    ## ToDo: parset masterframes
                     # Bias
                     if self.par['scienceframe']['process']['use_biasimage']:
                         masterbias_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterBias_{:}'.format(this_name))
@@ -251,9 +255,11 @@ class PyPhot(object):
                             biasfiles = self.fitstbl.frame_paths(grp_bias)
                             masterframe.biasframe(biasfiles, self.camera, self.det, masterbias_name,
                                                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterbiasimg = fits.getdata(masterbias_name,0) ## ToDo: Change 1 to 0
+                        masterbiasimg = fits.getdata(masterbias_name,0)
+                        maskbiasimg = fits.getdata(masterbias_name,1)
                     else:
                         masterbiasimg = None
+                        maskbiasimg = np.zeros(raw_shape,dtype='int16')
 
                     # Dark
                     if self.par['scienceframe']['process']['use_darkimage']:
@@ -266,25 +272,11 @@ class PyPhot(object):
                             darkfiles = self.fitstbl.frame_paths(grp_dark)
                             masterframe.darkframe(darkfiles, self.camera, self.det, masterdark_name, masterbiasimg=masterbiasimg,
                                                   cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterdarkimg = fits.getdata(masterdark_name, 0) ## ToDo: Change 1 to 0
+                        masterdarkimg = fits.getdata(masterdark_name, 0)
+                        maskdarkimg = fits.getdata(masterdarkimg,1)
                     else:
                         masterdarkimg = None
-
-                    # Pixel Flat
-                    if self.par['scienceframe']['process']['use_pixelflat']:
-                        masterpixflat_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterPixelFlat_{:}'.format(this_name))
-
-                        if os.path.exists(masterpixflat_name) and self.reuse_masters:
-                            msgs.info('Using existing master file {:}'.format(masterpixflat_name))
-                        else:
-                            grp_pixflat = frame_indx[is_pixflat & in_grp]
-                            pixflatfiles = self.fitstbl.frame_paths(grp_pixflat)
-                            masterframe.pixelflatframe(pixflatfiles, self.camera, self.det, masterpixflat_name,
-                                                  masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
-                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterpixflatimg = fits.getdata(masterpixflat_name, 0) ## ToDo: Change 1 to 0
-                    else:
-                        masterpixflatimg = None
+                        maskdarkimg = np.zeros(raw_shape,dtype='int16')
 
                     # Illumination Flat
                     if self.par['scienceframe']['process']['use_illumflat']:
@@ -298,17 +290,42 @@ class PyPhot(object):
                             illumflatfiles = self.fitstbl.frame_paths(grp_illumflat)
                             masterframe.illumflatframe(illumflatfiles, self.camera, self.det, masterillumflat_name,
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
-                                                       masterpixflatimg=masterpixflatimg,
-                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
-                        masterillumflatimg = fits.getdata(masterillumflat_name, 0) ## ToDo: Change 1 to 0
+                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=5,
+                                                       window_size=51, maskillum=0.3)
+                        masterillumflatimg = fits.getdata(masterillumflat_name, 0)
+                        maskillumflatimg = fits.getdata(masterillumflat_name, 1)
                     else:
                         masterillumflatimg = None
+                        maskillumflatimg = np.zeros(raw_shape,dtype='int16')
+
+                    # Pixel Flat
+                    if self.par['scienceframe']['process']['use_pixelflat']:
+                        masterpixflat_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterPixelFlat_{:}'.format(this_name))
+
+                        if os.path.exists(masterpixflat_name) and self.reuse_masters:
+                            msgs.info('Using existing master file {:}'.format(masterpixflat_name))
+                        else:
+                            grp_pixflat = frame_indx[is_pixflat & in_grp]
+                            pixflatfiles = self.fitstbl.frame_paths(grp_pixflat)
+                            masterframe.pixelflatframe(pixflatfiles, self.camera, self.det, masterpixflat_name,
+                                                       masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
+                                                       masterillumflatimg=masterillumflatimg,
+                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=5,
+                                                       window_size=51, maskillum=0.3)
+                        masterpixflatimg = fits.getdata(masterpixflat_name, 0)
+                        maskpixflatimg = fits.getdata(masterpixflat_name, 1)
+                    else:
+                        masterpixflatimg = None
+                        maskixflatimg = np.zeros(raw_shape,dtype='int16')
+
+                    ## prepare mask image for ccdproc
+                    maskproc = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
 
                     ## Procimage
-                    scifiles = self.fitstbl.frame_paths(grp_science)
                     sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(scifiles, self.camera, self.det,
                                     science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                     masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
+                                    maskproc = maskproc>0,
                                     background=self.par['scienceframe']['process']['background'],
                                     boxsize=self.par['scienceframe']['process']['boxsize'],
                                     filter_size=self.par['scienceframe']['process']['filter_size'],
@@ -327,7 +344,23 @@ class PyPhot(object):
                     #pixscale = detector_par['det{:02d}'.format(self.det)]['platescale']
                     pixscale = detector_par['platescale']
 
-                    ## ToDo: Remove fringing here.
+                    ## Remove fringing.
+                    # ToDO: add parset for fringing
+                    if False:
+                    #if self.par['postproc']['defringing']['skip']:
+                        msgs.warn('Skipping de-fringing for individual images.')
+                    else:
+                        msgs.info('De-fringing detector {:} images'.format(self.det))
+                        masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(this_name))
+                        if os.path.exists(masterfringe_name) and self.reuse_masters:
+                            msgs.info('Using existing master file {:}'.format(masterfringe_name))
+                        else:
+                            msgs.info('Building master file {:}'.format(masterfringe_name))
+                            fringefiles = sci_fits_list.copy()
+                            masterframe.fringeframe(fringefiles, masterfringe_name, mask=None, cenfunc='median', stdfunc='std',
+                                        sigma=3, maxiters=5)
+                        masterfringeimg = fits.getdata(masterfringe_name,0)
+                        postproc.defringing(sci_fits_list, masterfringeimg)
 
                     ## Astrometry calibration
                     if self.par['postproc']['astrometry']['skip']:

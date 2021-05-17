@@ -22,9 +22,22 @@ from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgr
 from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
 from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
 
-from pyphot import msgs
+from pyphot import msgs, io
 from pyphot import sex, scamp, swarp
 from pyphot import query, crossmatch
+
+def defringing(sci_fits_list, masterfringeimg):
+
+    ## ToDo: matching the amplitude of friging rather than scale with exposure time.
+    for i in range(len(sci_fits_list)):
+        data, header = io.load_fits(sci_fits_list[i])
+        if 'DEFRING' in header.keys():
+            msgs.info('The De-fringed image {:} exists, skipping...'.format(sci_fits_list[i]))
+        else:
+            data -= masterfringeimg * header['EXPTIME']
+            header['DEFRING'] = 'TRUE'
+            io.save_fits(sci_fits_list[i], data, header, 'ScienceImage', overwrite=True)
+            msgs.info('De-fringed science image {:} saved'.format(sci_fits_list[i]))
 
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
@@ -355,7 +368,13 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
               coefficients[1]*(ref_data['{:}mag'.format(primary)]-ref_data['{:}mag'.format(secondary)])+ \
               coefficients[2] * (ref_data['{:}mag'.format(primary)] - ref_data['{:}mag'.format(secondary)])**2
 
-    ref_ra, ref_dec = ref_data['RAJ2000'], ref_data['DEJ2000']
+    try:
+        ## 2MASS
+        ref_ra, ref_dec = ref_data['RAJ2000'], ref_data['DEJ2000']
+    except:
+        ## SDSS
+        ref_ra, ref_dec = ref_data['RA_ICRS'], ref_data['DE_ICRS']
+
     ref_pos = np.zeros((len(ref_ra), 2))
     ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
 

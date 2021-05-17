@@ -46,8 +46,7 @@ def initialize_header(hdr=None, primary=False):
     # Return
     return hdr
 
-def save_fits(fitsname, data, header, img_type, overwrite=True):
-
+def save_fits(fitsname, data, header, img_type, mask=None, overwrite=True):
 
     # Add some Header card
     hdr = initialize_header(hdr=None, primary=True)
@@ -56,9 +55,14 @@ def save_fits(fitsname, data, header, img_type, overwrite=True):
         header.append(hdr.cards[i])
 
     hdu = fits.PrimaryHDU(data, header=header)
-    hdu.writeto(fitsname, overwrite=overwrite)
 
-    # Image header
-    #img_hdu = fits.ImageHDU(data, header=header)
-    #hdulist = fits.HDUList([primary_hdu,img_hdu])
-    #hdulist.writeto(fitsname,overwrite=overwrite)
+    if mask is None:
+        hdu.writeto(fitsname, overwrite=overwrite)
+    else:
+        mask_hdu = fits.ImageHDU(mask, name='MASK')
+        hdulist = fits.HDUList([hdu,mask_hdu])
+        hdulist.writeto(fitsname,overwrite=overwrite)
+
+def load_fits(fitsname):
+    par = fits.open(fitsname)
+    return par[0].data, par[0].header

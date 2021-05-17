@@ -294,7 +294,7 @@ class ProcessImagesPar(ParSet):
         dtypes['mask_cr'] = bool
         descr['mask_cr'] = 'Identify CRs and mask them'
 
-        defaults['lamaxiter'] = 1
+        defaults['lamaxiter'] = 3
         dtypes['lamaxiter'] = int
         descr['lamaxiter'] = 'Maximum number of iterations for LA cosmics routine.'
 
