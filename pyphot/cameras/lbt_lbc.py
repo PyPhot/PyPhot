@@ -294,7 +294,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
-        par['scienceframe']['process']['replace'] = 'zero'
+        par['scienceframe']['process']['replace'] = 'None'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -410,7 +410,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on MMIRS")
+        msgs.info("Using hard-coded BPM for det=1 on LBCB")
 
         # Get the binning
         #hdu = fits.open(filename)
@@ -519,7 +519,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
-        par['scienceframe']['process']['replace'] = 'zero'
+        par['scienceframe']['process']['replace'] = 'None'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -635,7 +635,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on LBC")
+        msgs.info("Using hard-coded BPM for det={:} on LBCR".format(det))
 
         # Get the binning
         #hdu = fits.open(filename)

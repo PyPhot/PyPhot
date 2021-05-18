@@ -211,6 +211,12 @@ class PyPhot(object):
         # Find the illuminate flat frames
         is_illumflat = self.fitstbl.find_frames('illumflat')
 
+        # Find the super sky frames
+        is_supersky = self.fitstbl.find_frames('supersky')
+
+        # Find the fringe frames
+        is_fringe = self.fitstbl.find_frames('fringe')
+
         # Find the science frames
         is_science = self.fitstbl.find_frames('science')
 
@@ -254,7 +260,7 @@ class PyPhot(object):
                             grp_bias = frame_indx[is_bias & in_grp]
                             biasfiles = self.fitstbl.frame_paths(grp_bias)
                             masterframe.biasframe(biasfiles, self.camera, self.det, masterbias_name,
-                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
+                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=3)
                         masterbiasimg = fits.getdata(masterbias_name,0)
                         maskbiasimg = fits.getdata(masterbias_name,1)
                     else:
@@ -271,7 +277,7 @@ class PyPhot(object):
                             grp_dark = frame_indx[is_dark & in_grp]
                             darkfiles = self.fitstbl.frame_paths(grp_dark)
                             masterframe.darkframe(darkfiles, self.camera, self.det, masterdark_name, masterbiasimg=masterbiasimg,
-                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=5)
+                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=3)
                         masterdarkimg = fits.getdata(masterdark_name, 0)
                         maskdarkimg = fits.getdata(masterdarkimg,1)
                     else:
@@ -290,8 +296,8 @@ class PyPhot(object):
                             illumflatfiles = self.fitstbl.frame_paths(grp_illumflat)
                             masterframe.illumflatframe(illumflatfiles, self.camera, self.det, masterillumflat_name,
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
-                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=5,
-                                                       window_size=51, maskillum=0.3)
+                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
+                                                       window_size=51, maskillum=0.1)
                         masterillumflatimg = fits.getdata(masterillumflat_name, 0)
                         maskillumflatimg = fits.getdata(masterillumflat_name, 1)
                     else:
@@ -310,8 +316,8 @@ class PyPhot(object):
                             masterframe.pixelflatframe(pixflatfiles, self.camera, self.det, masterpixflat_name,
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                                        masterillumflatimg=masterillumflatimg,
-                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=5,
-                                                       window_size=51, maskillum=0.3)
+                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
+                                                       window_size=51, maskillum=0.1)
                         masterpixflatimg = fits.getdata(masterpixflat_name, 0)
                         maskpixflatimg = fits.getdata(masterpixflat_name, 1)
                     else:
@@ -321,14 +327,14 @@ class PyPhot(object):
                     ## prepare mask image for ccdproc
                     maskproc = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
 
-                    ## Procimage
-                    sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(scifiles, self.camera, self.det,
+                    ## CCDPROC -- bias, dark subtraction, flat fielding and cosmic ray rejections
+                    sci_fits_list, flag_fits_list = procimg.ccdproc(scifiles, self.camera, self.det,
                                     science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                     masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
                                     maskproc = maskproc>0,
-                                    background=self.par['scienceframe']['process']['background'],
-                                    boxsize=self.par['scienceframe']['process']['boxsize'],
-                                    filter_size=self.par['scienceframe']['process']['filter_size'],
+                                    #background=self.par['scienceframe']['process']['background'],
+                                    #boxsize=self.par['scienceframe']['process']['boxsize'],
+                                    #filter_size=self.par['scienceframe']['process']['filter_size'],
                                     mask_vig=self.par['scienceframe']['process']['mask_vig'],
                                     minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
                                     mask_cr=self.par['scienceframe']['process']['mask_cr'],
@@ -340,29 +346,78 @@ class PyPhot(object):
                                     objlim=self.par['scienceframe']['process']['objlim'],
                                     replace=self.par['scienceframe']['process']['replace'])
 
-                    detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), self.det)
-                    #pixscale = detector_par['det{:02d}'.format(self.det)]['platescale']
-                    pixscale = detector_par['platescale']
+                    # SuperSky Flat
+                    if self.par['scienceframe']['process']['use_illumflat']: # ToDo: change to supersky
+                        mastersupersky_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterSuperSky_{:}'.format(this_name))
 
-                    ## Remove fringing.
-                    # ToDO: add parset for fringing
-                    if False:
-                    #if self.par['postproc']['defringing']['skip']:
-                        msgs.warn('Skipping de-fringing for individual images.')
+                        if os.path.exists(mastersupersky_name) and self.reuse_masters:
+                            msgs.info('Using existing master file {:}'.format(mastersupersky_name))
+                        else:
+                            # find common between supersky and grp_science
+                            grp_supersky = np.intersect1d(frame_indx[is_supersky & in_grp], grp_science)
+                            if np.size(grp_supersky)<3:
+                                msgs.warn('The number of SuperSky images should be generally >=3.')
+                            superskyraw = self.fitstbl.frame_paths(grp_supersky)
+                            superskyfiles = []
+                            for ifile in superskyraw:
+                                rootname = os.path.join(self.science_path, ifile.split('/')[-1])
+                                if '.gz' in rootname:
+                                    rootname = rootname.replace('.gz', '')
+                                # prepare output file names
+                                superskyfile = rootname.replace('.fits', '_det{:02d}_proc.fits'.format(self.det))
+                                superskyfiles.append(superskyfile)
+
+                            masterframe.superskyframe(superskyfiles, mastersupersky_name,
+                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
+                                                       window_size=51)
+                        mastersuperskyimg = fits.getdata(mastersupersky_name, 0)
+                        masksuperskyimg = fits.getdata(mastersupersky_name, 1)
                     else:
-                        msgs.info('De-fringing detector {:} images'.format(self.det))
+                        mastersuperskyimg = None
+                        masksuperskyimg = np.zeros(raw_shape,dtype='int16')
+
+                    ## SCIPROC -- supersky flattening and background subtraction.
+                    sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, flag_fits_list,
+                                    mastersuperskyimg=mastersuperskyimg,
+                                    background=self.par['scienceframe']['process']['background'],
+                                    boxsize=self.par['scienceframe']['process']['boxsize'],
+                                    filter_size=self.par['scienceframe']['process']['filter_size'],
+                                    sigclip=self.par['scienceframe']['process']['sigclip'],
+                                    replace=self.par['scienceframe']['process']['replace'])
+
+                    ## Master Fringing.
+                    if self.par['scienceframe']['process']['use_illumflat']: # ToDo: change to fringing
                         masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(this_name))
                         if os.path.exists(masterfringe_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterfringe_name))
                         else:
-                            msgs.info('Building master file {:}'.format(masterfringe_name))
-                            fringefiles = sci_fits_list.copy()
-                            masterframe.fringeframe(fringefiles, masterfringe_name, mask=None, cenfunc='median', stdfunc='std',
-                                        sigma=3, maxiters=5)
+                            # find common between fringe and grp_science
+                            grp_fringe= np.intersect1d(frame_indx[is_fringe & in_grp], grp_science)
+                            if np.size(grp_fringe)<3:
+                                msgs.warn('The number of Fringe images should be generally >=3.')
+                            superskyraw = self.fitstbl.frame_paths(grp_fringe)
+                            fringefiles = []
+                            for ifile in superskyraw:
+                                rootname = os.path.join(self.science_path, ifile.split('/')[-1])
+                                if '.gz' in rootname:
+                                    rootname = rootname.replace('.gz', '')
+                                # prepare output file names
+                                fringefile = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(self.det))
+                                fringefiles.append(fringefile)
+
+                            masterframe.fringeframe(fringefiles, masterfringe_name, mask=None, mastersuperskyimg=mastersuperskyimg,
+                                                    cenfunc='median', stdfunc='std',sigma=3, maxiters=3, window_size=51)
                         masterfringeimg = fits.getdata(masterfringe_name,0)
+                        maskfringeimg = fits.getdata(masterfringe_name, 1)
                         postproc.defringing(sci_fits_list, masterfringeimg)
+                    else:
+                        masterfringeimg = None
+                        maskfringeimg = np.zeros(raw_shape,dtype='int16')
 
                     ## Astrometry calibration
+                    detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), self.det)
+                    pixscale = detector_par['platescale']
+
                     if self.par['postproc']['astrometry']['skip']:
                         msgs.warn('Skipping astrometry calibrations for individual images. Go with luck')
                         sci_resample_list, wht_resample_list, flag_resample_list = sci_fits_list, wht_fits_list, flag_fits_list
@@ -446,6 +501,7 @@ class PyPhot(object):
                                                     back_size=self.par['postproc']['coadd']['back_size'],
                                                     back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
                                                     back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
+                                                    resampling_type=self.par['postproc']['coadd']['resampling_type'],
                                                     delete=self.par['postproc']['coadd']['delete'],
                                                     log=self.par['postproc']['coadd']['log'])
 

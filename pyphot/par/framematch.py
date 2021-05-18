@@ -522,10 +522,12 @@ class FrameTypeBitMask(BitMask):
         frame_types = OrderedDict([
                         ('bias', 'Bias readout for detector bias subtraction'),
                         ('dark', 'Shuttered exposure to measure dark current'),
-                   ('pixelflat', 'Flat-field exposure used for pixel-to-pixel response'),
-                   ('illumflat', 'Flat-field exposure used for illumination flat'),
-                     ('science', 'On-sky observation of a primary target'),
-                    ('standard', 'On-sky observation of a flux calibrator'),
+                        ('pixelflat', 'Flat-field exposure used for pixel-to-pixel response'),
+                        ('illumflat', 'Flat-field exposure used for illumination flat'),
+                        ('supersky', 'On-sky observation used for super sky flat'),
+                        ('fringe', 'On-sky observation used for fringe frame'),
+                        ('science', 'On-sky observation of a primary target'),
+                        ('standard', 'On-sky observation of a flux calibrator'),
                                   ])
         super(FrameTypeBitMask, self).__init__(list(frame_types.keys()),
                                                descr=list(frame_types.values()))

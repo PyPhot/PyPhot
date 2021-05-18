@@ -294,7 +294,7 @@ class ProcessImagesPar(ParSet):
         dtypes['mask_cr'] = bool
         descr['mask_cr'] = 'Identify CRs and mask them'
 
-        defaults['lamaxiter'] = 3
+        defaults['lamaxiter'] = 1
         dtypes['lamaxiter'] = int
         descr['lamaxiter'] = 'Maximum number of iterations for LA cosmics routine.'
 
@@ -882,7 +882,7 @@ class CoaddPar(ParSet):
     """
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None,
                  clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
-                 back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
+                 back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None, resampling_type=None,
                  delete=None, log=None):
 
         # Grab the parameter names and values from the function
@@ -952,6 +952,11 @@ class CoaddPar(ParSet):
         dtypes['back_filtthresh'] = [int, float]
         descr['back_filtthresh'] = 'Threshold above which the background map filter operates'
 
+        defaults['resampling_type'] = 'LANCZOS3'
+        options['resampling_type'] = CoaddPar.valid_resampling_type()
+        dtypes['resampling_type'] = str
+        descr['resampling_type'] = 'Swarp resampling type options are: {0}'.format(', '.join(options['resampling_type']))
+
         defaults['delete'] = False
         dtypes['delete'] = bool
         descr['delete'] = 'Delete the configuration files for SWARP?'
@@ -973,7 +978,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1005,6 +1010,13 @@ class CoaddPar(ParSet):
         """
         return ['MEDIAN', 'AVERAGE', 'MIN','MAX','WEIGHTED','CLIPPED','CHI-OLD','CHI-MODE','CHI-MEAN','SUM',
                 'WEIGHTED_WEIGHT','MEDIAN_WEIGHT', 'AND', 'NAND','OR','NOR']
+
+    @staticmethod
+    def valid_resampling_type():
+        """
+        Return the valid methods for mosaic method.
+        """
+        return ['NEAREST', 'BILINEAR', 'LANCZOS2', 'LANCZOS3', 'LANCZOS4', 'FLAGS']
 
     def validate(self):
         """

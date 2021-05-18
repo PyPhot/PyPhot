@@ -19,15 +19,12 @@ from astropy.stats import SigmaClip
 from photutils import Background2D
 from photutils import MeanBackground, MedianBackground, SExtractorBackground
 
-def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
-            masterillumflatimg=None, maskproc=None,
-            background='median', boxsize=(50,50), filter_size=(3, 3),
-            mask_vig=False, minimum_vig=0.5, #mask vignetting
+def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
+            masterillumflatimg=None, maskproc=None, mask_vig=False, minimum_vig=0.5, #mask vignetting
             mask_cr=True, maxiter=1, grow=1.5, remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0,
             replace=None):
 
     sci_fits_list = []
-    wht_fits_list = []
     flag_fits_list = []
     for ifile in scifiles:
 
@@ -37,10 +34,8 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             if '.gz' in rootname:
                 rootname = rootname.replace('.gz','')
         # prepare output file names
-        sci_fits = rootname.replace('.fits','_det{:02d}_sci.fits'.format(det))
+        sci_fits = rootname.replace('.fits','_det{:02d}_proc.fits'.format(det))
         sci_fits_list.append(sci_fits)
-        wht_fits = rootname.replace('.fits','_det{:02d}_sci.weight.fits'.format(det))
-        wht_fits_list.append(wht_fits)
         flag_fits = rootname.replace('.fits','_det{:02d}_flag.fits'.format(det))
         flag_fits_list.append(flag_fits)
 
@@ -94,17 +89,6 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             ## master BPM mask
             bpm_all = bpm | bpm_cr | bpm_vig | bpm_nan | maskproc
 
-            ## Sky background subtraction
-            sigma_clip = SigmaClip(sigma=sigclip)
-            if background == 'median':
-                bkg_estimator = MedianBackground()
-            elif background == 'mean':
-                bkg_estimator = MeanBackground()
-            else:
-                bkg_estimator = SExtractorBackground()
-            bkg = Background2D(sci_image, boxsize, mask=bpm_all, filter_size=filter_size,sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
-            sci_image -= bkg.background
-
             ## replace bad pixel values
             if replace == 'zero':
                 sci_image[bpm_all] = 0
@@ -119,6 +103,66 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             else:
                 msgs.info('Not replacing bad pixel values')
 
+            header['CCDPROC'] = ('TRUE', 'CCDPROC is done?')
+            # save images
+            io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)
+            msgs.info('Science image {:} saved'.format(sci_fits))
+            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
+            #io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
+            io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
+            msgs.info('Flag image {:} saved'.format(flag_fits))
+
+    return sci_fits_list, flag_fits_list
+
+def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
+            background='median', boxsize=(50,50), filter_size=(3, 3), sigclip=5.0, replace=None):
+
+    sci_fits_list = []
+    wht_fits_list = []
+    for ii, ifile in enumerate(scifiles):
+        # prepare output file names
+        sci_fits = ifile.replace('_proc.fits','_sci.fits')
+        sci_fits_list.append(sci_fits)
+        wht_fits = ifile.replace('_proc.fits','_sci.weight.fits')
+        wht_fits_list.append(wht_fits)
+
+        if os.path.exists(sci_fits):
+            msgs.info('The Science product {:} exists, skipping...'.format(sci_fits))
+        else:
+            msgs.info('Processing {:}'.format(ifile))
+            data, header = io.load_fits(ifile)
+            flag, _ = io.load_fits(flagfiles[ii])
+            mask = flag>0
+
+            ## super flattening your images
+            if mastersuperskyimg is not None:
+                data /= mastersuperskyimg
+
+            ## Sky background subtraction
+            sigma_clip = SigmaClip(sigma=sigclip)
+            if background == 'median':
+                bkg_estimator = MedianBackground()
+            elif background == 'mean':
+                bkg_estimator = MeanBackground()
+            else:
+                bkg_estimator = SExtractorBackground()
+            bkg = Background2D(data, boxsize, mask=mask, filter_size=filter_size,sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+            sci_image = data-bkg.background
+
+            ## replace bad pixel values
+            if replace == 'zero':
+                sci_image[mask] = 0
+            elif replace == 'median':
+                _,sci_image[mask],_ = stats.sigma_clipped_stats(sci_image, mask, sigma=sigma_clip, maxiters=5)
+            elif replace == 'mean':
+                sci_image[mask],_,_ = stats.sigma_clipped_stats(sci_image, mask, sigma=sigma_clip, maxiters=5)
+            elif replace == 'min':
+                sci_image[mask] = np.min(sci_image[np.invert(mask)])
+            elif replace == 'max':
+                sci_image[mask] = np.max(sci_image[np.invert(mask)])
+            else:
+                msgs.info('Not replacing bad pixel values')
+
             # Generate weight map used for SExtractor and SWarp (WEIGHT_TYPE = MAP_WEIGHT)
             wht_image = 1.0 / bkg.background
 
@@ -127,13 +171,13 @@ def sciproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             msgs.info('Science image {:} saved'.format(sci_fits))
             io.save_fits(wht_fits, wht_image, header, 'WeightImage', overwrite=True)
             msgs.info('Weight image {:} saved'.format(wht_fits))
-            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
-            io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
+
+            #flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
+            #io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
             #io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
-            msgs.info('Flag image {:} saved'.format(flag_fits))
+            #msgs.info('Flag image {:} saved'.format(flag_fits))
 
-    return sci_fits_list, wht_fits_list, flag_fits_list
-
+    return sci_fits_list, wht_fits_list, flagfiles
 
 def lacosmic_pypeit(sciframe, saturation, nonlinear, varframe=None, maxiter=1, grow=1.5,
              remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0):

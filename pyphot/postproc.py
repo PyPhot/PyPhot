@@ -35,7 +35,7 @@ def defringing(sci_fits_list, masterfringeimg):
             msgs.info('The De-fringed image {:} exists, skipping...'.format(sci_fits_list[i]))
         else:
             data -= masterfringeimg * header['EXPTIME']
-            header['DEFRING'] = 'TRUE'
+            header['DEFRING'] = ('TRUE', 'De-Fringing is done?')
             io.save_fits(sci_fits_list[i], data, header, 'ScienceImage', overwrite=True)
             msgs.info('De-fringed science image {:} saved'.format(sci_fits_list[i]))
 
@@ -143,7 +143,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
 def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=200, back_filtersize=3,
-          back_filtthresh=0.0, delete=True, log=True):
+          back_filtthresh=0.0, resampling_type='LANCZOS3', delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
     msgs.info('Coadding image for {:}'.format(os.path.join(coadddir,coaddroot)))
@@ -166,7 +166,7 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
                    "WEIGHT_TYPE": weight_type,"RECALE_WEIGHTS": rescale,"BLANK_BADPIXELS":blank,
                    "COMBINE_TYPE": combine_type.upper(),"CLIP_AMPFRAC":clip_ampfrac,"CLIP_SIGMA":clip_sigma,
                    "SUBTRACT_BACK": subtract,"BACK_TYPE":back_type,"BACK_DEFAULT":back_default,"BACK_SIZE":back_size,
-                   "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh}
+                   "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
 
     swarp.swarpall(scifiles, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                    coadddir=coadddir, coaddroot=coaddroot + '_sci', delete=delete, log=log)
@@ -340,13 +340,13 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     try:
         catalog = Table.read(catalogfits)
-        good_cat = catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>5
+        good_cat = catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>10
         catalog = catalog[good_cat]
         ra, dec = catalog['sky_centroid_icrs.ra'], catalog['sky_centroid_icrs.dec']
     except:
         catalog = Table.read(catalogfits, 2)
-        good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['NIMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & (catalog['CLASS_STAR']>0.5)
-        good_cat &= catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>5
+        good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['NIMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & (catalog['CLASS_STAR']>0.9)
+        good_cat &= catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>10
         catalog = catalog[good_cat]
         ra, dec = catalog['ALPHA_J2000'], catalog['DELTA_J2000']
 
@@ -358,7 +358,11 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
     radius = np.nanmax(distance)
 
     ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-    good_ref = (1.0857/ref_data['e_{:}mag'.format(primary)]>5) & (1.0857/ref_data['e_{:}mag'.format(secondary)]>5)
+    good_ref = (1.0857/ref_data['e_{:}mag'.format(primary)]>10) & (1.0857/ref_data['e_{:}mag'.format(secondary)]>10)
+    try:
+        good_ref &= (ref_data['class']==6).data # ToDo: This is a hack need to tweak the query to return a uniform class parameter
+    except:
+        msgs.error('No point-source selection was applied to the reference catalog')
     try:
         ref_data = ref_data[good_ref.data]
     except:
@@ -384,6 +388,8 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     matched_cat_mag = catalog['MAG_AUTO'][matched]
     matched_ref_mag = ref_mag[ind[matched]]
+    #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
+
     nstar = np.sum(matched)
 
     _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
@@ -403,6 +409,17 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         plt.ylabel('# stars used for the calibration',fontsize=14)
         plt.text(zp-6.5*zp_std,0.8*nmax,r'{:0.3f}$\pm${:0.3f}'.format(zp,zp_std),fontsize=14)
         plt.savefig(outqa)
+        plt.close()
+
+        plt.plot(matched_ref_mag, matched_cat_mag+zp, 'k.')
+        plt.plot([matched_ref_mag.min(),matched_ref_mag.max()],[matched_ref_mag.min(),matched_ref_mag.max()],'r--')
+        plt.xlim(matched_ref_mag.min(),matched_ref_mag.max())
+        plt.ylim(matched_ref_mag.min(),matched_ref_mag.max())
+        plt.xlabel('Reference magnitude',fontsize=14)
+        plt.ylabel('Calibrated magnitude',fontsize=14)
+        plt.savefig(outqa.replace('zpt','photo'))
+        plt.close()
+
     # rerun the SExtractor with the zero point
     msgs.warn('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
 
