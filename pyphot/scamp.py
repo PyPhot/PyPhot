@@ -105,4 +105,8 @@ def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
 def scampall(imglist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
 
     for imgname in imglist:
-        scampone(imgname, config=config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig, delete=delete, log=log)
+        if config is not None:
+            this_config = config.copy() # need to copy this since the config would be possibly changed in scampone!
+        else:
+            this_config = None
+        scampone(imgname, config=this_config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig, delete=delete, log=log)

@@ -20,7 +20,7 @@ from photutils import Background2D
 from photutils import MeanBackground, MedianBackground, SExtractorBackground
 
 def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
-            masterillumflatimg=None, maskproc=None, mask_vig=False, minimum_vig=0.5, #mask vignetting
+            masterillumflatimg=None, maskproc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, #mask vignetting
             mask_cr=True, maxiter=1, grow=1.5, remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0,
             replace=None):
 
@@ -71,7 +71,8 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
                 sci_image /= masterpixflatimg
             if masterillumflatimg is not None:
                 sci_image /= masterillumflatimg
-            sci_image *= gain_image
+            if apply_gain:
+                sci_image *= gain_image
 
             if maskproc is None:
                 maskproc = np.ones_like(sci_image,dtype='bool')

@@ -224,6 +224,10 @@ def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultc
             weight_image = weight_image_list[ii]
         else:
             weight_image = None
-        sexone(imgname, task=task, config=config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
+        if config is not None:
+            this_config = config.copy()# need to copy this since the config would be possibly changed in sexone!
+        else:
+            this_config = None
+        sexone(imgname, task=task, config=this_config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
                nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log)
 

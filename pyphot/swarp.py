@@ -150,5 +150,9 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
 
     else:
         for imgname in imglist:
-            swarpone(imgname,config=config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log)
+            if config is not None:
+                this_config = config.copy()# need to copy this since the config would be possibly changed in swarpone!
+            else:
+                this_config = None
+            swarpone(imgname,config=this_config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log)
 

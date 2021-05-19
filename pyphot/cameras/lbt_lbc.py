@@ -107,7 +107,7 @@ class LBTLBCCamera(camera.Camera):
             return good_exp & (fitstbl['idname'] == 'flat') & flats & np.invert(copoint_exp)
         if ftype == 'standard':
             return good_exp & (fitstbl['idname'] == 'standard') & np.invert(copoint_exp)
-        if ftype in ['science']:
+        if ftype in ['science','supersky','fringe']:
             return good_exp & (fitstbl['idname'] == 'object') & np.invert(copoint_exp)
         if ftype == 'dark':
             return good_exp & (fitstbl['idname'] == 'dark') & np.invert(copoint_exp)
@@ -289,6 +289,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_illumflat'] = True
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
+        par['scienceframe']['process']['apply_gain'] = False
 
         # Background
         par['scienceframe']['process']['boxsize'] = (251,251)
@@ -520,6 +521,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_illumflat'] = True
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = True
+        par['scienceframe']['process']['apply_gain'] = False
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False

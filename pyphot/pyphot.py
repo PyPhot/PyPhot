@@ -14,10 +14,9 @@ from astropy.table import Table
 
 from configobj import ConfigObj
 
-from pyphot import msgs, io
+from pyphot import msgs
 from pyphot import procimg, postproc
-from pyphot import sex, scamp, swarp
-from pyphot import query, crossmatch
+from pyphot import sex
 from pyphot.par.util import parse_pyphot_file
 from pyphot.par import PyPhotPar
 from pyphot.metadata import PyPhotMetaData
@@ -322,7 +321,7 @@ class PyPhot(object):
                         maskpixflatimg = fits.getdata(masterpixflat_name, 1)
                     else:
                         masterpixflatimg = None
-                        maskixflatimg = np.zeros(raw_shape,dtype='int16')
+                        maskpixflatimg = np.zeros(raw_shape,dtype='int16')
 
                     ## prepare mask image for ccdproc
                     maskproc = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
@@ -332,9 +331,7 @@ class PyPhot(object):
                                     science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                     masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
                                     maskproc = maskproc>0,
-                                    #background=self.par['scienceframe']['process']['background'],
-                                    #boxsize=self.par['scienceframe']['process']['boxsize'],
-                                    #filter_size=self.par['scienceframe']['process']['filter_size'],
+                                    apply_gain=self.par['scienceframe']['process']['apply_gain'],
                                     mask_vig=self.par['scienceframe']['process']['mask_vig'],
                                     minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
                                     mask_cr=self.par['scienceframe']['process']['mask_cr'],

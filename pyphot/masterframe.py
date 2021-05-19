@@ -81,14 +81,14 @@ def combineflat(flatfiles, camera=None, det=None, masterbiasimg=None, masterdark
     masks = []
     for ifile in flatfiles:
         if camera is not None:
-            msgs.info('reading flat from raw images.')
+            msgs.info('reading raw flat images.')
             detector_par, array, header, exptime,_,_ = camera.get_rawimage(ifile, det)
             if masterbiasimg is not None:
                 array -= masterbiasimg
             if masterdarkimg is not None:
                 array -= masterdarkimg*exptime
         else:
-            msgs.info('reading flat from ccdproc-ed images.')
+            msgs.info('reading ccdproc-ed flat images.')
             array, header = io.load_fits(ifile)
 
         # Sigma_clipping statistics for the image
