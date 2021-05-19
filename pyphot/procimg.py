@@ -72,6 +72,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             if masterillumflatimg is not None:
                 sci_image /= masterillumflatimg
             sci_image *= gain_image
+
             if maskproc is None:
                 maskproc = np.ones_like(sci_image,dtype='bool')
 
@@ -103,6 +104,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             else:
                 msgs.info('Not replacing bad pixel values')
 
+            header['GAIN'] = (1.0, 'Effective gain')
             header['CCDPROC'] = ('TRUE', 'CCDPROC is done?')
             # save images
             io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)

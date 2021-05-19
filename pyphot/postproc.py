@@ -91,7 +91,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                defaultconfig='pyphot', conv='sex995', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
 
-    # configuration for the first scamp run
+    # configuration for the scamp run
     #
     scampconfig0 = {"CROSSID_RADIUS": 1.0,
                     "ASTREF_CATALOG": astref_catalog,
@@ -394,12 +394,11 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
                                               sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
-
     if outqa is not None:
         msgs.info('Make a histogram plot for the zpt')
         zp0 = zp - 7*zp_std
         zp1 = zp + 7*zp_std
-        num = plt.hist(matched_ref_mag - matched_cat_mag, bins=np.linspace(zp0,zp1,int(nstar/100)))
+        num = plt.hist(matched_ref_mag - matched_cat_mag, bins=np.arange(zp0,zp1,0.05))
         nmax = np.max(num[0]*1.1)
         plt.vlines(zp,0,nmax, linestyles='--', colors='r')
         plt.vlines(zp+zp_std,0,nmax, linestyles=':', colors='r')
@@ -412,9 +411,9 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         plt.close()
 
         plt.plot(matched_ref_mag, matched_cat_mag+zp, 'k.')
-        plt.plot([matched_ref_mag.min(),matched_ref_mag.max()],[matched_ref_mag.min(),matched_ref_mag.max()],'r--')
-        plt.xlim(matched_ref_mag.min(),matched_ref_mag.max())
-        plt.ylim(matched_ref_mag.min(),matched_ref_mag.max())
+        plt.plot([matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],[matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],'r--')
+        plt.xlim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
+        plt.ylim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
         plt.xlabel('Reference magnitude',fontsize=14)
         plt.ylabel('Calibrated magnitude',fontsize=14)
         plt.savefig(outqa.replace('zpt','photo'))

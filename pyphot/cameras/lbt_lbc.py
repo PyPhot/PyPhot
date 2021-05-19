@@ -287,6 +287,8 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_fringe'] = False
 
         # Background
         par['scienceframe']['process']['boxsize'] = (251,251)
@@ -304,6 +306,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['detect_thresh'] = 10
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 7
@@ -464,32 +467,32 @@ class LBTLBCRCamera(LBTLBCCamera):
             nonlinear       = 0.95,
             mincounts       = -1e10,
             numamplifiers   = 1,
-            gain            = np.atleast_1d(1.96),
-            ronoise         = np.atleast_1d(5.2),
+            gain            = np.atleast_1d(2.08),
+            ronoise         = np.atleast_1d(5.0),
             )
         # Detector 2
         detector_dict2 = detector_dict1.copy()
         detector_dict2.update(dict(
             det=2,
             darkcurr=1.,
-            gain            = np.atleast_1d(2.09),
-            ronoise         = np.atleast_1d(4.8),
+            gain            = np.atleast_1d(2.14),
+            ronoise         = np.atleast_1d(5.0),
         ))
         # Detector 3
         detector_dict3 = detector_dict1.copy()
         detector_dict3.update(dict(
             det=3,
             darkcurr=1.,
-            gain            = np.atleast_1d(2.06),
-            ronoise         = np.atleast_1d(4.8),
+            gain            = np.atleast_1d(2.13),
+            ronoise         = np.atleast_1d(5.3),
         ))
         # Detector 4
         detector_dict4 = detector_dict1.copy()
         detector_dict4.update(dict(
             det=4,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.98),
-            ronoise         = np.atleast_1d(5.0),
+            gain            = np.atleast_1d(2.09),
+            ronoise         = np.atleast_1d(4.8),
         ))
         detectors = [detector_dict1, detector_dict2, detector_dict3, detector_dict4]
         # Return
@@ -515,6 +518,8 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_fringe'] = True
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
@@ -530,6 +535,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
         par['postproc']['astrometry']['detect_thresh'] = 10
+        par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 7
         par['postproc']['astrometry']['crossid_radius'] = 5
@@ -573,14 +579,14 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'R-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
-            par['postproc']['photometry']['primary'] = 'g'
-            par['postproc']['photometry']['secondary'] = 'r'
+            par['postproc']['photometry']['primary'] = 'r'
+            par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 27.86
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'I-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
-            par['postproc']['photometry']['primary'] = 'r'
-            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['primary'] = 'i'
+            par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.59
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
@@ -591,16 +597,16 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
         elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
-            par['postproc']['photometry']['primary'] = 'r'
-            par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 27.57
-            par['postproc']['photometry']['coefficients'] = [0.,-0.072, 0.]
-        elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
+            par['postproc']['photometry']['zpt'] = 27.57
+            par['postproc']['photometry']['coefficients'] = [0.,0.072, 0.]
+        elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            par['postproc']['photometry']['primary'] = 'z'
+            par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 27.20
-            par['postproc']['photometry']['coefficients'] = [0., -0.020, 0.]
+            par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
 
         return par
 

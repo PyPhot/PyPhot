@@ -176,8 +176,8 @@ class ProcessImagesPar(ParSet):
                  comb_sigrej=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
-                 use_pixelflat=None, use_illumflat=None, use_specillum=None,
-                 use_pattern=None,
+                 use_pixelflat=None, use_illumflat=None, use_supersky=None,
+                 use_fringe=None,
                  background=None, boxsize=None, filter_size=None):
 
         # Grab the parameter names and values from the function
@@ -235,11 +235,6 @@ class ProcessImagesPar(ParSet):
         dtypes['use_darkimage'] = bool
         descr['use_darkimage'] = 'Subtract off a dark image.  If True, one or more darks must be provided.'
 
-        defaults['use_pattern'] = False
-        dtypes['use_pattern'] = bool
-        descr['use_pattern'] = 'Subtract off a detector pattern. This pattern is assumed to be sinusoidal' \
-                               'along one direction, with a frequency that is constant across the detector.'
-
         # Flats
         defaults['use_pixelflat'] = True
         dtypes['use_pixelflat'] = bool
@@ -247,12 +242,15 @@ class ProcessImagesPar(ParSet):
 
         defaults['use_illumflat'] = True
         dtypes['use_illumflat'] = bool
-        descr['use_illumflat'] = 'Use the illumination flat to correct for the illumination profile of each slit.'
+        descr['use_illumflat'] = 'Use the illumination flat to correct for the illumination profile.'
 
-        defaults['use_specillum'] = False
-        dtypes['use_specillum'] = bool
-        descr['use_specillum'] = 'Use the relative spectral illumination profiles to correct the spectral' \
-                                 'illumination profile of each slit. This is primarily used for IFUs.'
+        defaults['use_supersky'] = False
+        dtypes['use_supersky'] = bool
+        descr['use_supersky'] = 'Use supersky frame to further faltten your science images.'
+
+        defaults['use_fringe'] = False
+        dtypes['use_fringe'] = bool
+        descr['use_fringe'] = 'Subtract off a fringing pattern. This pattern usually appears for thin CCD at red wavelength.'
 
         defaults['combine'] = 'weightmean'
         options['combine'] = ProcessImagesPar.valid_combine_methods()
@@ -356,8 +354,8 @@ class ProcessImagesPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
         parkeys = ['trim', 'apply_gain', 'orient',
-                   'use_biasimage', 'use_pattern', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
-                   'use_illumflat', 'use_specillum', 'use_pixelflat',
+                   'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
+                   'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe',
                    'combine', 'satpix', 'n_lohi', 'replace', 'mask_vig','minimum_vig',
                    'mask_cr','lamaxiter', 'grow', 'clip', 'comb_sigrej','rmcompact', 'sigclip', 'sigfrac', 'objlim',
                    'background','boxsize','filter_size']
@@ -1629,6 +1627,7 @@ class CalibrationsPar(ParSet):
     """
     def __init__(self, master_dir=None, setup=None, bpm_usebias=None, biasframe=None,
                  darkframe=None, pixelflatframe=None, illumflatframe=None,
+                 superskyframe=None, fringeframe=None,
                  standardframe=None, flatfield=None,
                  raise_chk_error=None):
 
@@ -1699,6 +1698,19 @@ class CalibrationsPar(ParSet):
         dtypes['illumflatframe'] = [ ParSet, dict ]
         descr['illumflatframe'] = 'The frames and combination rules for the illumination flat'
 
+        defaults['superskyframe'] = FrameGroupPar(frametype='supersky',
+                                                  process=ProcessImagesPar(satpix='nothing',
+                                                                           use_pixelflat=False))
+        dtypes['superskyframe'] = [ ParSet, dict ]
+        descr['superskyframe'] = 'The frames and combination rules for the illumination flat'
+
+
+        defaults['fringeframe'] = FrameGroupPar(frametype='fringe',
+                                                process=ProcessImagesPar(satpix='nothing',
+                                                                         use_pixelflat=False))
+        dtypes['fringeframe'] = [ ParSet, dict ]
+        descr['fringeframe'] = 'The frames and combination rules for the illumination flat'
+
 
         defaults['standardframe'] = FrameGroupPar(frametype='standard',
                                                   process=ProcessImagesPar(mask_cr=True))
@@ -1728,8 +1740,8 @@ class CalibrationsPar(ParSet):
         # Basic keywords
         parkeys = [ 'master_dir', 'setup', 'bpm_usebias', 'raise_chk_error']
 
-        allkeys = parkeys + ['biasframe', 'darkframe', 'pixelflatframe',
-                             'illumflatframe','standardframe', 'flatfield']
+        allkeys = parkeys + ['biasframe', 'darkframe', 'pixelflatframe','illumflatframe',
+                             'superskyframe','fringeframe','standardframe', 'flatfield']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for CalibrationsPar.'.format(k[badkeys]))
@@ -1747,6 +1759,10 @@ class CalibrationsPar(ParSet):
         kwargs[pk] = FrameGroupPar.from_dict('pixelflat', cfg[pk]) if pk in k else None
         pk = 'illumflatframe'
         kwargs[pk] = FrameGroupPar.from_dict('illumflat', cfg[pk]) if pk in k else None
+        pk = 'superskyframe'
+        kwargs[pk] = FrameGroupPar.from_dict('supersky', cfg[pk]) if pk in k else None
+        pk = 'fringeframe'
+        kwargs[pk] = FrameGroupPar.from_dict('fringe', cfg[pk]) if pk in k else None
         pk = 'standardframe'
         kwargs[pk] = FrameGroupPar.from_dict('standard', cfg[pk]) if pk in k else None
         pk = 'flatfield'

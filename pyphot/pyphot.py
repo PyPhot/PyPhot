@@ -347,7 +347,7 @@ class PyPhot(object):
                                     replace=self.par['scienceframe']['process']['replace'])
 
                     # SuperSky Flat
-                    if self.par['scienceframe']['process']['use_illumflat']: # ToDo: change to supersky
+                    if self.par['scienceframe']['process']['use_supersky']:
                         mastersupersky_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterSuperSky_{:}'.format(this_name))
 
                         if os.path.exists(mastersupersky_name) and self.reuse_masters:
@@ -386,7 +386,7 @@ class PyPhot(object):
                                     replace=self.par['scienceframe']['process']['replace'])
 
                     ## Master Fringing.
-                    if self.par['scienceframe']['process']['use_illumflat']: # ToDo: change to fringing
+                    if self.par['scienceframe']['process']['use_fringe']:
                         masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(this_name))
                         if os.path.exists(masterfringe_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterfringe_name))
