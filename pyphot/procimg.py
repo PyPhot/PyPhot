@@ -13,6 +13,8 @@ from IPython import embed
 from pyphot import msgs
 from pyphot import utils
 from pyphot import io
+from pyphot import postproc
+from pyphot.lacosmic import lacosmic
 
 from astropy import stats
 from astropy.stats import SigmaClip
@@ -21,7 +23,6 @@ from photutils import MeanBackground, MedianBackground, SExtractorBackground
 
 def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
             masterillumflatimg=None, maskproc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, #mask vignetting
-            mask_cr=True, maxiter=1, grow=1.5, remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0,
             replace=None):
 
     sci_fits_list = []
@@ -36,7 +37,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
         # prepare output file names
         sci_fits = rootname.replace('.fits','_det{:02d}_proc.fits'.format(det))
         sci_fits_list.append(sci_fits)
-        flag_fits = rootname.replace('.fits','_det{:02d}_flag.fits'.format(det))
+        flag_fits = rootname.replace('.fits','_det{:02d}_ccdmask.fits'.format(det))
         flag_fits_list.append(flag_fits)
 
         if os.path.exists(sci_fits):
@@ -47,20 +48,11 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             saturation, nonlinear = detector_par['saturation'], detector_par['nonlinear']
             #darkcurr = detector_par['det{:02d}'.format(det)]['darkcurr']
 
-            # bad pixel mask
+            # detector bad pixel mask
             bpm = camera.bpm(ifile, det, shape=None, msbias=None)>0.
 
-            # CR mask
-            if mask_cr:
-                ## ToDo: This does not work well. Need to tweak both algorithm and figure out which one is better
-                #from pyphot.lacosmic import lacosmic
-                #bpm_cr = lacosmic(sci_image, 2, sigclip, sigclip,
-                #                  error=None, mask=None, background=None, effective_gain=detector_par['gain'][0],
-                #                  readnoise=detector_par['ronoise'][0], maxiter=maxiter, border_mode='mirror')
-                bpm_cr = lacosmic_pypeit(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
-                                  remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
-            else:
-                bpm_cr = np.zeros_like(sci_image,dtype=bool)
+            # Saturated pixel mask
+            bpm_sat = sci_image > saturation*nonlinear
 
             # CCDPROC
             if masterbiasimg is not None:
@@ -89,7 +81,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
 
             ## master BPM mask
-            bpm_all = bpm | bpm_cr | bpm_vig | bpm_nan | maskproc
+            bpm_all = bpm | bpm_sat | bpm_vig | bpm_nan | maskproc
 
             ## replace bad pixel values
             if replace == 'zero':
@@ -110,32 +102,36 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             # save images
             io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)
             msgs.info('Science image {:} saved'.format(sci_fits))
-            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
-            #io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
+            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_sat*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
             io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
             msgs.info('Flag image {:} saved'.format(flag_fits))
 
     return sci_fits_list, flag_fits_list
 
 def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
-            background='median', boxsize=(50,50), filter_size=(3, 3), sigclip=5.0, replace=None):
+            background='median', back_size=(200,200), back_filtersize=(3, 3), maskbrightstar=True, brightstar_nsigma=3,
+            mask_cr=True, contrast=2, maxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
+            replace=None):
 
     sci_fits_list = []
     wht_fits_list = []
+    flag_fits_list = []
     for ii, ifile in enumerate(scifiles):
         # prepare output file names
         sci_fits = ifile.replace('_proc.fits','_sci.fits')
         sci_fits_list.append(sci_fits)
         wht_fits = ifile.replace('_proc.fits','_sci.weight.fits')
         wht_fits_list.append(wht_fits)
+        flag_fits = ifile.replace('_proc.fits','_flag.fits')
+        flag_fits_list.append(flag_fits)
 
         if os.path.exists(sci_fits):
             msgs.info('The Science product {:} exists, skipping...'.format(sci_fits))
         else:
             msgs.info('Processing {:}'.format(ifile))
             data, header = io.load_fits(ifile)
-            flag, _ = io.load_fits(flagfiles[ii])
-            mask = flag>0
+            flag_image, _ = io.load_fits(flagfiles[ii])
+            mask = flag_image>0
 
             ## super flattening your images
             if mastersuperskyimg is not None:
@@ -149,20 +145,44 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
                 bkg_estimator = MeanBackground()
             else:
                 bkg_estimator = SExtractorBackground()
-            bkg = Background2D(data, boxsize, mask=mask, filter_size=filter_size,sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+
+            # mask bright stars before estimating the background
+            if maskbrightstar:
+                starmask = postproc.mask_bright_star(data, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+                                                     back_maxiters=maxiter)
+            else:
+                starmask = np.zeros_like(data, dtype=bool)
+            # estimate the 2D background with all masks
+            mask_bkg = mask | starmask
+            bkg = Background2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
+                               sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
             sci_image = data-bkg.background
 
-            ## replace bad pixel values
+            # CR mask
+            if mask_cr:
+                bpm_cr = lacosmic(sci_image, contrast, cr_threshold, neighbor_threshold,
+                                  error=bkg.background_rms, mask=mask, background=bkg.background, effective_gain=None,
+                                  readnoise=None, maxiter=maxiter, border_mode='mirror')
+                # seems not working as good as lacosmic.py
+                # grow=1.5, remove_compact_obj=True, sigfrac=0.3, objlim=5.0,
+                #bpm_cr = lacosmic_pypeit(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
+                #                  remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
+            else:
+                bpm_cr = np.zeros_like(sci_image,dtype=bool)
+
+            mask_all = mask | bpm_cr # should not include starmask since they are not bad pixels.
+            flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**5)
+            ## replace bad pixel values?
             if replace == 'zero':
-                sci_image[mask] = 0
+                sci_image[mask_all] = 0
             elif replace == 'median':
-                _,sci_image[mask],_ = stats.sigma_clipped_stats(sci_image, mask, sigma=sigma_clip, maxiters=5)
+                _,sci_image[mask_all],_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigma_clip, maxiters=5)
             elif replace == 'mean':
-                sci_image[mask],_,_ = stats.sigma_clipped_stats(sci_image, mask, sigma=sigma_clip, maxiters=5)
+                sci_image[mask_all],_,_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigma_clip, maxiters=5)
             elif replace == 'min':
-                sci_image[mask] = np.min(sci_image[np.invert(mask)])
+                sci_image[mask_all] = np.min(sci_image[np.invert(mask_all)])
             elif replace == 'max':
-                sci_image[mask] = np.max(sci_image[np.invert(mask)])
+                sci_image[mask_all] = np.max(sci_image[np.invert(mask_all)])
             else:
                 msgs.info('Not replacing bad pixel values')
 
@@ -174,13 +194,13 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
             msgs.info('Science image {:} saved'.format(sci_fits))
             io.save_fits(wht_fits, wht_image, header, 'WeightImage', overwrite=True)
             msgs.info('Weight image {:} saved'.format(wht_fits))
+            io.save_fits(flag_fits, flag_image_new.astype('int32'), header, 'FlagImage', overwrite=True)
+            msgs.info('Flag image {:} saved'.format(flag_fits))
 
             #flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
             #io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
-            #io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
-            #msgs.info('Flag image {:} saved'.format(flag_fits))
 
-    return sci_fits_list, wht_fits_list, flagfiles
+    return sci_fits_list, wht_fits_list, flag_fits_list
 
 def lacosmic_pypeit(sciframe, saturation, nonlinear, varframe=None, maxiter=1, grow=1.5,
              remove_compact_obj=True, sigclip=5.0, sigfrac=0.3, objlim=5.0):

@@ -171,14 +171,15 @@ class ProcessImagesPar(ParSet):
                  overscan_method=None, overscan_par=None,
                  combine=None, satpix=None,
                  mask_vig=None, minimum_vig=None,
-                 mask_cr=None, clip=None,
+                 mask_cr=None, contrast=None, clip=None,
+                 cr_threshold=None, neighbor_threshold=None,
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  comb_sigrej=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
                  use_pixelflat=None, use_illumflat=None, use_supersky=None,
                  use_fringe=None,
-                 background=None, boxsize=None, filter_size=None):
+                 background=None, back_size=None, back_filtersize=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -296,6 +297,22 @@ class ProcessImagesPar(ParSet):
         dtypes['lamaxiter'] = int
         descr['lamaxiter'] = 'Maximum number of iterations for LA cosmics routine.'
 
+        defaults['contrast'] = 2.0
+        dtypes['contrast'] = [int, float]
+        descr['contrast'] = 'Contrast threshold between the Laplacian image and the fine-structure image.'\
+                            'If your image is critically sampled, use a value around 2.'\
+                            'If your image is undersampled (e.g., HST data), a value of 4 or 5 (or more) is more appropriate.'\
+                            'If your image is oversampled, use a value between 1 and 2.'
+
+        defaults['cr_threshold'] = 5.0
+        dtypes['cr_threshold'] = [int, float]
+        descr['cr_threshold'] = 'The Laplacian signal-to-noise ratio threshold for cosmic-ray detection.'
+
+        defaults['neighbor_threshold'] = 2.0
+        dtypes['neighbor_threshold'] = [int, float]
+        descr['neighbor_threshold'] = 'The Laplacian signal-to-noise ratio threshold for detection of cosmic rays'\
+                                      'in pixels neighboring the initially-identified cosmic rays.'
+
         defaults['grow'] = 1.5
         dtypes['grow'] = [int, float]
         descr['grow'] = 'Factor by which to expand regions with cosmic rays detected by the ' \
@@ -331,13 +348,13 @@ class ProcessImagesPar(ParSet):
         descr['background'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
                                        ', '.join(options['background']))
 
-        defaults['boxsize'] = (50,50)
-        dtypes['boxsize'] = [tuple, list]
-        descr['boxsize'] = 'Boxsize for background estimation'
+        defaults['back_size'] = (200,200)
+        dtypes['back_size'] = [tuple, list]
+        descr['back_size'] = 'Box size for background estimation'
 
-        defaults['filter_size'] = (3,3)
-        dtypes['filter_size'] = [tuple, list]
-        descr['filter_size'] = 'Filter size for background estimation'
+        defaults['back_filtersize'] = (3,3)
+        dtypes['back_filtersize'] = [tuple, list]
+        descr['back_filtersize'] = 'Filter size for background estimation'
 
         # Instantiate the parameter set
         super(ProcessImagesPar, self).__init__(list(pars.keys()),
@@ -357,8 +374,9 @@ class ProcessImagesPar(ParSet):
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
                    'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe',
                    'combine', 'satpix', 'n_lohi', 'replace', 'mask_vig','minimum_vig',
-                   'mask_cr','lamaxiter', 'grow', 'clip', 'comb_sigrej','rmcompact', 'sigclip', 'sigfrac', 'objlim',
-                   'background','boxsize','filter_size']
+                   'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej','rmcompact', 'sigclip', 'sigfrac', 'objlim',
+                   'cr_threshold','neighbor_threshold',
+                   'background','back_size','back_filtersize']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):

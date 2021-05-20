@@ -48,18 +48,19 @@ def initialize_header(hdr=None, primary=False):
 
 def save_fits(fitsname, data, header, img_type, mask=None, overwrite=True):
 
-    # Add some Header card
-    hdr = initialize_header(hdr=None, primary=True)
-    hdr['IMGTYP'] = (img_type, 'PyPhot image type')
-    for i in range(len(hdr)):
-        header.append(hdr.cards[i])
+    if header.get('VERSPYP') is None:
+        # Add some Header card
+        hdr = initialize_header(hdr=None, primary=True)
+        hdr['IMGTYP'] = (img_type, 'PyPhot image type')
+        for i in range(len(hdr)):
+            header.append(hdr.cards[i])
 
     hdu = fits.PrimaryHDU(data, header=header)
 
     if mask is None:
         hdu.writeto(fitsname, overwrite=overwrite)
     else:
-        mask_hdu = fits.ImageHDU(mask, name='MASK')
+        mask_hdu = fits.ImageHDU(mask.astype('int32'), name='MASK')
         hdulist = fits.HDUList([hdu,mask_hdu])
         hdulist.writeto(fitsname,overwrite=overwrite)
 

@@ -194,10 +194,10 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     return coadd_file, coadd_wht_file, coadd_flag_file
 
 
-def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=None, nsigma=2., npixels=5, fwhm=5,
-           nlevels=32, contrast=0.001, back_nsigma=3, back_maxiters=10, back_type='Median', back_rms_type='Std',
-           back_filter=(200, 200), back_filter_size=(3, 3), morp_filter=False,
-           phot_apertures=[1.0,2.0,3.0,4.0,5.0]):
+def detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None, effective_gain=None, nsigma=2., npixels=5, fwhm=5,
+           nlevels=32, contrast=0.001, back_nsigma=3, back_maxiters=10, back_type='median', back_rms_type='std',
+           back_size=(200, 200), back_filter_size=(3, 3), morp_filter=False,
+           phot_apertures=[1.0,2.0,3.0,4.0,5.0], return_seg_only=False):
     '''
         Identify cosmic rays using the L.A.Cosmic algorithm
     U{http://www.astro.yale.edu/dokkum/lacosmic/}
@@ -221,7 +221,7 @@ def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=N
         back_maxiters:
         back_type:
         back_rms_type:
-        back_filter:
+        back_box_size:
         back_filter_size:
         morp_filter (bool): whether you want to use the kernel filter when measuring morphology and centroid
                             If set true, it should be similar with SExtractor. False gives a better morphology
@@ -261,8 +261,7 @@ def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=N
         bkgrms_estimator = BiweightScaleBackgroundRMS()
 
     if (rmsmap is None) or (bkgmap is None):
-        msgs.info('Estimating the 2D background that will be used for the detection and photometry.')
-        bkg = Background2D(data, back_filter, mask=mask, filter_size=back_filter_size, sigma_clip=sigma_clip,
+        bkg = Background2D(data, back_size, mask=mask, filter_size=back_filter_size, sigma_clip=sigma_clip,
                            bkg_estimator=bkg_estimator, bkgrms_estimator=bkgrms_estimator)
         if rmsmap is None:
             rmsmap = bkg.background_rms
@@ -280,6 +279,9 @@ def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=N
     ## Do the detection using the Image Segmentation technique
     ## The return is a SegmentationImage
     segm = detect_sources(data, threshold, npixels=npixels, filter_kernel=kernel)
+
+    if return_seg_only:
+        return segm
 
     # Source Deblending
     segm_deblend = deblend_sources(data, segm, npixels=npixels, filter_kernel=kernel,
@@ -335,6 +337,15 @@ def detect(data, wcs_info, rmsmap=None, bkgmap=None, mask=None, effective_gain=N
     ## ToDo: Add PSF photometry
 
     return tbl, rmsmap, bkgmap
+
+def mask_bright_star(data, brightstar_nsigma=3, back_nsigma=3, back_maxiters=10, npixels=3, fwhm=5):
+
+    msgs.info('Masking bright stars')
+    back_box_size = (data.shape[0] // 10, data.shape[1] // 10)
+    seg = detect(data, nsigma=brightstar_nsigma, npixels=npixels, fwhm=fwhm,
+                 back_type='median', back_rms_type='mad', back_nsigma=back_nsigma, back_maxiters=back_maxiters,
+                 back_size=back_box_size, back_filter_size=(3, 3), return_seg_only=True)
+    return seg.data>0
 
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], outqa=None):
 

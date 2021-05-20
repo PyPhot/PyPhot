@@ -296,7 +296,7 @@ class PyPhot(object):
                             masterframe.illumflatframe(illumflatfiles, self.camera, self.det, masterillumflat_name,
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                                        cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
-                                                       window_size=51, maskillum=0.1)
+                                                       window_size=51, maskbrightstar=False)
                         masterillumflatimg = fits.getdata(masterillumflat_name, 0)
                         maskillumflatimg = fits.getdata(masterillumflat_name, 1)
                     else:
@@ -316,7 +316,7 @@ class PyPhot(object):
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                                        masterillumflatimg=masterillumflatimg,
                                                        cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
-                                                       window_size=51, maskillum=0.1)
+                                                       window_size=51, maskpixvar=0.1, maskbrightstar=True, brightstar_nsigma=5)
                         masterpixflatimg = fits.getdata(masterpixflat_name, 0)
                         maskpixflatimg = fits.getdata(masterpixflat_name, 1)
                     else:
@@ -327,20 +327,13 @@ class PyPhot(object):
                     maskproc = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
 
                     ## CCDPROC -- bias, dark subtraction, flat fielding and cosmic ray rejections
-                    sci_fits_list, flag_fits_list = procimg.ccdproc(scifiles, self.camera, self.det,
+                    sci_fits_list, ccdmask_fits_list = procimg.ccdproc(scifiles, self.camera, self.det,
                                     science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                     masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
                                     maskproc = maskproc>0,
                                     apply_gain=self.par['scienceframe']['process']['apply_gain'],
                                     mask_vig=self.par['scienceframe']['process']['mask_vig'],
                                     minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
-                                    mask_cr=self.par['scienceframe']['process']['mask_cr'],
-                                    maxiter=self.par['scienceframe']['process']['lamaxiter'],
-                                    grow=self.par['scienceframe']['process']['grow'],
-                                    remove_compact_obj=self.par['scienceframe']['process']['rmcompact'],
-                                    sigclip=self.par['scienceframe']['process']['sigclip'],
-                                    sigfrac=self.par['scienceframe']['process']['sigfrac'],
-                                    objlim=self.par['scienceframe']['process']['objlim'],
                                     replace=self.par['scienceframe']['process']['replace'])
 
                     # SuperSky Flat
@@ -356,17 +349,20 @@ class PyPhot(object):
                                 msgs.warn('The number of SuperSky images should be generally >=3.')
                             superskyraw = self.fitstbl.frame_paths(grp_supersky)
                             superskyfiles = []
+                            superskymaskfiles = []
                             for ifile in superskyraw:
                                 rootname = os.path.join(self.science_path, ifile.split('/')[-1])
                                 if '.gz' in rootname:
                                     rootname = rootname.replace('.gz', '')
-                                # prepare output file names
+                                # prepare input file names
                                 superskyfile = rootname.replace('.fits', '_det{:02d}_proc.fits'.format(self.det))
                                 superskyfiles.append(superskyfile)
+                                superskymaskfile = rootname.replace('.fits', '_det{:02d}_ccdmask.fits'.format(self.det))
+                                superskymaskfiles.append(superskymaskfile)
 
-                            masterframe.superskyframe(superskyfiles, mastersupersky_name,
+                            masterframe.superskyframe(superskyfiles, mastersupersky_name, maskfiles=superskymaskfiles,
                                                        cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
-                                                       window_size=51)
+                                                       window_size=51, maskbrightstar=True, brightstar_nsigma=5)
                         mastersuperskyimg = fits.getdata(mastersupersky_name, 0)
                         masksuperskyimg = fits.getdata(mastersupersky_name, 1)
                     else:
@@ -374,12 +370,20 @@ class PyPhot(object):
                         masksuperskyimg = np.zeros(raw_shape,dtype='int16')
 
                     ## SCIPROC -- supersky flattening and background subtraction.
-                    sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, flag_fits_list,
+                    sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, ccdmask_fits_list,
                                     mastersuperskyimg=mastersuperskyimg,
                                     background=self.par['scienceframe']['process']['background'],
-                                    boxsize=self.par['scienceframe']['process']['boxsize'],
-                                    filter_size=self.par['scienceframe']['process']['filter_size'],
+                                    back_size=self.par['scienceframe']['process']['back_size'],
+                                    back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
+                                    mask_cr=self.par['scienceframe']['process']['mask_cr'],
+                                    maxiter=self.par['scienceframe']['process']['lamaxiter'],
                                     sigclip=self.par['scienceframe']['process']['sigclip'],
+                                    cr_threshold=self.par['scienceframe']['process']['cr_threshold'],
+                                    neighbor_threshold=self.par['scienceframe']['process']['neighbor_threshold'],
+                                    contrast=self.par['scienceframe']['process']['contrast'],
+                                    #grow=self.par['scienceframe']['process']['grow'],
+                                    #sigfrac=self.par['scienceframe']['process']['sigfrac'],
+                                    #objlim=self.par['scienceframe']['process']['objlim'],
                                     replace=self.par['scienceframe']['process']['replace'])
 
                     ## Master Fringing.
@@ -394,16 +398,21 @@ class PyPhot(object):
                                 msgs.warn('The number of Fringe images should be generally >=3.')
                             superskyraw = self.fitstbl.frame_paths(grp_fringe)
                             fringefiles = []
+                            fringemaskfiles = []
                             for ifile in superskyraw:
                                 rootname = os.path.join(self.science_path, ifile.split('/')[-1])
                                 if '.gz' in rootname:
                                     rootname = rootname.replace('.gz', '')
-                                # prepare output file names
+                                # prepare input file names
                                 fringefile = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(self.det))
                                 fringefiles.append(fringefile)
+                                fringemaskfile = rootname.replace('.fits', '_det{:02d}_flag.fits'.format(self.det))
+                                fringemaskfiles.append(fringemaskfile)
 
-                            masterframe.fringeframe(fringefiles, masterfringe_name, mask=None, mastersuperskyimg=mastersuperskyimg,
-                                                    cenfunc='median', stdfunc='std',sigma=3, maxiters=3, window_size=51)
+                            masterframe.fringeframe(fringefiles, masterfringe_name, fringemaskfiles=fringemaskfiles,
+                                                    mastersuperskyimg=mastersuperskyimg,
+                                                    cenfunc='median', stdfunc='std',sigma=3, maxiters=3,
+                                                    maskbrightstar=True, brightstar_nsigma=5)
                         masterfringeimg = fits.getdata(masterfringe_name,0)
                         maskfringeimg = fits.getdata(masterfringe_name, 1)
                         postproc.defringing(sci_fits_list, masterfringeimg)
@@ -527,7 +536,7 @@ class PyPhot(object):
                                                          back_maxiters=self.par['postproc']['detection']['back_maxiters'],
                                                          back_type=self.par['postproc']['detection']['back_type'],
                                                          back_rms_type=self.par['postproc']['detection']['back_rms_type'],
-                                                         back_filter=self.par['postproc']['detection']['back_size'],
+                                                         back_size=self.par['postproc']['detection']['back_size'],
                                                          back_filter_size=self.par['postproc']['detection']['back_filtersize'],
                                                          morp_filter=self.par['postproc']['detection']['morp_filter'],
                                                          phot_apertures=self.par['postproc']['detection']['phot_apertures'])
