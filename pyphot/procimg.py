@@ -85,7 +85,10 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             bpm_all = bpm | bpm_sat | bpm_vig | bpm_nan | maskproc
 
             ## replace bad pixel values.
-            # ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
+            ## ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
+            ##       replace saturated values with 65535 or maximum value, this will make the final coadd image looks better
+            ##       replace other bad pixels with median or zero for other pixels?
+
             if replace == 'zero':
                 sci_image[bpm_all] = 0
             elif replace == 'median':
@@ -171,6 +174,12 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
                 #                  remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
             else:
                 bpm_cr = np.zeros_like(sci_image,dtype=bool)
+
+            ## ToDO: correct extinction based on airmass and extinction coefficients.
+            ##       and then calibrate each detector: either giving the zeropoint or scaling the image accordingly.
+            ## Step 1: using the provided coefficients and airmass to correct the extinction.
+            ## Step 2: detect sources with SExtractor and calibrate zeropoint with calzpt
+            ## Step 3: save the zeropoint to fits header or scale the image accordingly.
 
             mask_all = mask | bpm_cr # should not include starmask since they are not bad pixels.
             flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**5)

@@ -453,6 +453,10 @@ class PyPhot(object):
                     ## Photometric calibration for individual chips
                     msgs.work('Photometric calibration for individual chips.')
 
+                ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint here?
+                ##       using swarp to combine different detectors, if only one detector then skip this step.
+                ##       RESAMPLING_TYPE = NEAREST,
+
                 ## Do the coadding and source detection target by target and filter by filter
                 ## The images are combined based on the coadd_id in your PyPhot file.
                 objids = np.unique(self.fitstbl['coadd_id'][grp_science]) ## number of combine groups

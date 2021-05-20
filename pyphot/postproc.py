@@ -368,6 +368,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
     distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
     radius = np.nanmax(distance)
 
+    ## ToDo: make the query more generic, i.e. the returned data should be in the same format with the same column names.
     ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
     good_ref = (1.0857/ref_data['e_{:}mag'.format(primary)]>10) & (1.0857/ref_data['e_{:}mag'.format(secondary)]>10)
     try:
