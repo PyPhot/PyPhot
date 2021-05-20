@@ -160,6 +160,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
 
             # CR mask
             if mask_cr:
+                msgs.info('Identifying cosmic rays using the L.A.Cosmic algorithm')
                 bpm_cr = lacosmic(sci_image, contrast, cr_threshold, neighbor_threshold,
                                   error=bkg.background_rms, mask=mask, background=bkg.background, effective_gain=None,
                                   readnoise=None, maxiter=maxiter, border_mode='mirror')
