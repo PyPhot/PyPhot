@@ -83,7 +83,8 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             ## master BPM mask
             bpm_all = bpm | bpm_sat | bpm_vig | bpm_nan | maskproc
 
-            ## replace bad pixel values
+            ## replace bad pixel values.
+            # ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
             if replace == 'zero':
                 sci_image[bpm_all] = 0
             elif replace == 'median':
@@ -173,7 +174,8 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
 
             mask_all = mask | bpm_cr # should not include starmask since they are not bad pixels.
             flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**5)
-            ## replace bad pixel values?
+
+            ## replace bad pixel values? ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
             if replace == 'zero':
                 sci_image[mask_all] = 0
             elif replace == 'median':

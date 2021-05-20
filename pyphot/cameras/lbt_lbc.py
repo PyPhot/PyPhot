@@ -107,7 +107,7 @@ class LBTLBCCamera(camera.Camera):
             return good_exp & (fitstbl['idname'] == 'flat') & flats & np.invert(copoint_exp)
         if ftype == 'standard':
             return good_exp & (fitstbl['idname'] == 'standard') & np.invert(copoint_exp)
-        if ftype in ['science','supersky','fringe']:
+        if ftype in ['science','supersky']:
             return good_exp & (fitstbl['idname'] == 'object') & np.invert(copoint_exp)
         if ftype == 'dark':
             return good_exp & (fitstbl['idname'] == 'dark') & np.invert(copoint_exp)
@@ -611,6 +611,46 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
 
         return par
+
+    def check_frame_type(self, ftype, fitstbl, exprng=None):
+        """
+        Check for frames of the provided type.
+
+        Args:
+            ftype (:obj:`str`):
+                Type of frame to check. Must be a valid frame type; see
+                frame-type :ref:`frame_type_defs`.
+            fitstbl (`astropy.table.Table`_):
+                The table with the metadata for one or more frames to check.
+            exprng (:obj:`list`, optional):
+                Range in the allowed exposure time for a frame of type
+                ``ftype``. See
+                :func:`pypeit.core.framematch.check_frame_exptime`.
+
+        Returns:
+            `numpy.ndarray`_: Boolean array with the flags selecting the
+            exposures in ``fitstbl`` that are ``ftype`` type frames.
+        """
+        ## a specific column indicates whether its flat or not
+        flats = np.zeros(len(fitstbl),dtype='bool')
+        for i in range(len(fitstbl)):
+            if 'flat' in fitstbl[i]['target'].lower():
+                flats[i] = True
+
+        good_exp = framematch.check_frame_exptime(fitstbl['exptime'], exprng)
+        copoint_exp = (fitstbl['target'] == 'Co-point')
+        if ftype == 'bias':
+            return good_exp & (fitstbl['idname'] == 'zero') & np.invert(copoint_exp)
+        if ftype in ['pixelflat', 'illumflat']:
+            return good_exp & (fitstbl['idname'] == 'flat') & flats & np.invert(copoint_exp)
+        if ftype == 'standard':
+            return good_exp & (fitstbl['idname'] == 'standard') & np.invert(copoint_exp)
+        if ftype in ['science','supersky','fringe']:
+            return good_exp & (fitstbl['idname'] == 'object') & np.invert(copoint_exp)
+        if ftype == 'dark':
+            return good_exp & (fitstbl['idname'] == 'dark') & np.invert(copoint_exp)
+        msgs.warn('Cannot determine if frames are of type {0}.'.format(ftype))
+        return np.zeros(len(fitstbl), dtype=bool)
 
     def bpm(self, filename, det, shape=None, msbias=None):
         """
