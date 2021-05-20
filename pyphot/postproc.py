@@ -43,7 +43,7 @@ def defringing(sci_fits_list, masterfringeimg):
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
                 detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=2.0,
                 astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=0.5,
-                pixscale_maxerr=1.1, mosaic_type='UNCHANGED',task='sex',
+                pixscale_maxerr=1.1, mosaic_type='LOOSE',task='sex',
                 weight_type='MAP_WEIGHT',delete=False, log=True):
 
     ## ToDo: Not sure why, but the scamp fails for MMIRS and IMACS, so I will try to resample it with swarp
@@ -431,7 +431,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         plt.close()
 
     # rerun the SExtractor with the zero point
-    msgs.warn('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
+    msgs.info('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
 
     return zp, zp_std, nstar
 

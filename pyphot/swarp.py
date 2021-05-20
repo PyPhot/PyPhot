@@ -126,7 +126,7 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
                ["-RESAMPLE_DIR"] + [coadddir] + ["-XML_NAME"] + [os.path.join(coadddir, coaddroot + ".swarp.xml")]
 
         # Set the max number of opened files by your computer
-        os.system("ulimit -n 2048")
+        os.system("ulimit -n 4096")
 
         p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = p.communicate()

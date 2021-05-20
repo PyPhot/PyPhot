@@ -354,6 +354,8 @@ class PyPhot(object):
                                 rootname = os.path.join(self.science_path, ifile.split('/')[-1])
                                 if '.gz' in rootname:
                                     rootname = rootname.replace('.gz', '')
+                                elif '.fz' in rootname:
+                                    rootname = rootname.replace('.fz', '')
                                 # prepare input file names
                                 superskyfile = rootname.replace('.fits', '_det{:02d}_proc.fits'.format(self.det))
                                 superskyfiles.append(superskyfile)
@@ -403,6 +405,8 @@ class PyPhot(object):
                                 rootname = os.path.join(self.science_path, ifile.split('/')[-1])
                                 if '.gz' in rootname:
                                     rootname = rootname.replace('.gz', '')
+                                elif '.fz' in rootname:
+                                    rootname = rootname.replace('.fz', '')
                                 # prepare input file names
                                 fringefile = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(self.det))
                                 fringefiles.append(fringefile)
@@ -457,9 +461,9 @@ class PyPhot(object):
                     iobjfiles = self.fitstbl['filename'][grp_iobj]
                     filter_iobj = self.fitstbl['filter'][grp_iobj][0]
                     coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_combid{:03d}'.format(filter_iobj,objid)
-                    if '.gz' in iobjfiles[0]:
+                    if ('.gz' in iobjfiles[0]) or ('.fz' in iobjfiles[0]):
                         for ii in range(len(iobjfiles)):
-                            iobjfiles[ii] = iobjfiles[ii].replace('.gz','')
+                            iobjfiles[ii] = iobjfiles[ii].replace('.gz','').replace('.fz','')
 
                     # compile the file list
                     nscifits = np.size(iobjfiles)
