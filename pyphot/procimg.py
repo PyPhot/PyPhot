@@ -34,6 +34,9 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             rootname = os.path.join(science_path,rootname)
             if '.gz' in rootname:
                 rootname = rootname.replace('.gz','')
+            elif '.fz' in rootname:
+                rootname = rootname.replace('.fz','')
+
         # prepare output file names
         sci_fits = rootname.replace('.fits','_det{:02d}_proc.fits'.format(det))
         sci_fits_list.append(sci_fits)
@@ -53,6 +56,9 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
 
             # Saturated pixel mask
             bpm_sat = sci_image > saturation*nonlinear
+
+            # Zero pixel mask
+            bpm_zero = sci_image == 0.
 
             # CCDPROC
             if masterbiasimg is not None:
@@ -82,7 +88,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
 
             ## master BPM mask
-            bpm_all = bpm | bpm_sat | bpm_vig | bpm_nan | maskproc
+            bpm_all = bpm | bpm_sat | bpm_zero | bpm_vig | bpm_nan | maskproc
 
             ## replace bad pixel values.
             ## ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
@@ -106,7 +112,8 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             # save images
             io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)
             msgs.info('Science image {:} saved'.format(sci_fits))
-            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_sat*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
+            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_sat*np.int(2**2) + \
+                         bpm_zero * np.int(2**3) + bpm_vig*np.int(2**4) + bpm_nan*np.int(2**5)
             io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
             msgs.info('Flag image {:} saved'.format(flag_fits))
 
@@ -182,7 +189,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
             ## Step 3: save the zeropoint to fits header or scale the image accordingly.
 
             mask_all = mask | bpm_cr # should not include starmask since they are not bad pixels.
-            flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**5)
+            flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**6)
 
             ## replace bad pixel values? ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
             if replace == 'zero':

@@ -418,7 +418,7 @@ class PyPhotMetaData:
         if det <= 0 or det > self.camera.ndet:
             raise IndexError('{0} is not a valid detector for {1}!'.format(det,
                              self.camera.name))
-        return '{0}_{1}_{2}'.format(self['setup'][row], self['calibbit'][row], str(det).zfill(2))
+        return '{0}_{1}_{2}.fits'.format(self['setup'][row], self['calibbit'][row], str(det).zfill(2))
 
     def construct_obstime(self, row):
         """

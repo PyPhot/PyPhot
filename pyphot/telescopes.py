@@ -5,6 +5,12 @@ Define the telescopes parameters used by pyphot.
 
 from pyphot.par.pyphotpar import TelescopePar
 
+class CFHTTelescopePar(TelescopePar):
+    def __init__(self):
+        super(CFHTTelescopePar, self).__init__(name='CFHT',
+                                                  longitude=155.47833,
+                                                  latitude=19.82833,
+                                                  elevation=4160.0)
 
 
 class GeminiNTelescopePar(TelescopePar):

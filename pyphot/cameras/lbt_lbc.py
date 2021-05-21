@@ -291,9 +291,6 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = False
 
-        # Background
-        par['scienceframe']['process']['boxsize'] = (251,251)
-
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
@@ -376,10 +373,10 @@ class LBTLBCBCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
-            par['postproc']['photometry']['primary'] = 'g'
-            par['postproc']['photometry']['secondary'] = 'r'
+            par['postproc']['photometry']['primary'] = 'r'
+            par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 27.75
-            par['postproc']['photometry']['coefficients'] = [0., -0.016, 0.]
+            par['postproc']['photometry']['coefficients'] = [0., 0.016, 0.]
 
         return par
 

@@ -166,20 +166,20 @@ class MMTMMIRSCamera(camera.Camera):
         par['postproc']['photometry']['cal_zpt'] = True
 
         if self.get_meta_value(scifile, 'filter') == 'J':
-            par['postproc']['photometry']['photref_catalog'] = 'Twomass'
+            par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'J'
             par['postproc']['photometry']['secondary'] = 'H'
             par['postproc']['photometry']['zpt'] = 21.0
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'H':
-            par['postproc']['photometry']['photref_catalog'] = 'Twomass'
+            par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'H'
             par['postproc']['photometry']['secondary'] = 'K'
             par['postproc']['photometry']['zpt'] = 21.0
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'K':
-            par['postproc']['photometry']['photref_catalog'] = 'Twomass'
+            par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'K'
             par['postproc']['photometry']['secondary'] = 'H'
             par['postproc']['photometry']['zpt'] = 21.0

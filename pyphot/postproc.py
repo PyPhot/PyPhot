@@ -350,13 +350,18 @@ def mask_bright_star(data, brightstar_nsigma=3, back_nsigma=3, back_maxiters=10,
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], outqa=None):
 
     try:
+        msgs.info('Reading photoutils catalog')
         catalog = Table.read(catalogfits)
         good_cat = catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>10
         catalog = catalog[good_cat]
         ra, dec = catalog['sky_centroid_icrs.ra'], catalog['sky_centroid_icrs.dec']
     except:
+        msgs.info('Reading SExtractor catalog')
         catalog = Table.read(catalogfits, 2)
-        good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['NIMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & (catalog['CLASS_STAR']>0.9)
+        # ToDo:  (catalog['NIMAFLAGS_ISO']<1) will reject most of the targets for dirty IR detector, i.e. WIRCam
+        #       So, we should save another flat image that only counts for the number of bad exposures associated to the pixel
+        #       and then use this number as a cut.
+        good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & (catalog['CLASS_STAR']>0.9) #& (catalog['NIMAFLAGS_ISO']<1)
         good_cat &= catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>10
         catalog = catalog[good_cat]
         ra, dec = catalog['ALPHA_J2000'], catalog['DELTA_J2000']
@@ -366,30 +371,25 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     ra_cen, dec_cen = np.median(ra), np.median(dec)
     distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
-    radius = np.nanmax(distance)
+    radius = np.nanmax(distance)*1.5 # query a bigger radius for safe
 
-    ## ToDo: make the query more generic, i.e. the returned data should be in the same format with the same column names.
-    ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-    good_ref = (1.0857/ref_data['e_{:}mag'.format(primary)]>10) & (1.0857/ref_data['e_{:}mag'.format(secondary)]>10)
-    try:
-        good_ref &= (ref_data['class']==6).data # ToDo: This is a hack need to tweak the query to return a uniform class parameter
-    except:
-        msgs.error('No point-source selection was applied to the reference catalog')
+    ref_data = query.query_standard(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+    good_ref = (1.0857/ref_data['{:}_MAG_ERR'.format(primary)]>10) & (1.0857/ref_data['{:}_MAG_ERR'.format(secondary)]>10)
     try:
         ref_data = ref_data[good_ref.data]
     except:
         ref_data = ref_data[good_ref]
 
-    ref_mag = ref_data['{:}mag'.format(primary)] + coefficients[0] + \
-              coefficients[1]*(ref_data['{:}mag'.format(primary)]-ref_data['{:}mag'.format(secondary)])+ \
-              coefficients[2] * (ref_data['{:}mag'.format(primary)] - ref_data['{:}mag'.format(secondary)])**2
+    #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+    #try:
+    #    good_ref &= (ref_data['class']==6).data
+    #except:
+    #    msgs.warn('No point-source selection was applied to the reference catalog')
 
-    try:
-        ## 2MASS
-        ref_ra, ref_dec = ref_data['RAJ2000'], ref_data['DEJ2000']
-    except:
-        ## SDSS
-        ref_ra, ref_dec = ref_data['RA_ICRS'], ref_data['DE_ICRS']
+    ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
+    ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
+              coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
+              coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
 
     ref_pos = np.zeros((len(ref_ra), 2))
     ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec

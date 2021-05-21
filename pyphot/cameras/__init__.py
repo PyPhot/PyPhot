@@ -3,10 +3,11 @@ from pyphot.cameras import camera
 
 # The import of all the camera modules here is what enables the dynamic
 # compiling of all the available cameras below
-from pyphot.cameras import mmt_mmirs
+from pyphot.cameras import cfht_wircam
 from pyphot.cameras import keck_nires
 from pyphot.cameras import lbt_lbc
 from pyphot.cameras import magellan_imacs
+from pyphot.cameras import mmt_mmirs
 
 # Build the list of names for the available cameras
 import numpy as np

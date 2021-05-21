@@ -241,9 +241,10 @@ class PyPhot(object):
                 # Loop on Detectors for calibrations and processing images
                 for self.det in detectors:
 
-                    this_setup = np.unique(self.fitstbl.table[grp_science]['setup'])[0]
-                    this_det = self.det
-                    this_name = '{:}_{:02d}.fits'.format(this_setup,this_det)
+                    #this_setup = np.unique(self.fitstbl.table[grp_science]['setup'])[0]
+                    #this_det = self.det
+                    #master_key = '{:}_{:02d}.fits'.format(this_setup,this_det)
+                    master_key = self.fitstbl.master_key(grp_science[0], det=1)
 
                     scifiles = self.fitstbl.frame_paths(grp_science)
                     raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
@@ -252,7 +253,7 @@ class PyPhot(object):
                     ## ToDo: parset masterframes
                     # Bias
                     if self.par['scienceframe']['process']['use_biasimage']:
-                        masterbias_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterBias_{:}'.format(this_name))
+                        masterbias_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterBias_{:}'.format(master_key))
                         if os.path.exists(masterbias_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterbias_name))
                         else:
@@ -268,7 +269,7 @@ class PyPhot(object):
 
                     # Dark
                     if self.par['scienceframe']['process']['use_darkimage']:
-                        masterdark_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterDark_{:}'.format(this_name))
+                        masterdark_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterDark_{:}'.format(master_key))
 
                         if os.path.exists(masterdark_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterdark_name))
@@ -286,7 +287,7 @@ class PyPhot(object):
                     # Illumination Flat
                     if self.par['scienceframe']['process']['use_illumflat']:
                         masterillumflat_name = os.path.join(self.par['calibrations']['master_dir'],
-                                                          'MasterIllumFlat_{:}'.format(this_name))
+                                                          'MasterIllumFlat_{:}'.format(master_key))
 
                         if os.path.exists(masterillumflat_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterillumflat_name))
@@ -305,7 +306,7 @@ class PyPhot(object):
 
                     # Pixel Flat
                     if self.par['scienceframe']['process']['use_pixelflat']:
-                        masterpixflat_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterPixelFlat_{:}'.format(this_name))
+                        masterpixflat_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterPixelFlat_{:}'.format(master_key))
 
                         if os.path.exists(masterpixflat_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterpixflat_name))
@@ -338,7 +339,7 @@ class PyPhot(object):
 
                     # SuperSky Flat
                     if self.par['scienceframe']['process']['use_supersky']:
-                        mastersupersky_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterSuperSky_{:}'.format(this_name))
+                        mastersupersky_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterSuperSky_{:}'.format(master_key))
 
                         if os.path.exists(mastersupersky_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(mastersupersky_name))
@@ -390,7 +391,7 @@ class PyPhot(object):
 
                     ## Master Fringing.
                     if self.par['scienceframe']['process']['use_fringe']:
-                        masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(this_name))
+                        masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(master_key))
                         if os.path.exists(masterfringe_name) and self.reuse_masters:
                             msgs.info('Using existing master file {:}'.format(masterfringe_name))
                         else:
