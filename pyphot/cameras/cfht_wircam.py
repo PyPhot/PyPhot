@@ -148,8 +148,9 @@ class CFHTWIRCAMCamera(camera.Camera):
         par['scienceframe']['process']['use_pixelflat'] = False
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_fringe'] = False
-        par['scienceframe']['process']['apply_gain'] = False
+        par['scienceframe']['process']['apply_gain'] = True
         par['scienceframe']['process']['use_supersky'] = True
+        ## the zeropints for WIRCam are for e/s, so please set apply_gain to True
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False

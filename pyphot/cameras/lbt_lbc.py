@@ -290,6 +290,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = False
+        ## the zeropints for LBT are for ADU/s, so do not apply_gain correction
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
@@ -339,6 +340,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
         par['postproc']['photometry']['cal_zpt'] = True
+
 
         if self.get_meta_value(scifile, 'filter') == 'SDT_Uspec':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
