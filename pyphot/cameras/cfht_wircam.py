@@ -3,18 +3,15 @@ Module for CFHT WIRCam
 
 """
 import glob
-
 import numpy as np
 
 from astropy import wcs
-from astropy.time import Time
 from astropy.io import fits
 
 from pyphot import msgs
 from pyphot import parse
 from pyphot import telescopes
 from pyphot.par import framematch
-
 from pyphot.cameras import camera
 
 
@@ -276,7 +273,7 @@ class CFHTWIRCAMCamera(camera.Camera):
             return good_exp & (fitstbl['idname'] == 'flat') & flats
         if ftype == 'standard':
             return good_exp & (fitstbl['idname'] == 'standard')
-        if ftype in ['science','supersky']:
+        if ftype in ['science','supersky','fringe']:
             return good_exp & (fitstbl['idname'] == 'OBJECT')
         if ftype == 'dark':
             return good_exp & (fitstbl['idname'] == 'dark')

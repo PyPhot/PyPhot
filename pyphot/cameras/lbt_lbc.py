@@ -1,9 +1,8 @@
 """
-Module for Magellan IMACS
+Module for LBT/LBC
 
 """
 import glob
-
 import numpy as np
 
 from astropy import wcs
@@ -14,7 +13,6 @@ from pyphot import msgs
 from pyphot import parse
 from pyphot import telescopes
 from pyphot.par import framematch
-
 from pyphot.cameras import camera
 
 

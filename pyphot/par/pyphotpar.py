@@ -58,9 +58,7 @@ assuming you want it to be accessed throughout the code.
 """
 import os
 import warnings
-from pkg_resources import resource_filename
 import inspect
-from IPython import embed
 from collections import OrderedDict
 
 import numpy
@@ -101,8 +99,6 @@ class FrameGroupPar(ParSet):
         descr['frametype'] = 'Frame type.  ' \
                              'Options are: {0}'.format(', '.join(options['frametype']))
 
-        # TODO: Add overscan parameters for each frame type?
-        # TODO: JFH This is not documented. What are the options for useframe and what the  does it do?
         defaults['useframe'] = None
         dtypes['useframe'] = str
         descr['useframe'] = 'A master calibrations file to use if it exists.'
@@ -529,69 +525,6 @@ class ProcessImagesPar(ParSet):
                    lamaxiter=int(hdr['LACMAXI']), grow=float(hdr['LACGRW']),
                    rmcompact=eval(hdr['LACRMC']), sigclip=float(hdr['LACSIGC']),
                    sigfrac=float(hdr['LACSIGF']), objlim=float(hdr['LACOBJL']))
-
-class FluxCalibratePar(ParSet):
-    """
-    A parameter set holding the arguments for how to perform the flux
-    calibration.
-
-    For a table with the current keywords, defaults, and descriptions,
-    see :ref:`pyphotpar`.
-    """
-    def __init__(self, extinct_correct=None, extrap_sens=None):
-
-        # Grab the parameter names and values from the function
-        # arguments
-        args, _, _, values = inspect.getargvalues(inspect.currentframe())
-        pars = OrderedDict([(k,values[k]) for k in args[1:]])
-
-        # Initialize the other used specifications for this parameter
-        # set
-        defaults = OrderedDict.fromkeys(pars.keys())
-        dtypes = OrderedDict.fromkeys(pars.keys())
-        descr = OrderedDict.fromkeys(pars.keys())
-
-        defaults['extrap_sens'] = False
-        dtypes['extrap_sens'] = bool
-        descr['extrap_sens'] = "If False (default), the code will barf if one tries to use " \
-                               "sensfunc at wavelengths outside its defined domain. By changing the " \
-                               "par['sensfunc']['extrap_blu'] and par['sensfunc']['extrap_red'] this domain " \
-                               "can be extended. If True the code will blindly extrapolate."
-
-
-        defaults['extinct_correct'] = True
-        dtypes['extinct_correct'] = bool
-        descr['extinct_correct'] = 'If extinct_correct=True the code will use an atmospheric extinction model to ' \
-                                   'extinction correct the data below 10000A. Note that this correction makes no ' \
-                                   'sense if one is telluric correcting and this shold be set to False'
-
-        # Instantiate the parameter set
-        super(FluxCalibratePar, self).__init__(list(pars.keys()),
-                                                 values=list(pars.values()),
-                                                 defaults=list(defaults.values()),
-                                                 dtypes=list(dtypes.values()),
-                                                 descr=list(descr.values()))
-        self.validate()
-
-    @classmethod
-    def from_dict(cls, cfg):
-        k = numpy.array([*cfg.keys()])
-        parkeys = ['extinct_correct', 'extrap_sens']
-
-        badkeys = numpy.array([pk not in parkeys for pk in k])
-        if numpy.any(badkeys):
-            raise ValueError('{0} not recognized key(s) for FluxCalibratePar.'.format(k[badkeys]))
-
-        kwargs = {}
-        for pk in parkeys:
-            kwargs[pk] = cfg[pk] if pk in k else None
-        return cls(**kwargs)
-
-    def validate(self):
-        """
-        Check the parameters are valid for the provided method.
-        """
-        pass
 
 class AstrometricPar(ParSet):
     """
@@ -1202,7 +1135,7 @@ class ReduxPar(ParSet):
     see :ref:`pyphotpar`.
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
-                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, slitspatnum=None):
+                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1236,12 +1169,6 @@ class ReduxPar(ParSet):
         dtypes['detnum'] = [int, list]
         descr['detnum'] = 'Restrict reduction to a list of detector indices.' \
                           'This cannot (and should not) be used with slitspatnum. '
-
-        dtypes['slitspatnum'] = [str, list]
-        descr['slitspatnum'] = 'Restrict reduction to a set of slit DET:SPAT values (closest slit is used). ' \
-                               'Example syntax -- slitspatnum = 1:175,1:205   If you are re-running the code, ' \
-                               '(i.e. modifying one slit) you *must* have the precise SPAT_ID index.' \
-                               'This cannot (and should not) be used with detnum'
 
         dtypes['sortroot'] = str
         descr['sortroot'] = 'A filename given to output the details of the sorted files.  If ' \
@@ -1292,7 +1219,7 @@ class ReduxPar(ParSet):
 
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
-                    'redux_path', 'ignore_bad_headers', 'slitspatnum']
+                    'redux_path', 'ignore_bad_headers']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1380,111 +1307,6 @@ class PostProcPar(ParSet):
 
     def validate(self):
         pass
-
-
-class SkySubPar(ParSet):
-    """
-    The parameter set used to hold arguments for functionality relevant
-    to sky subtraction.
-
-    For a table with the current keywords, defaults, and descriptions,
-    see :ref:`pyphotpar`.
-    """
-
-    def __init__(self, bspline_spacing=None, sky_sigrej=None, global_sky_std=None, no_poly=None,
-                 user_regions=None, joint_fit=None, load_mask=None, mask_by_boxcar=None,
-                 no_local_sky=None):
-        # Grab the parameter names and values from the function
-        # arguments
-        args, _, _, values = inspect.getargvalues(inspect.currentframe())
-        pars = OrderedDict([(k, values[k]) for k in args[1:]])  # "1:" to skip 'self'
-
-        # Initialize the other used specifications for this parameter
-        # set
-        defaults = OrderedDict.fromkeys(pars.keys())
-        options = OrderedDict.fromkeys(pars.keys())
-        dtypes = OrderedDict.fromkeys(pars.keys())
-        descr = OrderedDict.fromkeys(pars.keys())
-
-        # Fill out parameter specifications.  Only the values that are
-        # *not* None (i.e., the ones that are defined) need to be set
-        defaults['bspline_spacing'] = 0.6
-        dtypes['bspline_spacing'] = [int, float]
-        descr['bspline_spacing'] = 'Break-point spacing for the bspline sky subtraction fits.'
-
-        defaults['sky_sigrej'] = 3.0
-        dtypes['sky_sigrej'] = float
-        descr['sky_sigrej'] = 'Rejection parameter for local sky subtraction'
-
-        defaults['global_sky_std'] = True
-        dtypes['global_sky_std'] = bool
-        descr['global_sky_std'] = 'Global sky subtraction will be performed on standard stars. This should be turned' \
-                                  'off for example for near-IR reductions with narrow slits, since bright standards can' \
-                                  'fill the slit causing global sky-subtraction to fail. In these situations we go ' \
-                                  'straight to local sky-subtraction since it is designed to deal with such situations'
-
-        defaults['no_poly'] = False
-        dtypes['no_poly'] = bool
-        descr['no_poly'] = 'Turn off polynomial basis (Legendre) in global sky subtraction'
-
-        defaults['no_local_sky'] = False
-        dtypes['no_local_sky'] = bool
-        descr['no_local_sky'] = 'If True, turn off local sky model evaluation, but do fit object profile and perform optimal extraction'
-
-        # Masking
-        defaults['user_regions'] = None
-        dtypes['user_regions'] = [str, list]
-        descr['user_regions'] = 'A user-defined sky regions mask can be set using this keyword. To allow' \
-                                'the code to identify the sky regions automatically, set this variable to' \
-                                'an empty string. If you wish to set the sky regions, The text should be' \
-                                'a comma separated list of percentages to apply to _all_ slits' \
-                                ' For example: The following string   :10,35:65,80:   would select the' \
-                                'first 10%, the inner 30%, and the final 20% of _all_ slits.'
-
-        defaults['mask_by_boxcar'] = False
-        dtypes['mask_by_boxcar'] = bool
-        descr['mask_by_boxcar'] = 'In global sky evaluation, mask the sky region around the object by the boxcar radius (set in ExtractionPar).'
-
-        defaults['load_mask'] = False
-        dtypes['load_mask'] = bool
-        descr['load_mask'] = 'Load a user-defined sky regions mask to be used for the sky regions. Note,' \
-                             'if you set this to True, you must first run the pyphot_skysub_regions GUI' \
-                             'to manually select and store the regions to file.'
-
-        defaults['joint_fit'] = False
-        dtypes['joint_fit'] = bool
-        descr['joint_fit'] = 'Perform a simultaneous joint fit to sky regions using all available slits.'
-
-        # Instantiate the parameter set
-        super(SkySubPar, self).__init__(list(pars.keys()),
-                                        values=list(pars.values()),
-                                        defaults=list(defaults.values()),
-                                        options=list(options.values()),
-                                        dtypes=list(dtypes.values()),
-                                        descr=list(descr.values()))
-        self.validate()
-
-    @classmethod
-    def from_dict(cls, cfg):
-        k = numpy.array([*cfg.keys()])
-
-        # Basic keywords
-        parkeys = ['bspline_spacing', 'sky_sigrej', 'global_sky_std', 'no_poly',
-                   'user_regions', 'load_mask', 'joint_fit', 'mask_by_boxcar',
-                   'no_local_sky']
-
-        badkeys = numpy.array([pk not in parkeys for pk in k])
-        if numpy.any(badkeys):
-            raise ValueError('{0} not recognized key(s) for SkySubPar.'.format(k[badkeys]))
-
-        kwargs = {}
-        for pk in parkeys:
-            kwargs[pk] = cfg[pk] if pk in k else None
-        return cls(**kwargs)
-
-    def validate(self):
-        pass
-
 
 class CalibrationsPar(ParSet):
     """
@@ -1669,8 +1491,7 @@ class PyPhotPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, rdx=None, calibrations=None, scienceframe=None, postproc=None,
-                 flexure=None, fluxcalib=None, coadd1d=None, coadd2d=None, sensfunc=None, tellfit=None):
+    def __init__(self, rdx=None, calibrations=None, scienceframe=None, postproc=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1705,15 +1526,6 @@ class PyPhotPar(ParSet):
         defaults['postproc'] = PostProcPar()
         dtypes['postproc'] = [ParSet, dict]
         descr['postproc'] = 'Parameters for astrometry, coadding, and photometry.'
-
-        # Flux calibration is turned OFF by default
-        defaults['fluxcalib'] = FluxCalibratePar()
-        dtypes['fluxcalib'] = [ParSet, dict]
-        descr['fluxcalib'] = 'Parameters used by the flux-calibration procedure.  Flux ' \
-                             'calibration is not performed by default.  To turn on, either ' \
-                             'set the parameters in the \'fluxcalib\' parameter group or set ' \
-                             '\'fluxcalib = True\' in the \'rdx\' parameter group to use the ' \
-                             'default flux-calibration parameters.'
 
         # Instantiate the parameter set
         super(PyPhotPar, self).__init__(list(pars.keys()),
@@ -1913,8 +1725,7 @@ class PyPhotPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['rdx', 'calibrations', 'scienceframe', 'postproc', 'flexure', 'fluxcalib',
-                   'coadd1d', 'coadd2d', 'sensfunc', 'baseprocess', 'tellfit']
+        allkeys = ['rdx', 'calibrations', 'scienceframe', 'postproc', 'baseprocess']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for PyPhotPar.'.format(k[badkeys]))
@@ -1932,13 +1743,6 @@ class PyPhotPar(ParSet):
 
         pk = 'postproc'
         kwargs[pk] = PostProcPar.from_dict(cfg[pk]) if pk in k else None
-
-        # Allow flux calibration to be turned on using cfg['rdx']
-        pk = 'fluxcalib'
-        default = FluxCalibratePar() \
-                        if pk in cfg['rdx'].keys() and cfg['rdx']['fluxcalib'] else None
-        kwargs[pk] = FluxCalibratePar.from_dict(cfg[pk]) if pk in k else default
-
 
         if 'baseprocess' not in k:
             return cls(**kwargs)
