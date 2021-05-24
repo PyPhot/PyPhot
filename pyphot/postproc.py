@@ -46,8 +46,8 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                 pixscale_maxerr=1.1, mosaic_type='LOOSE',task='sex',
                 weight_type='MAP_WEIGHT', solve_photom_scamp=False, delete=False, log=True):
 
-    ## ToDo: Not sure why, but the scamp fails for MMIRS and IMACS, so I will try to resample it with swarp
-    ## This step is basically align the image to N to the up and E to the left
+    ## This step is basically align the image to N to the up and E to the left.
+    ## this step is important if your image have a very different origination from the regular one.
     # configuration for the first swarp run
     # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
     swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
@@ -59,7 +59,6 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     swarp.swarpall(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                    coaddroot=None, delete=delete, log=log)
 
-    # ToDo: There is a bug for resampling the flag images. i.e. flag=4 ==> flag=3 after resampling
     # resample flag image
     swarpconfig_flag = swarpconfig.copy()
     swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
@@ -389,8 +388,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         # ToDo:  (catalog['NIMAFLAGS_ISO']<1) will reject most of the targets for dirty IR detector, i.e. WIRCam
         #       So, we should save another flat image that only counts for the number of bad exposures associated to the pixel
         #       and then use this number as a cut.
-        #       Or we can remove saturated targets, or parse a parameter after fixing the flag image resampling bug.
-        # catalog['NIMAFLAGS_ISO'] & 2**2<1 used for remove saturated targets, see procimg.ccdproc
+        #       Currently we only remove saturated targets, catalog['NIMAFLAGS_ISO'] & 2**2<1 used for remove saturated targets, see procimg.ccdproc
         flag = catalog['NIMAFLAGS_ISO'] & 2**2<1  #(catalog['NIMAFLAGS_ISO']<1)
         good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & flag
         #& (catalog['CLASS_STAR']>0.9) & (catalog['NIMAFLAGS_ISO']<1)
