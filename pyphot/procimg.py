@@ -22,7 +22,7 @@ from photutils import Background2D
 from photutils import MeanBackground, MedianBackground, SExtractorBackground
 
 def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
-            masterillumflatimg=None, maskproc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, #mask vignetting
+            masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, #mask vignetting
             replace=None):
 
     sci_fits_list = []
@@ -66,15 +66,15 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             if masterdarkimg is not None:
                 sci_image -= masterdarkimg*exptime
             if masterpixflatimg is not None:
-                sci_image /= masterpixflatimg
+                sci_image *= utils.inverse(masterpixflatimg)
             if masterillumflatimg is not None:
-                sci_image /= masterillumflatimg
+                sci_image *= utils.inverse(masterillumflatimg)
             if apply_gain:
                 header['GAIN'] = (1.0, 'Effective gain')
                 sci_image *= gain_image
 
-            if maskproc is None:
-                maskproc = np.ones_like(sci_image,dtype='bool')
+            if bpm_proc is None:
+                bpm_proc = np.zeros_like(sci_image, dtype='bool')
 
             # mask Vignetting pixels
             if mask_vig and (masterillumflatimg is not None):
@@ -87,14 +87,16 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             # mask nan values
             bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
 
-            ## master BPM mask
-            bpm_all = bpm | bpm_sat | bpm_zero | bpm_vig | bpm_nan | maskproc
+            ## master BPM mask, contains all bpm except for saturated values.
+            bpm_all = bpm | bpm_zero | bpm_vig | bpm_nan | bpm_proc
 
-            ## replace bad pixel values.
+            ## replace saturated values
             ## ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
             ##       replace saturated values with 65535 or maximum value, this will make the final coadd image looks better
             ##       replace other bad pixels with median or zero for other pixels?
+            #sci_image[bpm_sat] = np.max(sci_image[np.invert(bpm_all)])
 
+            ## replace other bad pixel values.
             if replace == 'zero':
                 sci_image[bpm_all] = 0
             elif replace == 'median':
@@ -112,14 +114,14 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             # save images
             io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)
             msgs.info('Science image {:} saved'.format(sci_fits))
-            flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_sat*np.int(2**2) + \
+            flag_image = bpm*np.int(2**0) + bpm_proc*np.int(2**1) + bpm_sat*np.int(2**2) + \
                          bpm_zero * np.int(2**3) + bpm_vig*np.int(2**4) + bpm_nan*np.int(2**5)
             io.save_fits(flag_fits, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
             msgs.info('Flag image {:} saved'.format(flag_fits))
 
     return sci_fits_list, flag_fits_list
 
-def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
+def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_airmass=0.,
             background='median', back_size=(200,200), back_filtersize=(3, 3), maskbrightstar=True, brightstar_nsigma=3,
             mask_cr=True, contrast=2, maxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
             replace=None):
@@ -135,18 +137,26 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
         wht_fits_list.append(wht_fits)
         flag_fits = ifile.replace('_proc.fits','_flag.fits')
         flag_fits_list.append(flag_fits)
-
         if os.path.exists(sci_fits):
             msgs.info('The Science product {:} exists, skipping...'.format(sci_fits))
         else:
             msgs.info('Processing {:}'.format(ifile))
-            data, header = io.load_fits(ifile)
-            flag_image, _ = io.load_fits(flagfiles[ii])
+            header, data, _ = io.load_fits(ifile)
+            _, flag_image, _ = io.load_fits(flagfiles[ii])
             mask = flag_image>0
+            mask_zero = data == 0.
 
             ## super flattening your images
             if mastersuperskyimg is not None:
-                data /= mastersuperskyimg
+                data *= utils.inverse(mastersuperskyimg)
+
+            if airmass is not None:
+                if len(airmass) != len(scifiles):
+                    msgs.error('The length of airmass table should be the same with the number of exposures.')
+
+                # do the correction.
+                mag_ext = airmass[ii]*coeff_airmass
+                data *= 10**(0.4*mag_ext)
 
             ## Sky background subtraction
             sigma_clip = SigmaClip(sigma=sigclip)
@@ -182,31 +192,34 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
             else:
                 bpm_cr = np.zeros_like(sci_image,dtype=bool)
 
-            ## ToDO: correct extinction based on airmass and extinction coefficients.
-            ##       and then calibrate each detector: either giving the zeropoint or scaling the image accordingly.
-            ## Step 1: using the provided coefficients and airmass to correct the extinction.
-            ## Step 2: detect sources with SExtractor and calibrate zeropoint with calzpt
-            ## Step 3: save the zeropoint to fits header or scale the image accordingly.
-
-            mask_all = mask | bpm_cr # should not include starmask since they are not bad pixels.
             flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**6)
 
-            ## replace bad pixel values? ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
+            # make a mask used for statistics.
+            # should not include starmask since they are not bad pixels if you want to use this mask for other purpose
+            mask_all = mask | bpm_cr | starmask
+
+            ## replace cosmic ray affected pixels? ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
             if replace == 'zero':
-                sci_image[mask_all] = 0
+                sci_image[bpm_cr] = 0
             elif replace == 'median':
-                _,sci_image[mask_all],_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigma_clip, maxiters=5)
+                _,sci_image[bpm_cr],_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigma_clip, maxiters=5)
             elif replace == 'mean':
-                sci_image[mask_all],_,_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigma_clip, maxiters=5)
+                sci_image[bpm_cr],_,_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigma_clip, maxiters=5)
             elif replace == 'min':
-                sci_image[mask_all] = np.min(sci_image[np.invert(mask_all)])
+                sci_image[bpm_cr] = np.min(sci_image[np.invert(mask_all)])
             elif replace == 'max':
-                sci_image[mask_all] = np.max(sci_image[np.invert(mask_all)])
+                sci_image[bpm_cr] = np.max(sci_image[np.invert(mask_all)])
             else:
                 msgs.info('Not replacing bad pixel values')
 
             # Generate weight map used for SExtractor and SWarp (WEIGHT_TYPE = MAP_WEIGHT)
-            wht_image = 1.0 / bkg.background
+            wht_image = utils.inverse(bkg.background)
+
+            # Always set original zero values to be zero, this can avoid significant negative values after sky subtraction
+            # Set bad pixel's weight to be zero
+            sci_image[mask_zero] = 0
+            wht_image[mask_zero] = 0
+            wht_image[mask | bpm_cr] = 0
 
             # save images
             io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)
@@ -215,9 +228,6 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None,
             msgs.info('Weight image {:} saved'.format(wht_fits))
             io.save_fits(flag_fits, flag_image_new.astype('int32'), header, 'FlagImage', overwrite=True)
             msgs.info('Flag image {:} saved'.format(flag_fits))
-
-            #flag_image = bpm*np.int(2**0) + maskproc*np.int(2**1) + bpm_cr*np.int(2**2) + bpm_vig*np.int(2**3) + bpm_nan*np.int(2**4)
-            #io.save_fits(flag_fits, bpm_cr.astype('int32'), header, 'FlagImage', overwrite=True)
 
     return sci_fits_list, wht_fits_list, flag_fits_list
 

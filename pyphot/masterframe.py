@@ -78,7 +78,7 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
 
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
-                stdfunc='std', sigma=5, maxiters=3, window_size=50, maskpixvar=None,
+                stdfunc='std', sigma=5, maxiters=3, window_size=(51,51), maskpixvar=None,
                 maskbrightstar=True, brightstar_nsigma=5):
 
     images = []
@@ -95,12 +95,12 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
             bpm = camera.bpm(ifile, det, shape=None, msbias=None).astype('bool')
         else:
             msgs.info('Reading ccd proccessed flat image {:}'.format(ifile))
-            array, header = io.load_fits(ifile)
+            header, array, mask_image = io.load_fits(ifile)
             if maskfiles is not None:
-                flag_image, _ = io.load_fits(maskfiles[ii])
+                _, flag_image, _ = io.load_fits(maskfiles[ii])
                 bpm = flag_image.astype('bool')
             else:
-                bpm = np.zeros_like(array,dtype='bool')
+                bpm = mask_image.astype('bool')
 
         ## Mask bright stars
         maskbrightstar= False
@@ -142,9 +142,9 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
     if maskpixvar is not None:
         # mask bad pixels based on pixelflat (i.e. pixel variance greater than XX% using maskbad)
         # Only used for pixel flat
-        #illum = gaussian_filter(stack, sigma=window_size, mode='mirror')
+        #illum = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
         sigma_clip = SigmaClip(sigma=sigma)
-        bkg = Background2D(stack, (window_size,window_size), mask=np.isnan(stack), filter_size=(3,3), sigma_clip=sigma_clip,
+        bkg = Background2D(stack, window_size, mask=np.isnan(stack), filter_size=(3,3), sigma_clip=sigma_clip,
                            bkg_estimator=MedianBackground())
         illum = bkg.background
         bpm_pixvar = abs(1-stack/illum)>maskpixvar
@@ -157,7 +157,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
     return header, stack, stack_bpm
 
 def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=None, masterdarkimg=None,
-                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=51,
+                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
                    maskbrightstar=False, brightstar_nsigma=5):
 
     msgs.info('Building illuminating flat')
@@ -168,15 +168,15 @@ def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=N
 
     ## ToDo: currently I am using photoutils for the illuminating flat. Need to get a better combineflat
     sigma_clip = SigmaClip(sigma=sigma)
-    bkg = Background2D(stack, (window_size,window_size), mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
+    bkg = Background2D(stack, window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
                        bkg_estimator=MedianBackground())
     flat = bkg.background
     # scipy gaussian_filter seems not ideal, could produce some problem at the edge.
-    #flat = gaussian_filter(stack, sigma=window_size, mode='mirror')
+    #flat = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
     io.save_fits(masterillumflat_name, flat, header, 'MasterIllumFlat', mask=bpm, overwrite=True)
 
 def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=None, masterdarkimg=None, masterillumflatimg=None,
-                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=51, maskpixvar=0.1,
+                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), maskpixvar=0.1,
                    maskbrightstar=True, brightstar_nsigma=5):
 
     msgs.info('Building pixel flat')
@@ -191,7 +191,7 @@ def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=Non
     io.save_fits(masterpixflat_name, flat, header, 'MasterPixelFlat', mask=bpm, overwrite=True)
 
 def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
-                  cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=51,
+                  cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
                   maskbrightstar=True, brightstar_nsigma=5):
 
     msgs.info('Building super sky flat')
@@ -201,29 +201,28 @@ def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
 
     ## ToDo: currently I am using photoutils for the supersky. Need to get a better combineflat
     sigma_clip = SigmaClip(sigma=sigma)
-    bkg = Background2D(stack, (window_size,window_size), mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
+    bkg = Background2D(stack, window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
                        bkg_estimator=MedianBackground())
     flat = bkg.background
-    #flat = gaussian_filter(stack, sigma=window_size, mode='mirror')
-    #flat = median_filter(stack, size=window_size, mode='mirror')
+    #flat = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
+    #flat = median_filter(stack, size=window_size[0], mode='mirror')
     #io.save_fits(mastersupersky_name.replace('.fits','1.fits'), flat, header, 'MasterSuperSky', mask=bpm, overwrite=True)
     io.save_fits(mastersupersky_name, flat, header, 'MasterSuperSky', mask=bpm, overwrite=True)
 
 def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersuperskyimg=None, cenfunc='median', stdfunc='std',
               sigma=3, maxiters=3, maskbrightstar=True, brightstar_nsigma=5):
 
-    data0, header = io.load_fits(fringefiles[0])
+    header, data0, mask0 = io.load_fits(fringefiles[0])
     nx, ny, nz = data0.shape[0], data0.shape[1], len(fringefiles)
     data3D = np.zeros((nx, ny, nz))
     mask3D = np.zeros((nx, ny, nz),dtype='bool')
     for iimg in range(nz):
-        this_data, this_header = io.load_fits(fringefiles[iimg])
+        this_header, this_data, this_mask_image = io.load_fits(fringefiles[iimg])
         if mastersuperskyimg is not None:
             this_data = this_data / mastersuperskyimg
         if fringemaskfiles is not None:
-            this_mask, _ = io.load_fits(fringemaskfiles[iimg])
-        else:
-            this_mask = np.zeros(this_data, dtype='bool')
+            _, this_mask_image, _ = io.load_fits(fringemaskfiles[iimg])
+        this_mask = this_mask_image.astype('bool')
 
         # Mask very bright stars
         if maskbrightstar:

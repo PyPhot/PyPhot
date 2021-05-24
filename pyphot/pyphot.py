@@ -14,7 +14,7 @@ from astropy.table import Table
 
 from configobj import ConfigObj
 
-from pyphot import msgs
+from pyphot import msgs, io
 from pyphot import procimg, postproc
 from pyphot import sex
 from pyphot.par.util import parse_pyphot_file
@@ -222,7 +222,7 @@ class PyPhot(object):
         # Frame indices
         frame_indx = np.arange(len(self.fitstbl))
 
-        # Iterate over each calibration group again and reduce the science frames
+        # Iterate over each calibration group and reduce the science frames
         for i in range(self.fitstbl.n_calib_groups):
             # Find all the frames in this calibration group
             in_grp = self.fitstbl.find_calib_group(i)
@@ -244,13 +244,14 @@ class PyPhot(object):
                     #this_setup = np.unique(self.fitstbl.table[grp_science]['setup'])[0]
                     #this_det = self.det
                     #master_key = '{:}_{:02d}.fits'.format(this_setup,this_det)
-                    master_key = self.fitstbl.master_key(grp_science[0], det=1)
+                    master_key = self.fitstbl.master_key(grp_science[0], det=self.det)
 
                     scifiles = self.fitstbl.frame_paths(grp_science)
                     raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
+                    sci_airmass = self.fitstbl[grp_science]['airmass']
+                    coadd_ids = self.fitstbl['coadd_id'][grp_science]
 
                     ### Build Calibrations
-                    ## ToDo: parset masterframes
                     # Bias
                     if self.par['scienceframe']['process']['use_biasimage']:
                         masterbias_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterBias_{:}'.format(master_key))
@@ -260,12 +261,14 @@ class PyPhot(object):
                             grp_bias = frame_indx[is_bias & in_grp]
                             biasfiles = self.fitstbl.frame_paths(grp_bias)
                             masterframe.biasframe(biasfiles, self.camera, self.det, masterbias_name,
-                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=3)
-                        masterbiasimg = fits.getdata(masterbias_name,0)
-                        maskbiasimg = fits.getdata(masterbias_name,1)
+                                                  cenfunc=self.par['calibrations']['biasframe']['process']['comb_cenfunc'],
+                                                  stdfunc=self.par['calibrations']['biasframe']['process']['comb_stdfunc'],
+                                                  sigma=self.par['calibrations']['biasframe']['process']['comb_sigrej'],
+                                                  maxiters=self.par['calibrations']['biasframe']['process']['comb_maxiter'])
+                        _, masterbiasimg, maskbiasimg = io.load_fits(masterbias_name)
                     else:
                         masterbiasimg = None
-                        maskbiasimg = np.zeros(raw_shape,dtype='int16')
+                        maskbiasimg = np.zeros(raw_shape,dtype='int32')
 
                     # Dark
                     if self.par['scienceframe']['process']['use_darkimage']:
@@ -277,12 +280,14 @@ class PyPhot(object):
                             grp_dark = frame_indx[is_dark & in_grp]
                             darkfiles = self.fitstbl.frame_paths(grp_dark)
                             masterframe.darkframe(darkfiles, self.camera, self.det, masterdark_name, masterbiasimg=masterbiasimg,
-                                                  cenfunc='median', stdfunc='std', sigma=3, maxiters=3)
-                        masterdarkimg = fits.getdata(masterdark_name, 0)
-                        maskdarkimg = fits.getdata(masterdarkimg,1)
+                                                  cenfunc=self.par['calibrations']['darkframe']['process']['comb_cenfunc'],
+                                                  stdfunc=self.par['calibrations']['darkframe']['process']['comb_stdfunc'],
+                                                  sigma=self.par['calibrations']['darkframe']['process']['comb_sigrej'],
+                                                  maxiters=self.par['calibrations']['darkframe']['process']['comb_maxiter'])
+                        _, masterdarkimg, maskdarkimg = io.load_fits(masterdark_name)
                     else:
                         masterdarkimg = None
-                        maskdarkimg = np.zeros(raw_shape,dtype='int16')
+                        maskdarkimg = np.zeros(raw_shape,dtype='int32')
 
                     # Illumination Flat
                     if self.par['scienceframe']['process']['use_illumflat']:
@@ -296,13 +301,16 @@ class PyPhot(object):
                             illumflatfiles = self.fitstbl.frame_paths(grp_illumflat)
                             masterframe.illumflatframe(illumflatfiles, self.camera, self.det, masterillumflat_name,
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
-                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
-                                                       window_size=51, maskbrightstar=False)
-                        masterillumflatimg = fits.getdata(masterillumflat_name, 0)
-                        maskillumflatimg = fits.getdata(masterillumflat_name, 1)
+                                                       cenfunc=self.par['calibrations']['illumflatframe']['process']['comb_cenfunc'],
+                                                       stdfunc=self.par['calibrations']['illumflatframe']['process']['comb_stdfunc'],
+                                                       sigma=self.par['calibrations']['illumflatframe']['process']['comb_sigrej'],
+                                                       maxiters=self.par['calibrations']['illumflatframe']['process']['comb_maxiter'],
+                                                       window_size=self.par['calibrations']['illumflatframe']['process']['window_size'],
+                                                       maskbrightstar=False) # do not need mask bright star for illuminate flat
+                        _, masterillumflatimg, maskillumflatimg = io.load_fits(masterillumflat_name)
                     else:
                         masterillumflatimg = None
-                        maskillumflatimg = np.zeros(raw_shape,dtype='int16')
+                        maskillumflatimg = np.zeros(raw_shape,dtype='int32')
 
                     # Pixel Flat
                     if self.par['scienceframe']['process']['use_pixelflat']:
@@ -316,22 +324,30 @@ class PyPhot(object):
                             masterframe.pixelflatframe(pixflatfiles, self.camera, self.det, masterpixflat_name,
                                                        masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                                        masterillumflatimg=masterillumflatimg,
-                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
-                                                       window_size=51, maskpixvar=0.1, maskbrightstar=True, brightstar_nsigma=5)
-                        masterpixflatimg = fits.getdata(masterpixflat_name, 0)
-                        maskpixflatimg = fits.getdata(masterpixflat_name, 1)
+                                                       cenfunc=self.par['calibrations']['pixelflatframe']['process']['comb_cenfunc'],
+                                                       stdfunc=self.par['calibrations']['pixelflatframe']['process']['comb_stdfunc'],
+                                                       sigma=self.par['calibrations']['pixelflatframe']['process']['comb_sigrej'],
+                                                       maxiters=self.par['calibrations']['pixelflatframe']['process']['comb_maxiter'],
+                                                       window_size=self.par['calibrations']['pixelflatframe']['process']['window_size'],
+                                                       maskpixvar=self.par['calibrations']['pixelflatframe']['process']['maskpixvar'],
+                                                       maskbrightstar=self.par['calibrations']['pixelflatframe']['process']['mask_brightstar'],
+                                                       brightstar_nsigma=self.par['calibrations']['pixelflatframe']['process']['brightstar_nsigma'])
+                        _, masterpixflatimg, maskpixflatimg = io.load_fits(masterpixflat_name)
                     else:
                         masterpixflatimg = None
-                        maskpixflatimg = np.zeros(raw_shape,dtype='int16')
+                        maskpixflatimg = np.zeros(raw_shape,dtype='int32')
 
                     ## prepare mask image for ccdproc
-                    maskproc = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
+                    if self.par['scienceframe']['process']['mask_proc']:
+                        bpm_proc = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
+                    else:
+                        bpm_proc = np.zeros_like(raw_shape,dtype='int32')
 
                     ## CCDPROC -- bias, dark subtraction, flat fielding and cosmic ray rejections
                     sci_fits_list, ccdmask_fits_list = procimg.ccdproc(scifiles, self.camera, self.det,
                                     science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                     masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
-                                    maskproc = maskproc>0,
+                                    bpm_proc = bpm_proc.astype('bool'),
                                     apply_gain=self.par['scienceframe']['process']['apply_gain'],
                                     mask_vig=self.par['scienceframe']['process']['mask_vig'],
                                     minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
@@ -364,17 +380,22 @@ class PyPhot(object):
                                 superskymaskfiles.append(superskymaskfile)
 
                             masterframe.superskyframe(superskyfiles, mastersupersky_name, maskfiles=superskymaskfiles,
-                                                       cenfunc='median', stdfunc='std', sigma=3, maxiters=3,
-                                                       window_size=51, maskbrightstar=True, brightstar_nsigma=5)
-                        mastersuperskyimg = fits.getdata(mastersupersky_name, 0)
-                        masksuperskyimg = fits.getdata(mastersupersky_name, 1)
+                                                       cenfunc=self.par['calibrations']['superskyframe']['process']['comb_cenfunc'],
+                                                       stdfunc=self.par['calibrations']['superskyframe']['process']['comb_stdfunc'],
+                                                       sigma=self.par['calibrations']['superskyframe']['process']['comb_sigrej'],
+                                                       maxiters=self.par['calibrations']['superskyframe']['process']['comb_maxiter'],
+                                                       window_size=self.par['calibrations']['superskyframe']['process']['window_size'],
+                                                       maskbrightstar=self.par['calibrations']['superskyframe']['process']['mask_brightstar'],
+                                                       brightstar_nsigma=self.par['calibrations']['superskyframe']['process']['brightstar_nsigma'])
+                        _, mastersuperskyimg, masksuperskyimg = io.load_fits(mastersupersky_name)
                     else:
                         mastersuperskyimg = None
                         masksuperskyimg = np.zeros(raw_shape,dtype='int16')
 
-                    ## SCIPROC -- supersky flattening and background subtraction.
+                    ## SCIPROC -- supersky flattening, extinction correction based on airmass, and background subtraction.
                     sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, ccdmask_fits_list,
-                                    mastersuperskyimg=mastersuperskyimg,
+                                    mastersuperskyimg=mastersuperskyimg, airmass=sci_airmass,
+                                    coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
                                     background=self.par['scienceframe']['process']['background'],
                                     back_size=self.par['scienceframe']['process']['back_size'],
                                     back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
@@ -416,25 +437,44 @@ class PyPhot(object):
 
                             masterframe.fringeframe(fringefiles, masterfringe_name, fringemaskfiles=fringemaskfiles,
                                                     mastersuperskyimg=mastersuperskyimg,
-                                                    cenfunc='median', stdfunc='std',sigma=3, maxiters=3,
-                                                    maskbrightstar=True, brightstar_nsigma=5)
-                        masterfringeimg = fits.getdata(masterfringe_name,0)
-                        maskfringeimg = fits.getdata(masterfringe_name, 1)
+                                                    cenfunc=self.par['calibrations']['fringeframe']['process']['comb_cenfunc'],
+                                                    stdfunc=self.par['calibrations']['fringeframe']['process']['comb_stdfunc'],
+                                                    sigma=self.par['calibrations']['fringeframe']['process']['comb_sigrej'],
+                                                    maxiters=self.par['calibrations']['fringeframe']['process']['comb_maxiter'],
+                                                    maskbrightstar=self.par['calibrations']['fringeframe']['process']['mask_brightstar'],
+                                                    brightstar_nsigma=self.par['calibrations']['fringeframe']['process']['brightstar_nsigma'])
+                        _, masterfringeimg, maskfringeimg = io.load_fits(masterfringe_name)
                         postproc.defringing(sci_fits_list, masterfringeimg)
                     else:
                         masterfringeimg = None
                         maskfringeimg = np.zeros(raw_shape,dtype='int16')
 
-                    ## Astrometry calibration
+                    ## Astrometric calibration and photometric calibration of individual chips
+                    # get pixel scale for resampling with SCAMP
                     detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), self.det)
                     pixscale = detector_par['platescale']
 
                     if self.par['postproc']['astrometry']['skip']:
-                        msgs.warn('Skipping astrometry calibrations for individual images. Go with luck')
-                        sci_resample_list, wht_resample_list, flag_resample_list = sci_fits_list, wht_fits_list, flag_fits_list
+                        sci_resample_list = []
+                        wht_resample_list = []
+                        flag_resample_list = []
+                        cat_resample_list = []
+                        for i in range(len(sci_fits_list)):
+                            if os.path.exists(sci_fits_list[i].replace('.fits', '.resamp.fits')):
+                                msgs.info('Skipping astrometry calibrations for individual images.')
+                                sci_resample_list.append(sci_fits_list[i].replace('.fits', '.resamp.fits'))
+                                wht_resample_list.append(sci_fits_list[i].replace('.fits', '.resamp.weight.fits'))
+                                flag_resample_list.append(flag_fits_list[i].replace('.fits', '.resamp.fits'))
+                                cat_resample_list.append(sci_fits_list[i].replace('.fits', '.resamp_cat.fits'))
+                            else:
+                                msgs.warn('Skipping astrometry calibrations for individual images. Go with luck')
+                                sci_resample_list.append(sci_fits_list[i])
+                                wht_resample_list.append(sci_fits_list[i].replace('.fits', '.weight.fits'))
+                                flag_resample_list.append(flag_fits_list[i])
+                                cat_resample_list.append(sci_fits_list[i].replace('.fits', '_cat.fits'))
                     else:
                         msgs.info('Doing the astrometry calibrations for detector {:}'.format(self.det))
-                        sci_resample_list, wht_resample_list, flag_resample_list = postproc.astrometric(
+                        sci_resample_list, wht_resample_list, flag_resample_list, cat_resample_list = postproc.astrometric(
                                     sci_fits_list, wht_fits_list, flag_fits_list, pixscale,
                                     science_path=self.science_path, qa_path=self.qa_path,
                                     task=self.par['rdx']['sextractor'],
@@ -448,15 +488,38 @@ class PyPhot(object):
                                     pixscale_maxerr=self.par['postproc']['astrometry']['pixscale_maxerr'],
                                     mosaic_type=self.par['postproc']['astrometry']['mosaic_type'],
                                     weight_type=self.par['postproc']['astrometry']['weight_type'],
+                                    solve_photom_scamp=self.par['postproc']['astrometry']['solve_photom_scamp'],
                                     delete=self.par['postproc']['astrometry']['delete'],
                                     log=self.par['postproc']['astrometry']['log'])
 
-                    ## Photometric calibration for individual chips
+                    ## Photometrically calibrating individual chips
                     msgs.work('Photometric calibration for individual chips.')
+                    if self.par['postproc']['photometry']['cal_chip_zpt']:
 
-                ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint here?
+                        # Prepare the reference catalog list. These catalogs will be used for photometrically calibrating individual chips.
+                        coadd_ids = self.fitstbl['coadd_id'][grp_science]
+                        photref_catalog = self.par['postproc']['photometry']['photref_catalog']
+                        master_ref_cats = []
+                        outqa_list = []
+                        for icat in range(len(sci_resample_list)):
+                            this_cat = 'MasterRefCat_{:}_ID{:03d}_{:02d}.fits'.format(photref_catalog, coadd_ids[icat], self.det)
+                            master_ref_cats.append(os.path.join(self.par['calibrations']['master_dir'], this_cat))
+                            this_qa = os.path.basename(sci_resample_list[icat]).replace('.fits','')
+                            outqa_list.append(os.path.join(self.qa_path, this_qa))
+
+                        # Do the calibrations
+                        postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
+                                           ref_fits_list=master_ref_cats, outqa_root_list = outqa_list,
+                                           refcatalog=self.par['postproc']['photometry']['photref_catalog'],
+                                           primary=self.par['postproc']['photometry']['primary'],
+                                           secondary=self.par['postproc']['photometry']['secondary'],
+                                           coefficients=self.par['postproc']['photometry']['coefficients'],
+                                           ZP=self.par['postproc']['photometry']['zpt'])
+
+                ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here?
                 ##       using swarp to combine different detectors, if only one detector then skip this step.
                 ##       RESAMPLING_TYPE = NEAREST,
+                ##       Not sure whether its usful or not given that we can just ds9 -mosaic **resample.fits to check the image.
 
                 ## Do the coadding and source detection target by target and filter by filter
                 ## The images are combined based on the coadd_id in your PyPhot file.
@@ -465,10 +528,13 @@ class PyPhot(object):
                     grp_iobj = frame_indx[is_science & in_grp & (self.fitstbl['coadd_id']==objid)]
                     iobjfiles = self.fitstbl['filename'][grp_iobj]
                     filter_iobj = self.fitstbl['filter'][grp_iobj][0]
-                    coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_combid{:03d}'.format(filter_iobj,objid)
+                    coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_ID{:03d}'.format(filter_iobj,objid)
                     if ('.gz' in iobjfiles[0]) or ('.fz' in iobjfiles[0]):
                         for ii in range(len(iobjfiles)):
                             iobjfiles[ii] = iobjfiles[ii].replace('.gz','').replace('.fz','')
+                    # The name of reference catalog that will be saved to Master folder
+                    out_refcat = 'MasterRefCat_{:}_ID{:03d}.fits'.format(self.par['postproc']['photometry']['photref_catalog'],objid)
+                    out_refcat_fullpath = os.path.join(self.par['calibrations']['master_dir'], out_refcat)
 
                     # compile the file list
                     nscifits = np.size(iobjfiles)
@@ -607,7 +673,8 @@ class PyPhot(object):
                                                             primary=self.par['postproc']['photometry']['primary'],
                                                             secondary=self.par['postproc']['photometry']['secondary'],
                                                             coefficients=self.par['postproc']['photometry']['coefficients'],
-                                                            outqa=os.path.join(self.qa_path, coaddroot + '_sci_zpt.pdf'))
+                                                            FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
+                                                            outqaroot=os.path.join(self.qa_path, coaddroot))
                         par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
                         par[0].header['ZP'] = zp
                         par[0].header['ZP_STD'] = zp_std

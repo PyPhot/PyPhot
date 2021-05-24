@@ -171,6 +171,11 @@ class LBTLBCCamera(camera.Camera):
         if x2>4608: # LBC occationally has reading out problem and would result in some bad rows.
             x2=4608
 
+        ## ToDo: Check whether all data need to do the trim. It seems most of the data have problem at the edges.
+        ## Trim some edge pixels for LBT. This can be improved by providing BPM mask or mask using pixelflat,
+        ##  i.e. with maskpixvar=0.03
+        #x1, x2, y1, y2 = x1+15, x2-10, y1+5, y2-10
+
         data = hdu[det].data*1.0
         array = data[x1:x2,y1:y2]
 
@@ -295,7 +300,6 @@ class LBTLBCBCamera(LBTLBCCamera):
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
-        par['scienceframe']['process']['replace'] = 'None'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -342,12 +346,14 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['photometry']['cal_zpt'] = True
 
 
+        # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
         if self.get_meta_value(scifile, 'filter') == 'SDT_Uspec':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 27.33
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.47 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'U-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
@@ -355,30 +361,35 @@ class LBTLBCBCamera(LBTLBCCamera):
             par['postproc']['photometry']['zpt'] = 26.23
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.48 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'B-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.93
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.22 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'V-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 28.13
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.15 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'g-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 28.31
             par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.17 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 27.75
             par['postproc']['photometry']['coefficients'] = [0., 0.016, 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.11 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
 
         return par
 
@@ -510,6 +521,10 @@ class LBTLBCRCamera(LBTLBCCamera):
         """
         par = super().default_pyphot_par()
 
+        # Calibrations
+        # PyPhot default is 0.1. Use 0.03 to remove more bad pixels
+        par['calibrations']['pixelflatframe']['process']['maskpixvar'] =0.03
+
         # Image processing steps
         turn_off = dict(use_illumflat=False, use_biasimage=False, use_overscan=False,
                         use_darkimage=False)
@@ -525,7 +540,6 @@ class LBTLBCRCamera(LBTLBCCamera):
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
-        par['scienceframe']['process']['replace'] = 'None'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -578,36 +592,42 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['zpt'] = 27.94
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.16 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'R-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'g'
             par['postproc']['photometry']['zpt'] = 27.86
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.13 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'I-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.59
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 28.03
             par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.09 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['zpt'] = 27.57
             par['postproc']['photometry']['coefficients'] = [0.,0.072, 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.03 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 27.20
             par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
 
         return par
 

@@ -2,10 +2,12 @@ import sys
 import time
 import scipy
 import astropy
-import pyphot
 
 import numpy as np
 from astropy.io import fits
+
+import pyphot
+from pyphot import msgs
 
 def initialize_header(hdr=None, primary=False):
     """
@@ -55,15 +57,24 @@ def save_fits(fitsname, data, header, img_type, mask=None, overwrite=True):
         for i in range(len(hdr)):
             header.append(hdr.cards[i])
 
-    hdu = fits.PrimaryHDU(data, header=header)
-
     if mask is None:
+        hdu = fits.PrimaryHDU(data, header=header)
         hdu.writeto(fitsname, overwrite=overwrite)
     else:
-        mask_hdu = fits.ImageHDU(mask.astype('int32'), name='MASK')
-        hdulist = fits.HDUList([hdu,mask_hdu])
-        hdulist.writeto(fitsname,overwrite=overwrite)
+        hdu = fits.PrimaryHDU(header=header)
+        hdu1 = fits.ImageHDU(data, header=header, name='IMAGE')
+        hdu2 = fits.ImageHDU(mask.astype('int32'), header=header, name='MASK')
+        new_hdul = fits.HDUList([hdu, hdu1, hdu2])
+        new_hdul.writeto(fitsname, overwrite=True)
+        #mask_hdu = fits.ImageHDU(mask.astype('int32'), name='MASK')
+        #hdulist = fits.HDUList([hdu,mask_hdu])
+        #hdulist.writeto(fitsname,overwrite=overwrite)
 
 def load_fits(fitsname):
     par = fits.open(fitsname)
-    return par[0].data, par[0].header
+    if len(par)==1:
+        return par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
+    elif len(par)==3:
+        return par[1].header, par[1].data, par[2].data
+    else:
+        msgs.error('{:} is not a PyPhot FITS Image.'.format(fitsname))

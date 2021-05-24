@@ -169,12 +169,12 @@ class ProcessImagesPar(ParSet):
     """
     def __init__(self, trim=None, apply_gain=None, orient=None,
                  overscan_method=None, overscan_par=None,
-                 combine=None, satpix=None,
-                 mask_vig=None, minimum_vig=None,
-                 mask_cr=None, contrast=None, clip=None,
+                 comb_cenfunc=None, comb_stdfunc=None, clip=None, comb_maxiter=None,comb_sigrej=None,
+                 satpix=None, mask_proc=None, window_size=None, maskpixvar=None,
+                 mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,
+                 mask_cr=None, contrast=None,
                  cr_threshold=None, neighbor_threshold=None,
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
-                 comb_sigrej=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
                  use_pixelflat=None, use_illumflat=None, use_supersky=None,
@@ -253,26 +253,57 @@ class ProcessImagesPar(ParSet):
         dtypes['use_fringe'] = bool
         descr['use_fringe'] = 'Subtract off a fringing pattern. This pattern usually appears for thin CCD at red wavelength.'
 
-        defaults['combine'] = 'weightmean'
-        options['combine'] = ProcessImagesPar.valid_combine_methods()
-        dtypes['combine'] = str
-        descr['combine'] = 'Method used to combine multiple frames.  Options are: {0}'.format(
-                                       ', '.join(options['combine']))
+        defaults['comb_cenfunc'] = 'median'
+        options['comb_cenfunc'] = ProcessImagesPar.valid_combine_methods()
+        dtypes['comb_cenfunc'] = str
+        descr['comb_cenfunc'] = 'Method used to combine multiple frames.  Options are: {0}'.format(
+                                       ', '.join(options['comb_cenfunc']))
+
+        defaults['comb_stdfunc'] = 'std'
+        options['comb_stdfunc'] = ProcessImagesPar.valid_combine_stdfunc()
+        dtypes['comb_stdfunc'] = str
+        descr['comb_stdfunc'] = 'Std function used to combine multiple frames.  Options are: {0}'.format(
+                                       ', '.join(options['comb_stdfunc']))
 
         defaults['clip'] = True
         dtypes['clip'] = bool
         descr['clip'] = 'Perform sigma clipping when combining.  Only used with combine=weightmean'
 
-        defaults['comb_sigrej'] = None
+        defaults['comb_sigrej'] = 3.0
         dtypes['comb_sigrej'] = float
-        descr['comb_sigrej'] = 'Sigma-clipping level for when clip=True; ' \
-                           'Use None for automatic limit (recommended).  '
+        descr['comb_sigrej'] = 'Sigma-clipping level for when combing images'
+
+        defaults['comb_maxiter'] = 5
+        dtypes['comb_maxiter'] = int
+        descr['comb_maxiter'] = 'Maximum number of combining images.'
 
         defaults['satpix'] = 'reject'
         options['satpix'] = ProcessImagesPar.valid_saturation_handling()
         dtypes['satpix'] = str
         descr['satpix'] = 'Handling of saturated pixels.  Options are: {0}'.format(
                                        ', '.join(options['satpix']))
+
+        # CCD process parameters
+        defaults['mask_proc'] = True
+        dtypes['mask_proc'] = bool
+        descr['mask_proc'] = 'Mask bad pixels identified from CCD Master frames'
+
+        defaults['window_size'] = (51,51)
+        dtypes['window_size'] = [tuple, list]
+        descr['window_size'] = 'Box size for estimating large scale patterns, i.e. used for illuminating flat.'
+
+        defaults['maskpixvar'] = 0.1
+        dtypes['maskpixvar'] = float
+        descr['maskpixvar'] = 'The maximum allowed variance of pixelflat. The default value (0.1),'\
+                              'means pixel value with >1.1 or <0.9 will be masked.'
+
+        defaults['mask_brightstar'] = True
+        dtypes['mask_brightstar'] = bool
+        descr['mask_brightstar'] = 'Mask bright stars?'
+
+        defaults['brightstar_nsigma'] = 5
+        dtypes['brightstar_nsigma'] = [int, float]
+        descr['brightstar_nsigma'] = 'Sigma level to mask bright stars.'
 
         # Vignetting parameters
         defaults['mask_vig'] = False
@@ -289,7 +320,7 @@ class ProcessImagesPar(ParSet):
         descr['n_lohi'] = 'Number of pixels to reject at the lowest and highest ends of the ' \
                           'distribution; i.e., n_lohi = low, high.  Use None for no limit.'
 
-        defaults['mask_cr'] = False
+        defaults['mask_cr'] = True
         dtypes['mask_cr'] = bool
         descr['mask_cr'] = 'Identify CRs and mask them'
 
@@ -373,9 +404,10 @@ class ProcessImagesPar(ParSet):
         parkeys = ['trim', 'apply_gain', 'orient',
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
                    'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe',
-                   'combine', 'satpix', 'n_lohi', 'replace', 'mask_vig','minimum_vig',
-                   'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej','rmcompact', 'sigclip', 'sigfrac', 'objlim',
-                   'cr_threshold','neighbor_threshold',
+                   'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc', 'mask_vig','minimum_vig',
+                   'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma',
+                   'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
+                   'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
                    'background','back_size','back_filtersize']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -399,7 +431,14 @@ class ProcessImagesPar(ParSet):
         """
         Return the valid methods for combining frames.
         """
-        return ['median', 'weightmean' ]
+        return ['median', 'weightmean', 'mean', 'sum', 'min', 'max']
+
+    @staticmethod
+    def valid_combine_stdfunc():
+        """
+        Return the valid methods for combining frames.
+        """
+        return ['std']
 
     @staticmethod
     def valid_background_methods():
@@ -491,206 +530,6 @@ class ProcessImagesPar(ParSet):
                    rmcompact=eval(hdr['LACRMC']), sigclip=float(hdr['LACSIGC']),
                    sigfrac=float(hdr['LACSIGF']), objlim=float(hdr['LACOBJL']))
 
-
-class FlatFieldPar(ParSet):
-    """
-    A parameter set holding the arguments for how to perform the field
-    flattening.
-
-    For a table with the current keywords, defaults, and descriptions,
-    see :ref:`pyphotpar`.
-    """
-    def __init__(self, method=None, pixelflat_file=None, spec_samp_fine=None,
-                 spec_samp_coarse=None, spat_samp=None, tweak_slits=None, tweak_slits_thresh=None,
-                 tweak_slits_maxfrac=None, rej_sticky=None, slit_trim=None, slit_illum_pad=None,
-                 illum_iter=None, illum_rej=None, twod_fit_npoly=None, saturated_slits=None,
-                 slit_illum_relative=None):
-
-        # Grab the parameter names and values from the function
-        # arguments
-        args, _, _, values = inspect.getargvalues(inspect.currentframe())
-        pars = OrderedDict([(k,values[k]) for k in args[1:]])
-
-        # Initialize the other used specifications for this parameter
-        # set
-        defaults = OrderedDict.fromkeys(pars.keys())
-        options = OrderedDict.fromkeys(pars.keys())
-        dtypes = OrderedDict.fromkeys(pars.keys())
-        descr = OrderedDict.fromkeys(pars.keys())
-
-        # Fill out parameter specifications.  Only the values that are
-        # *not* None (i.e., the ones that are defined) need to be set
-
-
-        # ToDO there are only two methods. The bspline method and skip, so maybe we should rename the bspline method.
-        defaults['method'] = 'bspline'
-        options['method'] = FlatFieldPar.valid_methods()
-        dtypes['method'] = str
-        descr['method'] = 'Method used to flat field the data; use skip to skip flat-fielding.  ' \
-                          'Options are: None, {0}'.format(', '.join(options['method']))
-
-        defaults['pixelflat_file'] = None
-        dtypes['pixelflat_file'] = str
-        descr['pixelflat_file'] = 'Filename of the image to use for pixel-level field flattening'
-
-        defaults['spec_samp_fine'] = 1.2
-        dtypes['spec_samp_fine'] = [int, float]
-        descr['spec_samp_fine'] = 'bspline break point spacing in units of pixels for spectral fit to flat field blaze function.'
-
-        defaults['spec_samp_coarse'] = 50.0
-        dtypes['spec_samp_coarse'] = [int, float]
-        descr['spec_samp_coarse'] = 'bspline break point spacing in units of pixels for 2-d bspline-polynomial fit to ' \
-                                    'flat field image residuals. This should be a large number unless you are trying to ' \
-                                    'fit a sky flat with lots of narrow spectral features.'
-
-        defaults['spat_samp'] = 5.0
-        dtypes['spat_samp'] = [int, float]
-        descr['spat_samp'] = 'Spatial sampling for slit illumination function. This is the width of the median ' \
-                             'filter in pixels used to determine the slit illumination function, and thus sets the ' \
-                             'minimum scale on which the illumination function will have features.'
-
-        defaults['tweak_slits'] = True
-        dtypes['tweak_slits'] = bool
-        descr['tweak_slits'] = 'Use the illumination flat field to tweak the slit edges. ' \
-                               'This will work even if illumflatten is set to False '
-
-        defaults['tweak_slits_thresh'] = 0.93
-        dtypes['tweak_slits_thresh'] = float
-        descr['tweak_slits_thresh'] = 'If tweak_slits is True, this sets the illumination function threshold used to ' \
-                                      'tweak the slit boundaries based on the illumination flat. ' \
-                                      'It should be a number less than 1.0'
-
-        defaults['tweak_slits_maxfrac'] = 0.10
-        dtypes['tweak_slits_maxfrac'] = float
-        descr['tweak_slits_maxfrac'] = 'If tweak_slit is True, this sets the maximum fractional amount (of a slits width) ' \
-                                       'allowed for trimming each (i.e. left and right) slit boundary, i.e. the default is 10% ' \
-                                       'which means slits would shrink or grow by at most 20% (10% on each side)'
-
-
-        defaults['rej_sticky'] = False
-        dtypes['rej_sticky'] = bool
-        descr['rej_sticky'] = 'Propagate the rejected pixels through the stages of the ' \
-                              'flat-field fitting (i.e, from the spectral fit, to the spatial ' \
-                              'fit, and finally to the 2D residual fit).  If False, pixels ' \
-                              'rejected in each stage are included in each subsequent stage.'
-
-        defaults['slit_trim'] = 3.
-        dtypes['slit_trim'] = [int, float, tuple]
-        descr['slit_trim'] = 'The number of pixels to trim each side of the slit when ' \
-                             'selecting pixels to use for fitting the spectral response ' \
-                             'function.  Single values are used for both slit edges; a ' \
-                             'two-tuple can be used to trim the left and right sides differently.'
-
-        defaults['slit_illum_pad'] = 5.
-        dtypes['slit_illum_pad'] = [int, float]
-        descr['slit_illum_pad'] = 'The number of pixels to pad the slit edges when constructing ' \
-                                  'the slit-illumination profile. Single value applied to both ' \
-                                  'edges.'
-
-        defaults['slit_illum_relative'] = False
-        dtypes['slit_illum_relative'] = [bool]
-        descr['slit_illum_relative'] = 'Generate an image of the relative spectral illumination' \
-                                       'for a multi-slit setup.'
-
-        defaults['illum_iter'] = 0
-        dtypes['illum_iter'] = int
-        descr['illum_iter'] = 'The number of rejection iterations to perform when constructing ' \
-                              'the slit-illumination profile.  No rejection iterations are ' \
-                              'performed if 0.  WARNING: Functionality still being tested.'
-
-        defaults['illum_rej'] = 5.
-        dtypes['illum_rej'] = [int, float]
-        descr['illum_rej'] = 'The sigma threshold used in the rejection iterations used to ' \
-                             'refine the slit-illumination profile.  Rejection iterations are ' \
-                             'only performed if ``illum_iter > 0``.'
-
-        dtypes['twod_fit_npoly'] = int
-        descr['twod_fit_npoly'] = 'Order of polynomial used in the 2D bspline-polynomial fit to ' \
-                                  'flat-field image residuals. The code determines the order of ' \
-                                  'these polynomials to each slit automatically depending on ' \
-                                  'the slit width, which is why the default is None. Alter ' \
-                                  'this paramter at your own risk!'
-
-        defaults['saturated_slits'] = 'crash'
-        options['saturated_slits'] = FlatFieldPar.valid_saturated_slits_methods()
-        dtypes['saturated_slits'] = str
-        descr['saturated_slits'] = 'Behavior when a slit is encountered with a large fraction ' \
-                                   'of saturated pixels in the flat-field.  The options are: ' \
-                                   '\'crash\' - Raise an error and halt the data reduction; ' \
-                                   '\'mask\' - Mask the slit, meaning no science data will be ' \
-                                   'extracted from the slit; \'continue\' - ignore the ' \
-                                   'flat-field correction, but continue with the reduction.'
-
-        # Instantiate the parameter set
-        super(FlatFieldPar, self).__init__(list(pars.keys()),
-                                           values=list(pars.values()),
-                                           defaults=list(defaults.values()),
-                                           options=list(options.values()),
-                                           dtypes=list(dtypes.values()),
-                                           descr=list(descr.values()))
-
-        # Check the parameters match the method requirements
-        self.validate()
-
-    @classmethod
-    def from_dict(cls, cfg):
-        k = numpy.array([*cfg.keys()])
-        parkeys = ['method', 'pixelflat_file', 'spec_samp_fine', 'spec_samp_coarse',
-                   'spat_samp', 'tweak_slits', 'tweak_slits_thresh', 'tweak_slits_maxfrac',
-                   'rej_sticky', 'slit_trim', 'slit_illum_pad', 'slit_illum_relative',
-                   'illum_iter', 'illum_rej', 'twod_fit_npoly', 'saturated_slits']
-
-        badkeys = numpy.array([pk not in parkeys for pk in k])
-        if numpy.any(badkeys):
-            raise ValueError('{0} not recognized key(s) for FlatFieldPar.'.format(k[badkeys]))
-
-        kwargs = {}
-        for pk in parkeys:
-            kwargs[pk] = cfg[pk] if pk in k else None
-        return cls(**kwargs)
-
-    @staticmethod
-    def valid_methods():
-        """
-        Return the valid flat-field methods
-        """
-        return ['bspline', 'skip'] # [ 'PolyScan', 'bspline' ]. Same here. Not sure what PolyScan is
-
-    @staticmethod
-    def valid_saturated_slits_methods():
-        """
-        Return the valid options for dealing with saturated slits.
-        """
-        return ['crash', 'mask', 'continue']
-
-    def validate(self):
-        """
-        Check the parameters are valid for the provided method.
-        """
-        # Convert param to list
-        #if isinstance(self.data['params'], int):
-        #    self.data['params'] = [self.data['params']]
-        
-        # Check that there are the correct number of parameters
-        #if self.data['method'] == 'PolyScan' and len(self.data['params']) != 3:
-        #    raise ValueError('For PolyScan method, set params = order, number of '
-        #                     'pixels, number of repeats')
-        #if self.data['method'] == 'bspline' and len(self.data['params']) != 1:
-        #    raise ValueError('For bspline method, set params = spacing (integer).')
-        if self.data['pixelflat_file'] is None:
-            return
-
-        # Check the frame exists
-        if not os.path.isfile(self.data['pixelflat_file']):
-            raise ValueError('Provided frame file name does not exist: {0}'.format(
-                                self.data['pixelflat_file']))
-
-        # Check that if tweak slits is true that illumflatten is alwo true
-        # TODO -- We don't need this set, do we??   See the desc of tweak_slits above
-        #if self.data['tweak_slits'] and not self.data['illumflatten']:
-        #    raise ValueError('In order to tweak slits illumflatten must be set to True')
-
-
 class FluxCalibratePar(ParSet):
     """
     A parameter set holding the arguments for how to perform the flux
@@ -764,7 +603,8 @@ class AstrometricPar(ParSet):
     """
     def __init__(self, skip=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
-                 astref_catalog=None, astref_band=None, weight_type=None, delete=None, log=None):
+                 astref_catalog=None, astref_band=None, weight_type=None, solve_photom_scamp=None,
+                 delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -827,6 +667,10 @@ class AstrometricPar(ParSet):
         dtypes['astref_band'] = str
         descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
 
+        defaults['solve_photom_scamp'] = False
+        dtypes['solve_photom_scamp'] = bool
+        descr['solve_photom_scamp'] = 'SOLVE_PHOTOM with SCAMP? I would set it to False since PyPhot will calibrate individual chip'
+
         defaults['delete'] = True
         dtypes['delete'] = bool
         descr['delete'] = 'Deletec the configuration files for SExtractor, SCAMP, and SWARP?'
@@ -848,7 +692,7 @@ class AstrometricPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
-                   'weight_type', 'delete', 'log']
+                   'weight_type', 'solve_photom_scamp', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1257,7 +1101,8 @@ class PhotometryPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, cal_zpt=None, photref_catalog=None, zpt=None, primary=None, secondary=None, coefficients=None):
+    def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, primary=None, secondary=None,
+                 coefficients=None, coeff_airmass=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1275,9 +1120,13 @@ class PhotometryPar(ParSet):
         dtypes['skip'] = bool
         descr['skip'] = 'Skip detecting sources?'
 
-        defaults['cal_zpt'] = False
+        defaults['cal_zpt'] = True
         dtypes['cal_zpt'] = bool
         descr['cal_zpt'] = 'Calibrating the zeropoint before photometry'
+
+        defaults['cal_chip_zpt'] = True
+        dtypes['cal_chip_zpt'] = bool
+        descr['cal_chip_zpt'] = 'Calibrating the zeropoint for individual chips'
 
         defaults['photref_catalog'] = 'PS1'
         options['photref_catalog'] = PhotometryPar.valid_catalog_methods()
@@ -1300,6 +1149,11 @@ class PhotometryPar(ParSet):
         dtypes['coefficients'] = [tuple, list]
         descr['coefficients'] = 'Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2'
 
+        defaults['coeff_airmass'] = 0.
+        dtypes['coeff_airmass'] = [int, float]
+        descr['coeff_airmass'] = 'Extinction-term coefficient, i.e. mag_real=mag_obs-coeff_airmass*airmass'
+
+
         # Instantiate the parameter set
         super(PhotometryPar, self).__init__(list(pars.keys()),
                                                  values=list(pars.values()),
@@ -1311,7 +1165,7 @@ class PhotometryPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'cal_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary', 'coefficients']
+        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary', 'coefficients', 'coeff_airmass']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1646,8 +1500,7 @@ class CalibrationsPar(ParSet):
     def __init__(self, master_dir=None, setup=None, bpm_usebias=None, biasframe=None,
                  darkframe=None, pixelflatframe=None, illumflatframe=None,
                  superskyframe=None, fringeframe=None,
-                 standardframe=None, flatfield=None,
-                 raise_chk_error=None):
+                 standardframe=None, raise_chk_error=None):
 
 
         # Grab the parameter names and values from the function
@@ -1685,7 +1538,7 @@ class CalibrationsPar(ParSet):
         # Calibration Frames
         defaults['biasframe'] = FrameGroupPar(frametype='bias',
                                               process=ProcessImagesPar(apply_gain=False,
-                                                                       combine='median',
+                                                                       comb_cenfunc='median',
                                                                        use_biasimage=False,
                                                                        use_pixelflat=False,
                                                                        use_illumflat=False))
@@ -1736,12 +1589,6 @@ class CalibrationsPar(ParSet):
         descr['standardframe'] = 'The frames and combination rules for the spectrophotometric ' \
                                  'standard observations'
 
-
-        defaults['flatfield'] = FlatFieldPar()
-        dtypes['flatfield'] = [ ParSet, dict ]
-        descr['flatfield'] = 'Parameters used to set the flat-field procedure'
-
-
         # Instantiate the parameter set
         super(CalibrationsPar, self).__init__(list(pars.keys()),
                                               values=list(pars.values()),
@@ -1759,7 +1606,7 @@ class CalibrationsPar(ParSet):
         parkeys = [ 'master_dir', 'setup', 'bpm_usebias', 'raise_chk_error']
 
         allkeys = parkeys + ['biasframe', 'darkframe', 'pixelflatframe','illumflatframe',
-                             'superskyframe','fringeframe','standardframe', 'flatfield']
+                             'superskyframe','fringeframe','standardframe']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for CalibrationsPar.'.format(k[badkeys]))
@@ -1783,8 +1630,6 @@ class CalibrationsPar(ParSet):
         kwargs[pk] = FrameGroupPar.from_dict('fringe', cfg[pk]) if pk in k else None
         pk = 'standardframe'
         kwargs[pk] = FrameGroupPar.from_dict('standard', cfg[pk]) if pk in k else None
-        pk = 'flatfield'
-        kwargs[pk] = FlatFieldPar.from_dict(cfg[pk]) if pk in k else None
 
         return cls(**kwargs)
 

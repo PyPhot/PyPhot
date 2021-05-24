@@ -147,17 +147,23 @@ class CFHTWIRCAMCamera(camera.Camera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = False
         par['scienceframe']['process']['use_illumflat'] = False
-        par['scienceframe']['process']['use_fringe'] = False
-        par['scienceframe']['process']['apply_gain'] = True
         par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_fringe'] = True
+
         ## the zeropints for WIRCam are for e/s, so please set apply_gain to True
+        par['scienceframe']['process']['apply_gain'] = True
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
+
+        # The WIRCam processed replace bad pixels with zero, so I would also replace with zeros.
         par['scienceframe']['process']['replace'] = 'zero'
 
         # cosmic ray rejection
+        # I set to False for WIRCam since WIRCam processed data set bad pixels to zero
+        # and all pixels close to bad pixels will be masked as cosmic rays
+        par['scienceframe']['process']['mask_cr'] = False
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
         par['scienceframe']['process']['grow'] = 0.5
@@ -172,6 +178,9 @@ class CFHTWIRCAMCamera(camera.Camera):
         par['postproc']['astrometry']['crossid_radius'] = 5
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
+
+        # Photometry
+        par['postproc']['photometry']['cal_chip_zpt'] = True
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['standardframe']['exprng'] = [None, 6]
@@ -201,6 +210,7 @@ class CFHTWIRCAMCamera(camera.Camera):
         par = super().config_specific_par(scifile, inp_par=inp_par)
         par['postproc']['photometry']['cal_zpt'] = True
 
+        # https://www.cfht.hawaii.edu/Instruments/Imaging/WIRCam/quickinformation.html
         if self.get_meta_value(scifile, 'filter') == 'Y':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'J'
@@ -208,24 +218,28 @@ class CFHTWIRCAMCamera(camera.Camera):
             par['postproc']['photometry']['zpt'] = 25.06
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.02 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'J':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'J'
             par['postproc']['photometry']['secondary'] = 'H'
             par['postproc']['photometry']['zpt'] = 25.87
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.05
         elif self.get_meta_value(scifile, 'filter') == 'H':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'H'
             par['postproc']['photometry']['secondary'] = 'J'
             par['postproc']['photometry']['zpt'] = 26.37
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.03
         elif self.get_meta_value(scifile, 'filter') == 'Ks':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'K'
             par['postproc']['photometry']['secondary'] = 'H'
             par['postproc']['photometry']['zpt'] = 26.28
             par['postproc']['photometry']['coefficients'] = [0.,0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.05
 
         return par
 
