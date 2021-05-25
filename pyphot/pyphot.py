@@ -148,10 +148,6 @@ class PyPhot(object):
         msgs.info('Master calibration data output to: {0}'.format(self.calibrations_path))
         msgs.info('Science data output to: {0}'.format(self.science_path))
         msgs.info('Coadded data output to: {0}'.format(self.coadd_path))
-        # TODO: Is anything written to the qa dir or only to qa/PNGs?
-        # Should we have separate calibration and science QA
-        # directories?
-        # An html file wrapping them all too
 
         # Init
         # TODO: I don't think this ever used
@@ -331,7 +327,9 @@ class PyPhot(object):
                                                        window_size=self.par['calibrations']['pixelflatframe']['process']['window_size'],
                                                        maskpixvar=self.par['calibrations']['pixelflatframe']['process']['maskpixvar'],
                                                        maskbrightstar=self.par['calibrations']['pixelflatframe']['process']['mask_brightstar'],
-                                                       brightstar_nsigma=self.par['calibrations']['pixelflatframe']['process']['brightstar_nsigma'])
+                                                       brightstar_nsigma=self.par['calibrations']['pixelflatframe']['process']['brightstar_nsigma'],
+                                                       maskbrightstar_method=self.par['calibrations']['pixelflatframe']['process']['brightstar_method'],
+                                                       sextractor_task=self.par['rdx']['sextractor'])
                         _, masterpixflatimg, maskpixflatimg = io.load_fits(masterpixflat_name)
                     else:
                         masterpixflatimg = None
@@ -386,7 +384,9 @@ class PyPhot(object):
                                                        maxiters=self.par['calibrations']['superskyframe']['process']['comb_maxiter'],
                                                        window_size=self.par['calibrations']['superskyframe']['process']['window_size'],
                                                        maskbrightstar=self.par['calibrations']['superskyframe']['process']['mask_brightstar'],
-                                                       brightstar_nsigma=self.par['calibrations']['superskyframe']['process']['brightstar_nsigma'])
+                                                       brightstar_nsigma=self.par['calibrations']['superskyframe']['process']['brightstar_nsigma'],
+                                                       maskbrightstar_method = self.par['calibrations']['superskyframe']['process']['brightstar_method'],
+                                                       sextractor_task = self.par['rdx']['sextractor'])
                         _, mastersuperskyimg, masksuperskyimg = io.load_fits(mastersupersky_name)
                     else:
                         mastersuperskyimg = None
@@ -399,6 +399,10 @@ class PyPhot(object):
                                     background=self.par['scienceframe']['process']['background'],
                                     back_size=self.par['scienceframe']['process']['back_size'],
                                     back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
+                                    maskbrightstar=self.par['scienceframe']['process']['mask_brightstar'],
+                                    brightstar_nsigma=self.par['scienceframe']['process']['brightstar_nsigma'],
+                                    maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
+                                    sextractor_task=self.par['rdx']['sextractor'],
                                     mask_cr=self.par['scienceframe']['process']['mask_cr'],
                                     maxiter=self.par['scienceframe']['process']['lamaxiter'],
                                     sigclip=self.par['scienceframe']['process']['sigclip'],
@@ -442,12 +446,11 @@ class PyPhot(object):
                                                     sigma=self.par['calibrations']['fringeframe']['process']['comb_sigrej'],
                                                     maxiters=self.par['calibrations']['fringeframe']['process']['comb_maxiter'],
                                                     maskbrightstar=self.par['calibrations']['fringeframe']['process']['mask_brightstar'],
-                                                    brightstar_nsigma=self.par['calibrations']['fringeframe']['process']['brightstar_nsigma'])
+                                                    brightstar_nsigma=self.par['calibrations']['fringeframe']['process']['brightstar_nsigma'],
+                                                    maskbrightstar_method=self.par['calibrations']['fringeframe']['process']['brightstar_method'],
+                                                    sextractor_task=self.par['rdx']['sextractor'])
                         _, masterfringeimg, maskfringeimg = io.load_fits(masterfringe_name)
                         postproc.defringing(sci_fits_list, masterfringeimg)
-                    else:
-                        masterfringeimg = None
-                        maskfringeimg = np.zeros(raw_shape,dtype='int16')
 
                     ## Astrometric calibration and photometric calibration of individual chips
                     # get pixel scale for resampling with SCAMP
@@ -493,7 +496,7 @@ class PyPhot(object):
                                     log=self.par['postproc']['astrometry']['log'])
 
                     ## Photometrically calibrating individual chips
-                    msgs.work('Photometric calibration for individual chips.')
+                    msgs.info('Photometrically calibrating individual chips.')
                     if self.par['postproc']['photometry']['cal_chip_zpt']:
 
                         # Prepare the reference catalog list. These catalogs will be used for photometrically calibrating individual chips.
@@ -516,7 +519,7 @@ class PyPhot(object):
                                            coefficients=self.par['postproc']['photometry']['coefficients'],
                                            ZP=self.par['postproc']['photometry']['zpt'])
 
-                ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here?
+                ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here? Probably not?
                 ##       using swarp to combine different detectors, if only one detector then skip this step.
                 ##       RESAMPLING_TYPE = NEAREST,
                 ##       Not sure whether its usful or not given that we can just ds9 -mosaic **resample.fits to check the image.

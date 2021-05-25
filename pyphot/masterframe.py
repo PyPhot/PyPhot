@@ -79,7 +79,7 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
                 stdfunc='std', sigma=5, maxiters=3, window_size=(51,51), maskpixvar=None,
-                maskbrightstar=True, brightstar_nsigma=5):
+                maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     images = []
     masks = []
@@ -103,10 +103,9 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
                 bpm = mask_image.astype('bool')
 
         ## Mask bright stars
-        maskbrightstar= False
         if maskbrightstar:
-            starmask = postproc.mask_bright_star(array, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
-                                                 back_maxiters=maxiters)
+            starmask = postproc.mask_bright_star(array, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
+                                                 back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
         else:
             starmask = np.zeros_like(array, dtype=bool)
 
@@ -144,7 +143,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
         # Only used for pixel flat
         #illum = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
         sigma_clip = SigmaClip(sigma=sigma)
-        bkg = Background2D(stack, window_size, mask=np.isnan(stack), filter_size=(3,3), sigma_clip=sigma_clip,
+        bkg = Background2D(stack.copy(), window_size, mask=np.isnan(stack), filter_size=(3,3), sigma_clip=sigma_clip,
                            bkg_estimator=MedianBackground())
         illum = bkg.background
         bpm_pixvar = abs(1-stack/illum)>maskpixvar
@@ -158,17 +157,18 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
 
 def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=None, masterdarkimg=None,
                    cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
-                   maskbrightstar=False, brightstar_nsigma=5):
+                   maskbrightstar=False, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     msgs.info('Building illuminating flat')
     header, stack, bpm = combineflat(flatfiles, camera=camera, det=det, masterbiasimg=masterbiasimg,
                                      masterdarkimg=masterdarkimg, cenfunc=cenfunc, stdfunc=stdfunc, sigma=sigma,
                                      maxiters=maxiters, window_size=window_size, maskpixvar=None,
-                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma)
+                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
+                                     maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
     ## ToDo: currently I am using photoutils for the illuminating flat. Need to get a better combineflat
     sigma_clip = SigmaClip(sigma=sigma)
-    bkg = Background2D(stack, window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
+    bkg = Background2D(stack.copy(), window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
                        bkg_estimator=MedianBackground())
     flat = bkg.background
     # scipy gaussian_filter seems not ideal, could produce some problem at the edge.
@@ -177,12 +177,13 @@ def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=N
 
 def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=None, masterdarkimg=None, masterillumflatimg=None,
                    cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), maskpixvar=0.1,
-                   maskbrightstar=True, brightstar_nsigma=5):
+                   maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     msgs.info('Building pixel flat')
     header, stack, bpm = combineflat(flatfiles, camera=camera, det=det, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg, cenfunc=cenfunc,
                                      stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size, maskpixvar=maskpixvar,
-                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma)
+                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
+                                     maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
     if masterillumflatimg is None:
         masterillumflatimg = np.ones_like(stack)
@@ -192,16 +193,17 @@ def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=Non
 
 def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
-                  maskbrightstar=True, brightstar_nsigma=5):
+                  maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     msgs.info('Building super sky flat')
     header, stack, bpm = combineflat(superskyfiles, maskfiles=maskfiles, cenfunc=cenfunc, maskpixvar=None,
                                      stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size,
-                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma)
+                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
+                                     maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
     ## ToDo: currently I am using photoutils for the supersky. Need to get a better combineflat
     sigma_clip = SigmaClip(sigma=sigma)
-    bkg = Background2D(stack, window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
+    bkg = Background2D(stack.copy(), window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
                        bkg_estimator=MedianBackground())
     flat = bkg.background
     #flat = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
@@ -210,7 +212,8 @@ def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
     io.save_fits(mastersupersky_name, flat, header, 'MasterSuperSky', mask=bpm, overwrite=True)
 
 def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersuperskyimg=None, cenfunc='median', stdfunc='std',
-              sigma=3, maxiters=3, maskbrightstar=True, brightstar_nsigma=5):
+                sigma=3, maxiters=3, maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor',
+                sextractor_task='sex'):
 
     header, data0, mask0 = io.load_fits(fringefiles[0])
     nx, ny, nz = data0.shape[0], data0.shape[1], len(fringefiles)
@@ -226,11 +229,13 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
 
         # Mask very bright stars
         if maskbrightstar:
-            from photutils import detect_sources
-            mean, median, stddev = stats.sigma_clipped_stats(this_data, mask=this_mask, sigma=sigma, maxiters=maxiters,
-                                                             cenfunc=cenfunc, stdfunc=stdfunc)
-            segm = detect_sources(this_data, brightstar_nsigma*stddev, npixels=5)
-            starmask = segm.data.astype('bool')
+            #from photutils import detect_sources
+            #mean, median, stddev = stats.sigma_clipped_stats(this_data, mask=this_mask, sigma=sigma, maxiters=maxiters,
+            #                                                 cenfunc=cenfunc, stdfunc=stdfunc)
+            #segm = detect_sources(this_data, brightstar_nsigma*stddev, npixels=5)
+            #starmask = segm.data.astype('bool')
+            starmask = postproc.mask_bright_star(this_data, mask=this_mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
+                                                 back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
             this_mask = np.logical_or(this_mask, starmask)
 
         data3D[:, :, iimg] = this_data / this_header['EXPTIME']

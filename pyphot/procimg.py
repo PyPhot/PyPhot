@@ -77,12 +77,25 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
                 bpm_proc = np.zeros_like(sci_image, dtype='bool')
 
             # mask Vignetting pixels
-            if mask_vig and (masterillumflatimg is not None):
-                bpm_vig = masterillumflatimg<minimum_vig
-            elif mask_vig and (masterpixflatimg is not None):
-                bpm_vig = masterpixflatimg < minimum_vig
+            if masterillumflatimg is not None:
+                flat_for_vig = masterillumflatimg.copy()
+            elif masterpixflatimg is not None:
+                flat_for_vig = masterpixflatimg.copy()
+            else:
+                flat_for_vig = np.ones_like(sci_image)
+            if mask_vig:
+                msgs.info('Masking significantly vignetting (>{:}%) pixels'.format(minimum_vig*100))
+                bpm_vig = flat_for_vig < 1-minimum_vig
+                sci_image[bpm_vig] = 0.
             else:
                 bpm_vig = np.zeros_like(sci_image, dtype=bool)
+
+            #if mask_vig and (masterillumflatimg is not None):
+            #    bpm_vig = masterillumflatimg<minimum_vig
+            #elif mask_vig and (masterpixflatimg is not None):
+            #    bpm_vig = masterpixflatimg < minimum_vig
+            #else:
+            #    bpm_vig = np.zeros_like(sci_image, dtype=bool)
 
             # mask nan values
             bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
@@ -123,6 +136,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
 
 def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_airmass=0.,
             background='median', back_size=(200,200), back_filtersize=(3, 3), maskbrightstar=True, brightstar_nsigma=3,
+            maskbrightstar_method='sextractor', sextractor_task='sex',
             mask_cr=True, contrast=2, maxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
             replace=None):
 
@@ -169,11 +183,13 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
 
             # mask bright stars before estimating the background
             if maskbrightstar:
-                starmask = postproc.mask_bright_star(data, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
-                                                     back_maxiters=maxiter)
+                starmask = postproc.mask_bright_star(data.copy(), mask=mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+                                                     back_maxiters=maxiter, method=maskbrightstar_method, task=sextractor_task)
             else:
                 starmask = np.zeros_like(data, dtype=bool)
+
             # estimate the 2D background with all masks
+            msgs.info('Subtracting 2D background')
             mask_bkg = mask | starmask
             bkg = Background2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
                                sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
@@ -190,6 +206,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 #bpm_cr = lacosmic_pypeit(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,
                 #                  remove_compact_obj=remove_compact_obj, sigclip=sigclip, sigfrac=sigfrac, objlim=objlim)
             else:
+                msgs.warn('Skipped cosmic ray rejection process!')
                 bpm_cr = np.zeros_like(sci_image,dtype=bool)
 
             flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**6)

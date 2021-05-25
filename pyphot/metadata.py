@@ -1141,14 +1141,12 @@ class PyPhotMetaData:
             allowed frame types.
         """
         # Checks
-        if 'frametype' in self.keys() or 'framebit' in self.keys():
-            msgs.warn('Removing existing frametype and framebit columns.')
         if 'frametype' in self.keys():
             del self.table['frametype']
         if 'framebit' in self.keys():
             del self.table['framebit']
 
-        # TODO: This needs to be moved into each Spectrograph
+        # TODO: This needs to be moved into each camera
         if useIDname and 'idname' not in self.keys():
             raise ValueError('idname is not set in table; cannot use it for file typing.')
 

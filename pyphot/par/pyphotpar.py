@@ -167,7 +167,7 @@ class ProcessImagesPar(ParSet):
                  overscan_method=None, overscan_par=None,
                  comb_cenfunc=None, comb_stdfunc=None, clip=None, comb_maxiter=None,comb_sigrej=None,
                  satpix=None, mask_proc=None, window_size=None, maskpixvar=None,
-                 mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,
+                 mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,brightstar_method=None,
                  mask_cr=None, contrast=None,
                  cr_threshold=None, neighbor_threshold=None,
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
@@ -288,7 +288,7 @@ class ProcessImagesPar(ParSet):
         dtypes['window_size'] = [tuple, list]
         descr['window_size'] = 'Box size for estimating large scale patterns, i.e. used for illuminating flat.'
 
-        defaults['maskpixvar'] = 0.1
+        defaults['maskpixvar'] = None
         dtypes['maskpixvar'] = float
         descr['maskpixvar'] = 'The maximum allowed variance of pixelflat. The default value (0.1),'\
                               'means pixel value with >1.1 or <0.9 will be masked.'
@@ -296,6 +296,12 @@ class ProcessImagesPar(ParSet):
         defaults['mask_brightstar'] = True
         dtypes['mask_brightstar'] = bool
         descr['mask_brightstar'] = 'Mask bright stars?'
+
+        defaults['brightstar_method'] = 'sextractor'
+        options['brightstar_method'] = ProcessImagesPar.valid_brightstar_methods()
+        dtypes['brightstar_method'] = str
+        descr['brightstar_method'] = 'If all pixels are rejected, replace them using this method.  ' \
+                           'Options are: {0}'.format(', '.join(options['brightstar_method']))
 
         defaults['brightstar_nsigma'] = 5
         dtypes['brightstar_nsigma'] = [int, float]
@@ -401,7 +407,7 @@ class ProcessImagesPar(ParSet):
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
                    'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe',
                    'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc', 'mask_vig','minimum_vig',
-                   'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma',
+                   'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
                    'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
                    'background','back_size','back_filtersize']
@@ -435,6 +441,13 @@ class ProcessImagesPar(ParSet):
         Return the valid methods for combining frames.
         """
         return ['std']
+
+    @staticmethod
+    def valid_brightstar_methods():
+        """
+        Return the valid methods for combining frames.
+        """
+        return ['photoutils', 'sextractor' ]
 
     @staticmethod
     def valid_background_methods():
@@ -584,7 +597,7 @@ class AstrometricPar(ParSet):
         dtypes['pixscale_maxerr'] = [int, float]
         descr['pixscale_maxerr'] = 'Max scale-factor uncertainty'
 
-        defaults['mosaic_type'] = 'UNCHANGED'
+        defaults['mosaic_type'] = 'LOOSE'
         options['mosaic_type'] = AstrometricPar.valid_mosaic_methods()
         dtypes['mosaic_type'] = str
         descr['mosaic_type'] = 'Reference catalog  Options are: {0}'.format(
@@ -1167,8 +1180,7 @@ class ReduxPar(ParSet):
                               "For some rare cases you need to use 'sextractor', depends on how you installed it."
 
         dtypes['detnum'] = [int, list]
-        descr['detnum'] = 'Restrict reduction to a list of detector indices.' \
-                          'This cannot (and should not) be used with slitspatnum. '
+        descr['detnum'] = 'Restrict reduction to a list of detector indices.'
 
         dtypes['sortroot'] = str
         descr['sortroot'] = 'A filename given to output the details of the sorted files.  If ' \
@@ -1228,9 +1240,7 @@ class ReduxPar(ParSet):
         kwargs = {}
         for pk in parkeys:
             kwargs[pk] = cfg[pk] if pk in k else None
-        # Check that detnum and slitspatnum are not both set
-        if kwargs['detnum'] is not None and kwargs['slitspatnum'] is not None:
-            raise IOError("You cannot set both detnum and slitspatnum!  Causes serious SpecObjs output challenges..")
+
         # Finish
         return cls(**kwargs)
 
@@ -1300,8 +1310,14 @@ class PostProcPar(ParSet):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))
 
         kwargs = {}
-        for pk in allkeys:
-            kwargs[pk] = cfg[pk] if pk in k else None
+        pk = 'astrometry'
+        kwargs[pk] = AstrometricPar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'coadd'
+        kwargs[pk] = CoaddPar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'detection'
+        kwargs[pk] = DetectionPar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'photometry'
+        kwargs[pk] = PhotometryPar.from_dict(cfg[pk]) if pk in k else None
 
         return cls(**kwargs)
 
@@ -1735,8 +1751,8 @@ class PyPhotPar(ParSet):
         pk = 'rdx'
         kwargs[pk] = ReduxPar.from_dict(cfg[pk]) if pk in k else None
 
-        #pk = 'calibrations'
-        #kwargs[pk] = CalibrationsPar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'calibrations'
+        kwargs[pk] = CalibrationsPar.from_dict(cfg[pk]) if pk in k else None
 
         pk = 'scienceframe'
         kwargs[pk] = FrameGroupPar.from_dict('science', cfg[pk]) if pk in k else None

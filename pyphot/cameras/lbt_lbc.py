@@ -294,10 +294,11 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = False
         ## the zeropints for LBT are for ADU/s, so do not apply_gain correction
+        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
 
         # Vignetting
-        par['scienceframe']['process']['mask_vig'] = False
-        par['scienceframe']['process']['minimum_vig'] = 0.7
+        #par['scienceframe']['process']['mask_vig'] = False
+        #par['scienceframe']['process']['minimum_vig'] = 0.7
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -534,10 +535,12 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = True
         par['scienceframe']['process']['apply_gain'] = False
+        ## the zeropints for LBT are for ADU/s, so do not apply_gain correction
+        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
 
         # Vignetting
-        par['scienceframe']['process']['mask_vig'] = False
-        par['scienceframe']['process']['minimum_vig'] = 0.7
+        #par['scienceframe']['process']['mask_vig'] = False
+        #par['scienceframe']['process']['minimum_vig'] = 0.7
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0

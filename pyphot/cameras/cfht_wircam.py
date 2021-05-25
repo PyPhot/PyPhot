@@ -214,7 +214,10 @@ class CFHTWIRCAMCamera(camera.Camera):
             par['postproc']['photometry']['secondary'] = 'H'
             par['postproc']['photometry']['zpt'] = 25.06
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
-            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            # I used the UKIRT Y-band as a proximation, which was derived by Hodgkin et al. 2009, MNRAS, 394, 675
+            # Hodgkin+09 using vega system, I corrected it to AB using Hewett+06 vega-AB offset and derived that
+            #  Y_AB = J_AB,2MASS + 0.029 + 0.5*(J_AB,2MASS-H_AB,2MASS)
+            par['postproc']['photometry']['coefficients'] = [0.029,0.5,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.02 # extinction, i.e. mag_real=mag_obs-coeff_airmass*airmass
         elif self.get_meta_value(scifile, 'filter') == 'J':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'

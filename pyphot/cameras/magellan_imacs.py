@@ -103,9 +103,9 @@ class MagellanIMACSCamera(camera.Camera):
             return good_exp & (fitstbl['idname'] == 'Bias')
         if ftype in ['pixelflat', 'illumflat']:
             return good_exp & (fitstbl['idname'] == 'Object') & flats
-        if ftype == 'standard':
-            return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
-        if ftype in ['science']:
+        #if ftype == 'standard':
+        #    return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
+        if ftype in ['science','supersky','fringe']:
             return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
         if ftype == 'dark':
             return good_exp & (fitstbl['idname'] == 'Dark')
@@ -148,7 +148,7 @@ class MagellanIMACSCamera(camera.Camera):
 
         # get the x and y binning factors...
         detector_par = self.get_detector_par(hdu, det if det is not None else 1)
-        msgs.work('Need to tweak with binned data.')
+        ## ToDo: Need to tweak with binned data
         xbin, ybin = parse.parse_binning(detector_par['binning'])
 
         # Update header with an initial WCS information.
@@ -171,6 +171,8 @@ class MagellanIMACSCamera(camera.Camera):
             head1.append(header_wcs.cards[i])
 
         # First read over the header info to determine the size of the output array...
+        #head1.pop('BZERO')
+        #head1.pop('BSCALE')
         datasec = head1['DATASEC']
         x1, x2, y1, y2 = np.array(parse.load_sections(datasec, fmt_iraf=False)).flatten()
 
@@ -319,11 +321,15 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
+        par['scienceframe']['process']['use_supersky'] = True
+
+        ## We use dome flat for the pixel flat and thus do not need mask bright stars.
+        par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = True
-        par['scienceframe']['process']['minimum_vig'] = 0.7
-        par['scienceframe']['process']['replace'] = 'zero'
+        par['scienceframe']['process']['minimum_vig'] = 0.3
+        #par['scienceframe']['process']['replace'] = 'zero'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -372,7 +378,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
-            par['postproc']['photometry']['zpt'] = 24.2 # Meausred from observations of J1526-2050 without correcting the extinction
+            par['postproc']['photometry']['zpt'] = 24.3 # Meausred from the observations of J1526-2050
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_g':
@@ -391,13 +397,14 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
-            par['postproc']['photometry']['zpt'] = 27.53 # I measured 27.25 without correcting the extinction
+            par['postproc']['photometry']['zpt'] = 27.53
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_z':
+            par['scienceframe']['process']['use_fringe'] = True # Subtract fringing if using z-band
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
-            par['postproc']['photometry']['zpt'] = 26.97 # I measured 26.71 without correcting the extinction
+            par['postproc']['photometry']['zpt'] = 26.97
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
 
         return par
@@ -433,7 +440,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on MMIRS")
+        msgs.info("Using hard-coded BPM for det=1 on IMACS")
 
         # Get the binning
         #hdu = fits.open(filename)

@@ -73,7 +73,8 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
     configapp = get_config(config=config)
 
     comd = ["swarp"] + [os.path.join(workdir, imgname)] + configcomd + configapp + \
-           ["-COMBINE"] + ["N"] + ["-RESAMPLE_DIR"] + [workdir]
+           ["-COMBINE"] + ["N"] + ["-RESAMPLE_DIR"] + [workdir] + \
+           ["-XML_NAME"] + [os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))]
 
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
@@ -90,9 +91,9 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         logfile.close()
         msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
     if delete:
-        os.system("rm " + os.path.join(workdir,"*.swarp"))
-        if os.path.exists(os.path.join(workdir,"swarp.xml")):
-            os.system("rm " + os.path.join(workdir,"swarp.xml"))
+        os.system("rm " + os.path.join(workdir, "*.swarp"))
+        if os.path.exists(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))):
+            os.system("rm {:}".format(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))))
 
 
 def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None, delete=False, log=False):
@@ -147,6 +148,9 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
             os.system("rm " + os.path.join(workdir, "*.swarp"))
             if os.path.exists(os.path.join(workdir, "swarp.xml")):
                 os.system("rm " + os.path.join(workdir, "swarp.xml"))
+        else:
+            os.system("mv {:} {:}".format(os.path.join(workdir, "*.swarp"), coadddir))
+
 
     else:
         for imgname in imglist:
