@@ -375,6 +375,8 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['postproc']['photometry']['cal_zpt'] = True
 
         if self.get_meta_value(scifile, 'filter') == 'NB919':
+            # There is no need to subtract fringing for NB919.
+            # ToDo: measure the color-term using PS1 z and y bands.
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
@@ -394,6 +396,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['zpt'] = 27.77
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_i':
+            # There is no need to subtract fringing for i-band and other bands
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
