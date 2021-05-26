@@ -517,7 +517,8 @@ class PyPhot(object):
                                            primary=self.par['postproc']['photometry']['primary'],
                                            secondary=self.par['postproc']['photometry']['secondary'],
                                            coefficients=self.par['postproc']['photometry']['coefficients'],
-                                           ZP=self.par['postproc']['photometry']['zpt'])
+                                           ZP=self.par['postproc']['photometry']['zpt'],
+                                           nstar_min=self.par['postproc']['photometry']['nstar_min'])
 
                 ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here? Probably not?
                 ##       using swarp to combine different detectors, if only one detector then skip this step.

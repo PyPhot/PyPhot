@@ -169,7 +169,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                     msgs.error('The length of airmass table should be the same with the number of exposures.')
 
                 # do the correction.
-                mag_ext = airmass[ii]*coeff_airmass
+                mag_ext = coeff_airmass * (airmass[ii]-1)
                 data *= 10**(0.4*mag_ext)
 
             ## Sky background subtraction

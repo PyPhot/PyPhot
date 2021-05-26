@@ -1,10 +1,13 @@
-import sys
+import sys, os
 import time
 import scipy
 import astropy
 
 import numpy as np
 from astropy.io import fits
+from astropy.table import Table
+
+from pkg_resources import resource_filename
 
 import pyphot
 from pyphot import msgs
@@ -78,3 +81,35 @@ def load_fits(fitsname):
         return par[1].header, par[1].data, par[2].data
     else:
         msgs.error('{:} is not a PyPhot FITS Image.'.format(fitsname))
+
+
+def load_filter(filter):
+    """
+    Load a system response curve for a given filter
+
+    Args:
+        filter (str): Name of filter
+
+    Returns:
+        ndarray, ndarray: wavelength, instrument throughput
+
+    """
+    filter_file = resource_filename('pyphot', os.path.join('data', 'filters', 'filter_list.ascii'))
+    tbl = Table.read(filter_file, format='ascii')
+    allowed_options = tbl['filter'].data
+
+    # Check
+    if filter not in allowed_options:
+        msgs.error("PyPhot is not ready for filter = {}".format(filter))
+
+    trans_file = resource_filename('pyphot', os.path.join('data', 'filters', 'filtercurves.fits'))
+    trans = fits.open(trans_file)
+    wave = trans[filter].data['lam']  # Angstroms
+    instr = trans[filter].data['Rlam']  # Am keeping in atmospheric terms
+    keep = instr > 0.
+    # Parse
+    wave = wave[keep]
+    instr = instr[keep]
+
+    # Return
+    return wave, instr

@@ -26,7 +26,7 @@ def parse_args(options=None, return_parser=False):
 def main(args):
 
     import os
-    from pyquasar import msgs
+    from pyphot import msgs
     from astropy.io import fits
 
     parA = fits.open(args.fileA)

@@ -1,0 +1,14 @@
+#!/usr/bin/env python
+#
+# See top-level LICENSE file for Copyright information
+#
+# -*- coding: utf-8 -*-
+
+"""
+This script generates an ArcID plot from a Master WaveSoln file
+"""
+
+from pyphot.scripts import colorterm
+
+if __name__ == '__main__':
+    colorterm.main(colorterm.parse_args())

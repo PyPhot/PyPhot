@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import stats as sp_stats
+from sklearn import linear_model
 
 from astropy import wcs
 from astropy import units as u
@@ -483,40 +485,70 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     nstar = np.sum(matched)
 
-    _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
-                                              sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
-    if outqaroot is not None:
-        msgs.info('Make a histogram plot for the zpt')
-        zp0 = zp - 7*zp_std
-        zp1 = zp + 7*zp_std
-        num = plt.hist(matched_ref_mag - matched_cat_mag, bins=np.arange(zp0,zp1,0.05))
-        nmax = np.max(num[0]*1.1)
-        plt.vlines(zp,0,nmax, linestyles='--', colors='r')
-        plt.vlines(zp+zp_std,0,nmax, linestyles=':', colors='r')
-        plt.vlines(zp-zp_std,0,nmax, linestyles=':', colors='r')
-        plt.ylim(0,nmax)
-        plt.xlabel('Zero point',fontsize=14)
-        plt.ylabel('# stars used for the calibration',fontsize=14)
-        plt.text(zp-6.5*zp_std,0.8*nmax,r'{:0.3f}$\pm${:0.3f}'.format(zp,zp_std),fontsize=14)
-        plt.savefig(outqaroot+'_zpt_hist.pdf')
-        plt.close()
+    if nstar==0:
+        msgs.warn('No matched standard stars were found')
+        return 0., 0., nstar
+    elif nstar < 10:
+            msgs.warn('Only {:} standard stars were found'.format(nstar))
+            _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
+                                                      sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
+            return zp, zp_std, nstar
+    else:
+        _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
+                                                  sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
+        # rerun the SExtractor with the zero point
+        msgs.info('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
 
-        plt.plot(matched_ref_mag, matched_cat_mag+zp, 'k.')
-        plt.plot([matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],[matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],'r--')
-        plt.xlim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
-        plt.ylim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
-        plt.xlabel('Reference magnitude',fontsize=14)
-        plt.ylabel('Calibrated magnitude',fontsize=14)
-        plt.savefig(outqaroot+'_zpt_scatter.pdf')
-        plt.close()
+        if nstar>10:
+            # measure the color-term
+            this_mag = zp+matched_cat_mag
+            yy = this_mag - ref_data['{:}_MAG'.format(primary)][ind[matched]]
+            xx = ref_data['{:}_MAG'.format(primary)][ind[matched]] - ref_data['{:}_MAG'.format(secondary)][ind[matched]]
+            #_, color_term, color_term_std = stats.sigma_clipped_stats(yy*utils.inverse(xx), sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
+            color_term_sp, intercept, r_value, p_value, color_term_sp_std = sp_stats.linregress(xx, yy)
+            msgs.info('Color-term coefficient is estimated to be {:}+/-{:} by Scipy'.format(color_term_sp,color_term_sp_std))
+            #from scipy.optimize import curve_fit
+            #def func(x, a, b):
+            #    return b * x + a
+            #popt, pcov = curve_fit(func, xx, yy)
+            #from sklearn.preprocessing import StandardScaler
+            XX = xx.data[..., None]
+            ransac = linear_model.RANSACRegressor()
+            ransac.fit(XX, yy)
+            color_term = ransac.estimator_.coef_[0]
+            msgs.info('Color-term coefficient is estimated to be {:} by RANSAC'.format(color_term))
+        else:
+            color_term = 0.
 
-    # rerun the SExtractor with the zero point
-    msgs.info('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
+        if outqaroot is not None:
+            msgs.info('Make a histogram plot for the zpt')
+            zp0 = zp - 7*zp_std
+            zp1 = zp + 7*zp_std
+            num = plt.hist(matched_ref_mag - matched_cat_mag, bins=np.arange(zp0,zp1,0.05))
+            nmax = np.max(num[0]*1.1)
+            plt.vlines(zp,0,nmax, linestyles='--', colors='r')
+            plt.vlines(zp+zp_std,0,nmax, linestyles=':', colors='r')
+            plt.vlines(zp-zp_std,0,nmax, linestyles=':', colors='r')
+            plt.ylim(0,nmax)
+            plt.xlabel('Zero point',fontsize=14)
+            plt.ylabel('# stars used for the calibration',fontsize=14)
+            plt.text(zp-6.5*zp_std,0.8*nmax,r'{:0.3f}$\pm${:0.3f}'.format(zp,zp_std),fontsize=14)
+            plt.savefig(outqaroot+'_zpt_hist.pdf')
+            plt.close()
+
+            plt.plot(matched_ref_mag, matched_cat_mag+zp, 'k.')
+            plt.plot([matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],[matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],'r--')
+            plt.xlim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
+            plt.ylim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
+            plt.xlabel('Reference magnitude',fontsize=14)
+            plt.ylabel('Calibrated magnitude',fontsize=14)
+            plt.savefig(outqaroot+'_zpt_scatter.pdf')
+            plt.close()
 
     return zp, zp_std, nstar
 
 def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0,
-              refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.]):
+              refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10):
 
     for ii, this_cat in enumerate(cat_fits_list):
         if sci_fits_list is None:
@@ -534,6 +566,8 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
 
         if not os.path.exists(this_sci_fits):
             msgs.error('{:} was not found, make sure you have an associated image!'.format(this_sci_fits))
+        else:
+            msgs.info('Calibrating the zero point for {:}'.format(this_sci_fits))
 
         par = fits.open(this_sci_fits)
         try:
@@ -546,20 +580,23 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         zp_this, zp_this_std, nstar = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
                                    coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE,
                                    out_refcat=this_ref_name, outqaroot=this_qa_root)
-        msgs.info('Calibrating the zeropoint of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
-        mag_ext = ZP-zp_this
-        if mag_ext>0.5:
-            msgs.warn('{:} has an extinction of {:} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
-        else:
-            msgs.info('{:} has an extinction of {:} magnitude, great conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
+        if nstar>nstar_min:
+            msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
+            mag_ext = ZP-zp_this
+            if mag_ext>0.5:
+                msgs.warn('{:} has an extinction of {:} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
+            else:
+                msgs.info('{:} has an extinction of {:} magnitude, great conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
 
-        FLXSCALE *= 10**(0.4*(mag_ext))
-        par[0].header['FLXSCALE'] = FLXSCALE
-        par[0].header['FLASCALE'] = FLASCALE
-        par[0].header['ZP'] = zp_this
-        par[0].header['ZP_STD'] = zp_this_std
-        par[0].header['ZP_NSTAR'] = nstar
-        par.writeto(this_sci_fits, overwrite=True)
+            FLXSCALE *= 10**(0.4*(mag_ext))
+            par[0].header['FLXSCALE'] = FLXSCALE
+            par[0].header['FLASCALE'] = FLASCALE
+            par[0].header['ZP'] = zp_this
+            par[0].header['ZP_STD'] = zp_this_std
+            par[0].header['ZP_NSTAR'] = nstar
+            par.writeto(this_sci_fits, overwrite=True)
+        else:
+            msgs.warn('The number of stars found for calibration is smaller than nstar_min. skipping the ZPT calibrations.')
 
 
 def ForcedAperPhot(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):

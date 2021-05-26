@@ -347,9 +347,9 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['postproc']['astrometry']['log'] = False
 
         # Set the default exposure time ranges for the frame typing
-        par['calibrations']['standardframe']['exprng'] = [None, 10]
-        par['calibrations']['darkframe']['exprng'] = [None, None]
-        par['scienceframe']['exprng'] = [10, None]
+        par['calibrations']['superskyframe']['exprng'] = [10, None]
+        par['calibrations']['fringeframe']['exprng'] = [10, None]
+        par['scienceframe']['exprng'] = [None, None]
 
         return par
 
@@ -380,35 +380,51 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
-            par['postproc']['photometry']['zpt'] = 24.3 # Meausred from the observations of J1526-2050
+            par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
-            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            # pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
+            par['postproc']['photometry']['coefficients'] = [0.016,-0.634,0.]
+            # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+            # I use z-band as a proximation for NB919. It actually does not matter since
+            # PyPhot calibrates individual chip of each exposure to the ZPT first and then coadds all chips and exposures.
+            par['postproc']['photometry']['coeff_airmass'] = 0.02
+        elif self.get_meta_value(scifile, 'filter') == 'Sloan_u':
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            par['postproc']['photometry']['primary'] = 'u'
+            par['postproc']['photometry']['secondary'] = 'g'
+            par['postproc']['photometry']['zpt'] = 23.55
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.48
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_g':
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.72
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.18
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_r':
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 27.77
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.10
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_i':
             # There is no need to subtract fringing for i-band and other bands
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['zpt'] = 27.53
-            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coefficients'] = [0.,0.060,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.04
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_z':
             par['scienceframe']['process']['use_fringe'] = True # Subtract fringing if using z-band
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
             par['postproc']['photometry']['zpt'] = 26.97
-            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coefficients'] = [-0.012,-0.268,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.02
 
         return par
 

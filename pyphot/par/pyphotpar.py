@@ -1048,7 +1048,7 @@ class PhotometryPar(ParSet):
     see :ref:`pyphotpar`.
     """
     def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, primary=None, secondary=None,
-                 coefficients=None, coeff_airmass=None):
+                 coefficients=None, coeff_airmass=None, nstar_min=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1083,6 +1083,10 @@ class PhotometryPar(ParSet):
         dtypes['zpt'] = [int, float]
         descr['zpt'] = 'Zero point'
 
+        defaults['nstar_min'] = 10.
+        dtypes['nstar_min'] = [int, float]
+        descr['nstar_min'] = 'The minimum number of stars used for photometric calibrations'
+
         defaults['primary'] = 'r'
         dtypes['primary'] = str
         descr['primary'] = 'Primary calibration filter'
@@ -1111,7 +1115,8 @@ class PhotometryPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary', 'coefficients', 'coeff_airmass']
+        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary',
+                   'coefficients', 'coeff_airmass', 'nstar_min']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):

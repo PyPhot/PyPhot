@@ -1,8 +1,12 @@
 import itertools
 
 import numpy as np
+from scipy.optimize import curve_fit
+
 from collections import deque
 from bisect import insort, bisect_left
+
+from astropy.stats import sigma_clip
 
 from pyphot import msgs
 
@@ -208,3 +212,24 @@ def rebin_evlist(frame, newshape):
              [')'] + ['.sum(%d)' % (i+1) for i in range(lenShape)] + \
              ['/factor[%d]' % i for i in range(lenShape)]
     return eval(''.join(evList))
+
+
+def robust_curve_fit(func, xx, yy, niters=5, sigclip=5, maxiters_sigclip=3, cenfunc='median', stdfunc='std',
+                     p0=None, sigma=None, absolute_sigma=None, bounds=None, method=None, jac=None, **kwargs):
+
+    if bounds is None:
+        bounds = (-np.inf, np.inf)
+    ii=0
+    xx_mask, yy_mask = xx.copy(), yy.copy()
+    while ii < niters:
+        popt, pcov = curve_fit(func, xx_mask, yy_mask, p0=p0, sigma=sigma, absolute_sigma=absolute_sigma,
+                               bounds=bounds, method=method, jac=jac, **kwargs)
+        diff = abs(func(xx_mask,popt[0],popt[1]) - yy_mask)
+
+        masked_data = sigma_clip(diff, sigma=sigclip, maxiters=maxiters_sigclip, masked=True,
+                                 cenfunc=cenfunc, stdfunc=stdfunc, copy=True)
+
+        xx_mask, yy_mask = xx_mask[np.invert(masked_data.mask)], yy_mask[np.invert(masked_data.mask)]
+        ii +=1
+
+    return popt, pcov
