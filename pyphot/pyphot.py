@@ -498,7 +498,6 @@ class PyPhot(object):
                     ## Photometrically calibrating individual chips
                     msgs.info('Photometrically calibrating individual chips.')
                     if self.par['postproc']['photometry']['cal_chip_zpt']:
-
                         # Prepare the reference catalog list. These catalogs will be used for photometrically calibrating individual chips.
                         coadd_ids = self.fitstbl['coadd_id'][grp_science]
                         photref_catalog = self.par['postproc']['photometry']['photref_catalog']
@@ -511,14 +510,28 @@ class PyPhot(object):
                             outqa_list.append(os.path.join(self.qa_path, this_qa))
 
                         # Do the calibrations
-                        postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
-                                           ref_fits_list=master_ref_cats, outqa_root_list = outqa_list,
-                                           refcatalog=self.par['postproc']['photometry']['photref_catalog'],
-                                           primary=self.par['postproc']['photometry']['primary'],
-                                           secondary=self.par['postproc']['photometry']['secondary'],
-                                           coefficients=self.par['postproc']['photometry']['coefficients'],
-                                           ZP=self.par['postproc']['photometry']['zpt'],
-                                           nstar_min=self.par['postproc']['photometry']['nstar_min'])
+                        zp_all, zp_std_all, nstar_all = postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
+                                                        ref_fits_list=master_ref_cats, outqa_root_list = outqa_list,
+                                                        refcatalog=self.par['postproc']['photometry']['photref_catalog'],
+                                                        primary=self.par['postproc']['photometry']['primary'],
+                                                        secondary=self.par['postproc']['photometry']['secondary'],
+                                                        coefficients=self.par['postproc']['photometry']['coefficients'],
+                                                        ZP=self.par['postproc']['photometry']['zpt'],
+                                                        nstar_min=self.par['postproc']['photometry']['nstar_min'])
+
+                        # The FITS table that stores individual zero-points
+                        master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],
+                                                       'MasterZPT_{:}'.format(master_key))
+                        master_zpt_tbl = Table()
+                        master_zpt_tbl['Name'] = self.fitstbl['filename'][grp_science].astype('U20')
+                        master_zpt_tbl['filter'] = self.fitstbl['filter'][grp_science].astype('U10')
+                        master_zpt_tbl['exptime'] = self.fitstbl['exptime'][grp_science].astype('double')
+                        master_zpt_tbl['airmass'] = self.fitstbl['airmass'][grp_science].astype('double')
+                        master_zpt_tbl['ZPT'] = zp_all
+                        master_zpt_tbl['ZPT_Std'] = zp_std_all
+                        master_zpt_tbl['NStar'] = nstar_all.astype('int32')
+                        master_zpt_tbl['Detector'] = (np.ones_like(nstar_all)*self.det).astype('int32')
+                        master_zpt_tbl.write(master_zpt_name, overwrite=True)
 
                 ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here? Probably not?
                 ##       using swarp to combine different detectors, if only one detector then skip this step.

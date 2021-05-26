@@ -17,6 +17,8 @@ def colorterm(filter, primary, secondary, show=True, path=None):
 
 
     if path is None:
+        # Path for the XSL DR2 spectra which can be downloaded from the following link.
+        # http://xsl.u-strasbg.fr/page_dr2.html
         path = resource_filename('pyphot', os.path.join('data', 'all_dr2_fits'))
 
     nstar = 911

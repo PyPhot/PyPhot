@@ -212,7 +212,7 @@ class CFHTWIRCAMCamera(camera.Camera):
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'J'
             par['postproc']['photometry']['secondary'] = 'H'
-            par['postproc']['photometry']['zpt'] = 25.06
+            par['postproc']['photometry']['zpt'] = 25.75
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             # I used the UKIRT Y-band as a proximation, which was derived by Hodgkin et al. 2009, MNRAS, 394, 675
             # Hodgkin+09 using vega system, I corrected it to AB using Hewett+06 vega-AB offset and derived that
@@ -225,21 +225,21 @@ class CFHTWIRCAMCamera(camera.Camera):
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'J'
             par['postproc']['photometry']['secondary'] = 'H'
-            par['postproc']['photometry']['zpt'] = 25.87
+            par['postproc']['photometry']['zpt'] = 26.078
             par['postproc']['photometry']['coefficients'] = [-0.001, -0.059, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.05
         elif self.get_meta_value(scifile, 'filter') == 'H':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'H'
             par['postproc']['photometry']['secondary'] = 'J'
-            par['postproc']['photometry']['zpt'] = 26.37
+            par['postproc']['photometry']['zpt'] = 26.72
             par['postproc']['photometry']['coefficients'] = [-0.007, -0.035, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.03
         elif self.get_meta_value(scifile, 'filter') == 'Ks':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'K'
             par['postproc']['photometry']['secondary'] = 'H'
-            par['postproc']['photometry']['zpt'] = 26.28
+            par['postproc']['photometry']['zpt'] = 26.54
             par['postproc']['photometry']['coefficients'] = [0.023,-0.031, 0.] # I used VISTA Ks as an approximation.
             par['postproc']['photometry']['coeff_airmass'] = 0.05
 

@@ -419,8 +419,8 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         #       So, we should save another flat image that only counts for the number of bad exposures associated to the pixel
         #       and then use this number as a cut.
         #       Currently we only remove saturated targets, catalog['NIMAFLAGS_ISO'] & 2**2<1 used for remove saturated targets, see procimg.ccdproc
-        flag = catalog['NIMAFLAGS_ISO'] & 2**2<1  #(catalog['NIMAFLAGS_ISO']<1)
-        good_cat = (catalog['IMAFLAGS_ISO']<1) & (catalog['FLAGS']<1) & flag
+        flag = (catalog['NIMAFLAGS_ISO'] & 2**2<1) & (catalog['IMAFLAGS_ISO'] & 2**2<1) #& (catalog['IMAFLAGS_ISO']<1)  #(catalog['NIMAFLAGS_ISO']<1)
+        good_cat = (catalog['FLAGS']<1) & flag
         #& (catalog['CLASS_STAR']>0.9) & (catalog['NIMAFLAGS_ISO']<1)
         good_cat &= catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>10
         catalog = catalog[good_cat]
@@ -553,6 +553,9 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0,
               refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10):
 
+
+    zp_all, zp_std_all = np.zeros(len(cat_fits_list)), np.zeros(len(cat_fits_list))
+    nstar_all = np.zeros(len(cat_fits_list))
     for ii, this_cat in enumerate(cat_fits_list):
         if sci_fits_list is None:
             this_sci_fits = this_cat.replace('.cat','.fits')
@@ -609,6 +612,12 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             par.writeto(this_sci_fits, overwrite=True)
         else:
             msgs.warn('The number of stars found for calibration is smaller than nstar_min. skipping the ZPT calibrations.')
+
+        zp_all[ii] = zp_this
+        zp_std_all[ii] = zp_this_std
+        nstar_all[ii] = nstar
+
+    return zp_all, zp_std_all, nstar_all
 
 
 def ForcedAperPhot(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):
