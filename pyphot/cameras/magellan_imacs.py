@@ -383,7 +383,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             # pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
-            par['postproc']['photometry']['coefficients'] = [0.016,-0.634,0.]
+            par['postproc']['photometry']['coefficients'] = [0.015,-0.618,0.]
             # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
             # I use z-band as a proximation for NB919. It actually does not matter since
             # PyPhot calibrates individual chip of each exposure to the ZPT first and then coadds all chips and exposures.
@@ -415,7 +415,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['zpt'] = 27.53
-            par['postproc']['photometry']['coefficients'] = [0.,0.060,0.]
+            par['postproc']['photometry']['coefficients'] = [0.,0.058,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.04
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_z':
             par['scienceframe']['process']['use_fringe'] = True # Subtract fringing if using z-band
@@ -423,7 +423,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
             par['postproc']['photometry']['zpt'] = 26.97
-            par['postproc']['photometry']['coefficients'] = [-0.012,-0.268,0.]
+            par['postproc']['photometry']['coefficients'] = [-0.011,-0.258,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.02
 
         return par

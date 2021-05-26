@@ -1,8 +1,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import stats as sp_stats
-from sklearn import linear_model
 
 from astropy import wcs
 from astropy import units as u
@@ -499,6 +497,10 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         # rerun the SExtractor with the zero point
         msgs.info('The zeropoint measured from {:} stars is {:0.3f}+/-{:0.3f}'.format(nstar, zp, zp_std))
 
+        '''
+        # No need to measure the color-term here
+        from scipy import stats as sp_stats
+        from sklearn import linear_model
         if nstar>10:
             # measure the color-term
             this_mag = zp+matched_cat_mag
@@ -519,6 +521,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
             msgs.info('Color-term coefficient is estimated to be {:} by RANSAC'.format(color_term))
         else:
             color_term = 0.
+        '''
 
         if outqaroot is not None:
             msgs.info('Make a histogram plot for the zpt')
@@ -570,12 +573,21 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             msgs.info('Calibrating the zero point for {:}'.format(this_sci_fits))
 
         par = fits.open(this_sci_fits)
+        ## ToDo: If we read in FLXSCALE, the zpt would change if you run this code twice
+        ##  Maybe just give the input of 1.0/EXPTIME and measure the FLXSCALE use calzpt?
+        ##  Thus that the ZPT won't change no matter how many times you run the code.
         try:
-            FLXSCALE = par[0].header['FLXSCALE']
+            FLXSCALE = 1.0 / par[0].header['EXPTIME']
+            #FLXSCALE = par[0].header['FLXSCALE']
+        except:
+            msgs.warn('EXPTIME was not found in the FITS Image Header, assuming the image unit is counts/sec.')
+            FLXSCALE = 1.0
+        try:
             FLASCALE = par[0].header['FLASCALE']
         except:
-            msgs.warn('Either FLXSCALE or FLASCALE was not found in the FITS Image Header.')
-            FLXSCALE, FLASCALE = 1.0, 1.0
+            msgs.warn('FLASCALE was not found in the FITS Image Header.')
+            FLASCALE = 1.0
+
 
         zp_this, zp_this_std, nstar = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
                                    coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE,

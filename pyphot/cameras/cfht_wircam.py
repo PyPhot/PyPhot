@@ -219,7 +219,7 @@ class CFHTWIRCAMCamera(camera.Camera):
             #  Y_AB = J_AB,2MASS + 0.029 + 0.5*(J_AB,2MASS-H_AB,2MASS)
             # This is consistent with what I derived below
             # pyphot_colorterm UKIRT-Y TMASS-J TMASS-H --path /Volumes/Work/Imaging/all_dr2_fits
-            par['postproc']['photometry']['coefficients'] = [0.008,0.697,0.]
+            par['postproc']['photometry']['coefficients'] = [0.003,0.694,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.02 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'J':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'

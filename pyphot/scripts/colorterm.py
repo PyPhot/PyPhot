@@ -110,7 +110,7 @@ Some pre-calculated coefficients:
 
 ## UKIRT vs 2MASS
 pyphot_colorterm UKIRT-Y TMASS-J TMASS-H --path /Volumes/Work/Imaging/all_dr2_fits
- ==> UKIRT-Y=TMASS-J + (0.697*(TMASS-J-TMASS-H)) + 0.008
+ ==> UKIRT-Y=TMASS-J + (0.694*(TMASS-J-TMASS-H)) + (0.003)
 
 pyphot_colorterm UKIRT-J TMASS-J TMASS-H --path /Volumes/Work/Imaging/all_dr2_fits
  ==> UKIRT-J=TMASS-J + (-0.059*(TMASS-J-TMASS-H)) + (-0.001)
@@ -133,13 +133,13 @@ pyphot_colorterm VISTA-K TMASS-K TMASS-H --path /Volumes/Work/Imaging/all_dr2_fi
 pyphot_colorterm SDSS-R PS1-R PS1-I --path /Volumes/Work/Imaging/all_dr2_fits
  ==> SDSS-R=PS1-R + (0.024*(PS1-R-PS1-I)) + (0.002) #ToDo: Need second order for this!!!
 pyphot_colorterm SDSS-I PS1-I PS1-Z --path /Volumes/Work/Imaging/all_dr2_fits
- ==> SDSS-I=PS1-I + (0.060*(PS1-I-PS1-Z)) + (-0.000)
+ ==> SDSS-I=PS1-I + (0.058*(PS1-I-PS1-Z)) + (-0.000)
 pyphot_colorterm SDSS-Z PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
- ==> SDSS-Z=PS1-Z + (-0.268*(PS1-Z-PS1-Y)) + (-0.012)
+ ==> SDSS-Z=PS1-Z + (-0.258*(PS1-Z-PS1-Y)) + (-0.011)
 
 ## IMACS NB919 VS PanStarrs
 pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
- ==> IMACSF2-NB919=PS1-Z + (-0.634*(PS1-Z-PS1-Y)) + 0.016
+ ==> IMACSF2-NB919=PS1-Z + (-0.618*(PS1-Z-PS1-Y)) + (0.015)
 
 
 '''

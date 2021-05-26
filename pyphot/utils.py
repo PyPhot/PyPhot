@@ -214,7 +214,7 @@ def rebin_evlist(frame, newshape):
     return eval(''.join(evList))
 
 
-def robust_curve_fit(func, xx, yy, niters=5, sigclip=5, maxiters_sigclip=3, cenfunc='median', stdfunc='std',
+def robust_curve_fit(func, xx, yy, niters=5, sigclip=3, maxiters_sigclip=5, cenfunc='median', stdfunc='std',
                      p0=None, sigma=None, absolute_sigma=None, bounds=None, method=None, jac=None, **kwargs):
 
     if bounds is None:
