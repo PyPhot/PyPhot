@@ -3,7 +3,6 @@
 #
 # Licensed under a 3-clause BSD license.
 
-import sys
 import os
 import glob
 
@@ -57,7 +56,7 @@ def run_setup(data_files, scripts, packages, install_requires):
           provides=NAME,                                                # *
           version=VERSION,
           license='BSD3',
-          description='Python packages for quasar analyses',
+          description='Python packages for astronomical imaging and photometry',
           long_description=open('README.md').read(),
           author='Feige Wang',
           author_email='fgwang.astro@gmail.com',

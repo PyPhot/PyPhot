@@ -1,36 +1,29 @@
 # PyPhot
 
-The Python Imaging Reduction Pipeline.  For
-documentation visit:
-
-http://pypeit.readthedocs.io
-
-
+The Python Imaging and Photometry Reduction Pipeline.
 
 # Instruments Served
-* Gemini/GNIRS
-* Gemini/GMOS 
-* Gemini/FLAMINGOS 2 
-* Magellan/Fire
-* MMT/BinoSpec (270 and 600 tested)
+* CFHT/WIRCam
+* LBT/LBC
+* Magellan/IMACS
 * MMT/MMIRS
-* Keck/DEIMOS (600ZD, 830G, 1200G)
-* Keck/LRIS
-* Keck/MOSFIRE  (J and Y gratings tested)
 * Keck/NIRES Acquisition Camera
-* LBT/Luci-I, Luci-II
-* VLT/FORS2  (300I, 300V)
 
-# Requirements
 
-(see `pypeit/requirements.txt`)
-
+# Software Requirements
 * python
-* numpy
-* scipy
-* matplotlib
+* SExtractor
+* SWarp
+* Scamp
+
+# Python package requirements
+(see `pyphot/requirements.txt`)
 * astropy
 * configobj
+* matplotlib
+* numpy
+* photutils
+* scipy
 
 
 # License (BSD-3)
