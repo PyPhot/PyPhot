@@ -173,6 +173,7 @@ class LBTLBCCamera(camera.Camera):
         ## Trim some edge pixels for LBT. This can be improved by providing BPM mask or mask using pixelflat,
         ##  i.e. with maskpixvar=0.03
         #x1, x2, y1, y2 = x1+15, x2-10, y1+5, y2-10
+        x1, x2, y1, y2 = x1+10, x2-10, y1+10, y2-10
 
         data = hdu[det].data*1.0
         array = data[x1:x2,y1:y2]
