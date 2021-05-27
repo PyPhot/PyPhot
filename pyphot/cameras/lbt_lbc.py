@@ -347,18 +347,19 @@ class LBTLBCBCamera(LBTLBCCamera):
 
 
         # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
+        # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
         if self.get_meta_value(scifile, 'filter') == 'SDT_Uspec':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 27.33
+            par['postproc']['photometry']['zpt'] = 28.13 #2.5*np.log10(2.09)+27.33
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.47 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'U-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 26.23
+            par['postproc']['photometry']['zpt'] = 27.03 #2.5*np.log10(2.09)+26.23
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.48 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
@@ -366,28 +367,28 @@ class LBTLBCBCamera(LBTLBCCamera):
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 27.93
+            par['postproc']['photometry']['zpt'] = 28.73 #2.5*np.log10(2.09)+27.93
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.22 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'V-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 28.13
+            par['postproc']['photometry']['zpt'] = 28.93 #2.5*np.log10(2.09)+28.13
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.15 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'g-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 28.31
+            par['postproc']['photometry']['zpt'] = 29.11 #2.5*np.log10(2.09)+28.31
             par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.17 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 27.75
+            par['postproc']['photometry']['zpt'] = 28.55 #2.5*np.log10(2.09)+27.75, consistent with J0100, 27.67 for 1ADU/s
             par['postproc']['photometry']['coefficients'] = [0., 0.016, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.11 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
 
@@ -587,11 +588,13 @@ class LBTLBCRCamera(LBTLBCCamera):
         par = super().config_specific_par(scifile, inp_par=inp_par)
         par['postproc']['photometry']['cal_zpt'] = True
 
+        # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
+        # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
         if self.get_meta_value(scifile, 'filter') == 'V-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'Sloan'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 27.94
+            par['postproc']['photometry']['zpt'] = 28.77 #2.5*np.log10(2.14)+27.94
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.16 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
@@ -599,35 +602,35 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 27.86
+            par['postproc']['photometry']['zpt'] = 28.69 #2.5*np.log10(2.14)+27.86
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.13 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'I-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 27.59
+            par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 28.03
+            par['postproc']['photometry']['zpt'] = 28.86 #2.5*np.log10(2.14)+28.03
             par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.09 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
-            par['postproc']['photometry']['zpt'] = 27.57
+            par['postproc']['photometry']['zpt'] = 28.66 #2.5*np.log10(2.14)+27.83, measured from J0100 observations
             par['postproc']['photometry']['coefficients'] = [0.,0.072, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.03 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 27.20
+            par['postproc']['photometry']['zpt'] = 28.03 # For 1 e/s, 2.5*np.log10(2.14)+27.2, consistent with J0100, 27.25 for 1ADU/s
             par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
 
