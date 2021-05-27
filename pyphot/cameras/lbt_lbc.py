@@ -293,9 +293,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_illumflat'] = True
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
-        par['scienceframe']['process']['apply_gain'] = False
-        ## the zeropints for LBT are for ADU/s, so do not apply_gain correction
-        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
+        par['scienceframe']['process']['apply_gain'] = True
 
         # Vignetting
         #par['scienceframe']['process']['mask_vig'] = False
@@ -348,6 +346,7 @@ class LBTLBCBCamera(LBTLBCCamera):
 
         # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
         # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
+        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
         if self.get_meta_value(scifile, 'filter') == 'SDT_Uspec':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
@@ -536,9 +535,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_illumflat'] = True
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = True
-        par['scienceframe']['process']['apply_gain'] = False
-        ## the zeropints for LBT are for ADU/s, so do not apply_gain correction
-        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
+        par['scienceframe']['process']['apply_gain'] = True
 
         # Vignetting
         #par['scienceframe']['process']['mask_vig'] = False
@@ -590,6 +587,7 @@ class LBTLBCRCamera(LBTLBCCamera):
 
         # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
         # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
+        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
         if self.get_meta_value(scifile, 'filter') == 'V-Bessel':
             par['postproc']['photometry']['photref_catalog'] = 'Sloan'
             par['postproc']['photometry']['primary'] = 'u'

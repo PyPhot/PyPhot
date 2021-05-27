@@ -210,7 +210,7 @@ class ProcessImagesPar(ParSet):
         dtypes['use_biasimage'] = bool
         descr['use_biasimage'] = 'Use a bias image.  If True, one or more must be supplied in the PyPhot file.'
 
-        defaults['use_overscan'] = True
+        defaults['use_overscan'] = False
         dtypes['use_overscan'] = bool
         descr['use_overscan'] = 'Subtract off the overscan.  Detector *must* have one or code will crash.'
 
@@ -241,7 +241,7 @@ class ProcessImagesPar(ParSet):
         dtypes['use_illumflat'] = bool
         descr['use_illumflat'] = 'Use the illumination flat to correct for the illumination profile.'
 
-        defaults['use_supersky'] = False
+        defaults['use_supersky'] = True
         dtypes['use_supersky'] = bool
         descr['use_supersky'] = 'Use supersky frame to further faltten your science images.'
 
