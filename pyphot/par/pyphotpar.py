@@ -1047,8 +1047,8 @@ class PhotometryPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, primary=None, secondary=None,
-                 coefficients=None, coeff_airmass=None, nstar_min=None):
+    def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, external_flag=None,
+                 primary=None, secondary=None, coefficients=None, coeff_airmass=None, nstar_min=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1073,6 +1073,10 @@ class PhotometryPar(ParSet):
         defaults['cal_chip_zpt'] = True
         dtypes['cal_chip_zpt'] = bool
         descr['cal_chip_zpt'] = 'Calibrating the zeropoint for individual chips'
+
+        defaults['external_flag'] = True
+        dtypes['external_flag'] = bool
+        descr['external_flag'] = 'Apply external flag cut when calibrating zeropoint? '
 
         defaults['photref_catalog'] = 'PS1'
         options['photref_catalog'] = PhotometryPar.valid_catalog_methods()
@@ -1115,7 +1119,7 @@ class PhotometryPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary',
+        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'external_flag', 'primary', 'secondary',
                    'coefficients', 'coeff_airmass', 'nstar_min']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
