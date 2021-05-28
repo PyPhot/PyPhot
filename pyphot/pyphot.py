@@ -517,7 +517,8 @@ class PyPhot(object):
                                                         secondary=self.par['postproc']['photometry']['secondary'],
                                                         coefficients=self.par['postproc']['photometry']['coefficients'],
                                                         ZP=self.par['postproc']['photometry']['zpt'],
-                                                        nstar_min=self.par['postproc']['photometry']['nstar_min'])
+                                                        nstar_min=self.par['postproc']['photometry']['nstar_min'],
+                                                        external_flag=self.par['postproc']['photometry']['external_flag'])
 
                         # The FITS table that stores individual zero-points
                         master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],
@@ -691,6 +692,7 @@ class PyPhot(object):
                                                             secondary=self.par['postproc']['photometry']['secondary'],
                                                             coefficients=self.par['postproc']['photometry']['coefficients'],
                                                             FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
+                                                            external_flag=self.par['postproc']['photometry']['external_flag'],
                                                             outqaroot=os.path.join(self.qa_path, coaddroot))
                         par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
                         par[0].header['ZP'] = zp
