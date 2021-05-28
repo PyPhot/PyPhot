@@ -86,7 +86,7 @@ def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
     comd = ["scamp"] + [os.path.join(workdir, catname)] + configcomd + configapp
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    msgs.info("Header generated: " + os.path.join(workdir, imgname[:-5]+".head"))
+    msgs.info("Header generated: " + os.path.join(workdir, catname[:-5]+".head"))
 
     if log:
         logfile = open(os.path.join(workdir, imgname[:-5]+".scamp.log"), "w")
