@@ -42,7 +42,7 @@ def defringing(sci_fits_list, masterfringeimg):
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
                 detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=0.5,
+                astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0,
                 pixscale_maxerr=1.1, mosaic_type='LOOSE',task='sex',
                 weight_type='MAP_WEIGHT', solve_photom_scamp=False, delete=False, log=True):
 
@@ -113,7 +113,6 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                     "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
     scamp.scampall(sci_fits_list_resample, config=scampconfig0, workdir=science_path, QAdir=qa_path,
                    defaultconfig='pyphot', delete=delete, log=log)
-
     ## copy the .head for flag images
     for i in range(len(sci_fits_list_resample)):
         os.system('cp {:} {:}'.format(sci_fits_list_resample[i].replace('.fits', '_cat.head'),
@@ -136,7 +135,6 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
         os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.fits')))
         os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.head')))
         os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp_cat.head')))
-
     # Update fluxscale
     if solve_photom_scamp:
         msgs.info('The FLXSCALE was solved with scamp.')
@@ -409,7 +407,7 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
     return mask
 
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.],
-           FLXSCALE=1.0, FLASCALE=1.0, # This two paramers are exactly same with that used in SCAMP
+           FLXSCALE=1.0, FLASCALE=1.0, external_flag=True, # This two paramers are exactly same with that used in SCAMP
            out_refcat=None, outqaroot=None):
 
     try:
@@ -419,7 +417,11 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         #       So, we should save another flat image that only counts for the number of bad exposures associated to the pixel
         #       and then use this number as a cut.
         #       Currently we only remove saturated targets, catalog['NIMAFLAGS_ISO'] & 2**2<1 used for remove saturated targets, see procimg.ccdproc
-        flag = (catalog['NIMAFLAGS_ISO'] & 2**2<1) & (catalog['IMAFLAGS_ISO'] & 2**2<1) #& (catalog['IMAFLAGS_ISO']<1)  #(catalog['NIMAFLAGS_ISO']<1)
+        if external_flag:
+            #flag = (catalog['NIMAFLAGS_ISO'] & 2**2<1) & (catalog['IMAFLAGS_ISO'] & 2**2<1) #& (catalog['IMAFLAGS_ISO']<1)  #(catalog['NIMAFLAGS_ISO']<1)
+            flag = (catalog['IMAFLAGS_ISO']<1) & (catalog['NIMAFLAGS_ISO']<1)
+        else:
+            flag = np.ones_like(catalog['FLAGS'], dtype='bool')
         good_cat = (catalog['FLAGS']<1) & flag
         #& (catalog['CLASS_STAR']>0.9) & (catalog['NIMAFLAGS_ISO']<1)
         good_cat &= catalog['FLUX_AUTO']/catalog['FLUXERR_AUTO']>10
@@ -550,7 +552,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     return zp, zp_std, nstar
 
-def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0,
+def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0, external_flag=True,
               refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10):
 
 
@@ -593,7 +595,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
 
 
         zp_this, zp_this_std, nstar = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
-                                   coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE,
+                                   coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE, external_flag=external_flag,
                                    out_refcat=this_ref_name, outqaroot=this_qa_root)
         if nstar>nstar_min:
             msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
