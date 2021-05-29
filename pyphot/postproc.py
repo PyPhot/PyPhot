@@ -165,8 +165,8 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     if solve_photom_scamp:
         msgs.info('The FLXSCALE was solved with scamp.')
     else:
-        msgs.info('The FLXSCALE was solved with 1/EXPTIME.')
         for i in range(len(sci_fits_list)):
+            msgs.info('Solving the FLXSCALE for {:} with 1/EXPTIME.'.format(os.path.basename(sci_fits_list_resample[i])))
             par = fits.open(sci_fits_list_resample[i])
             # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
             # in order to get the correct flag when doing the coadd with swarp in the later step
@@ -175,6 +175,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
 
     # change flag image type to int32, flux scale to 1.0
     for i in range(len(sci_fits_list)):
+        msgs.info('Saving FLAG image {:} to int32.'.format(os.path.basename(flag_fits_list_resample[i])))
         par = fits.open(flag_fits_list_resample[i])
         # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
         # in order to get the correct flag when doing the coadd with swarp in the later step
