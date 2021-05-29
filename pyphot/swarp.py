@@ -58,11 +58,12 @@ def get_config(config=None):
     return configapp
 
 
-def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=True, log=False):
+def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=True, log=False, verbose=True):
 
-    ## Get the version of your swarp
-    swarpversion = get_version()
-    msgs.info("SWarp version is {:}".format(swarpversion))
+    if verbose:
+        ## Get the version of your swarp
+        swarpversion = get_version()
+        msgs.info("SWarp version is {:}".format(swarpversion))
 
     ## Generate the configuration file
     configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
@@ -89,7 +90,8 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         logfile.write(err.decode("utf-8"))
         logfile.write("\n")
         logfile.close()
-        msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
+        if verbose:
+            msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
     if delete:
         os.system("rm " + os.path.join(workdir, "*.swarp"))
         if os.path.exists(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))):
@@ -99,7 +101,6 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
 def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None, delete=False, log=False):
 
     if coaddroot is not None:
-
         if coadddir is None:
             coadddir = os.path.join(workdir, "Coadd")
         if not os.path.exists(coadddir):
@@ -151,12 +152,13 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
         else:
             os.system("mv {:} {:}".format(os.path.join(workdir, "*.swarp"), coadddir))
 
-
     else:
         for imgname in imglist:
+            msgs.info('Resampling {:} with Swarp {:}'.format(imgname, get_version()))
             if config is not None:
                 this_config = config.copy()# need to copy this since the config would be possibly changed in swarpone!
             else:
                 this_config = None
-            swarpone(imgname,config=this_config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log)
+            swarpone(imgname, config=this_config, workdir=workdir, defaultconfig=defaultconfig,
+                     delete=delete, log=log, verbose=False)
 

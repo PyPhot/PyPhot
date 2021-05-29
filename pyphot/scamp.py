@@ -61,11 +61,12 @@ def get_config(config=None, workdir="./"):
     return configapp
 
 
-def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=True, log=False):
+def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=True, log=False, verbose=True):
 
-    ## Get the version of your SCAMP
-    scampversion = get_version()
-    msgs.info("Scamp version is {:}".format(scampversion))
+    if verbose:
+        ## Get the version of your SCAMP
+        scampversion = get_version()
+        msgs.info("Scamp version is {:}".format(scampversion))
 
     ## Generate the configuration file
     configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
@@ -86,7 +87,8 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
     comd = ["scamp"] + [os.path.join(workdir, catname)] + configcomd + configapp
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    msgs.info("Header generated: " + os.path.join(workdir, catname[:-5]+".head"))
+    if verbose:
+        msgs.info("Header generated: " + os.path.join(workdir, catname[:-5]+".head"))
 
     if log:
         logfile = open(os.path.join(workdir, catname[:-5]+".scamp.log"), "w")
@@ -98,15 +100,18 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         logfile.write(err.decode("utf-8"))
         logfile.write("\n")
         logfile.close()
-        msgs.info("Processing log generated: " + os.path.join(workdir, catname[:-5]+".scamp.log"))
+        if verbose:
+            msgs.info("Processing log generated: " + os.path.join(workdir, catname[:-5]+".scamp.log"))
     if delete:
         os.system("rm " + os.path.join(workdir,"*.scamp"))
 
 def scampall(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
 
     for catname in catlist:
+        msgs.info('Refine the astrometric solution with SCAMP {:} for {:}'.format(get_version(), catname))
         if config is not None:
             this_config = config.copy() # need to copy this since the config would be possibly changed in scampone!
         else:
             this_config = None
-        scampone(catname, config=this_config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig, delete=delete, log=log)
+        scampone(catname, config=this_config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig,
+                 delete=delete, log=log, verbose=False)
