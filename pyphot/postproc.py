@@ -31,10 +31,12 @@ def defringing(sci_fits_list, masterfringeimg):
     ## ToDo: matching the amplitude of friging rather than scale with exposure time.
     for i in range(len(sci_fits_list)):
         header, data, _ = io.load_fits(sci_fits_list[i])
+        mask_zero = data == 0.
         if 'DEFRING' in header.keys():
             msgs.info('The De-fringed image {:} exists, skipping...'.format(sci_fits_list[i]))
         else:
             data -= masterfringeimg * header['EXPTIME']
+            data[mask_zero] = 0
             header['DEFRING'] = ('TRUE', 'De-Fringing is done?')
             io.save_fits(sci_fits_list[i], data, header, 'ScienceImage', overwrite=True)
             msgs.info('De-fringed science image {:} saved'.format(sci_fits_list[i]))
