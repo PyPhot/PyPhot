@@ -168,8 +168,8 @@ class CFHTWIRCAMCamera(camera.Camera):
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['detect_thresh'] = 5
         par['postproc']['astrometry']['position_maxerr'] = 1.0
+        par['postproc']['astrometry']['detect_thresh'] = 5
         par['postproc']['astrometry']['analysis_thresh'] = 5
         par['postproc']['astrometry']['detect_minarea'] = 5
         par['postproc']['astrometry']['crossid_radius'] = 2
@@ -403,6 +403,7 @@ class CFHTWIRCAMCamera(camera.Camera):
 
             # data
             cube = np.zeros((N_microdither, head_det['NAXIS1']*xbin,head_det['NAXIS2']*ybin))
+            cube_flag = np.zeros((N_microdither, head_det['NAXIS1']*xbin,head_det['NAXIS2']*ybin))
             pos0 = head_det['MDCOORD1'].split(',')
             x_pos0, y_pos0 = float(pos0[0][1:]), float(pos0[1][:-1])
             for ii in range(N_microdither):
@@ -418,8 +419,10 @@ class CFHTWIRCAMCamera(camera.Camera):
                 this_dither = np.roll(this_dither,int(x_shift),axis=1)
                 this_dither = np.roll(this_dither,int(y_shift),axis=0)
                 cube[ii, :, :] = this_dither
-
+                cube_flag[ii, :, :] = (this_dither==0.) ## True for pixels=0
+            data_flag = np.sum(cube_flag, axis=0)
             data = np.median(cube, axis=0)
+            data[data_flag.astype('bool')] = 0 ## make pixels affected by bad pixels to be zero
 
             x1, x2, y1, y2 = x1*xbin, x2*xbin, y1*ybin, y2*ybin
             detector_par['platescale'] = detector_par['platescale'] / xbin
