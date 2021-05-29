@@ -18,7 +18,7 @@ def get_version():
     return version
 
 
-def get_default_config(defaultconfig='pyphot', workdir='./'):
+def get_default_config(defaultconfig='pyphot', workdir='./',verbose=True):
     """
     To get the default SWARP configuration file
     """
@@ -29,13 +29,16 @@ def get_default_config(defaultconfig='pyphot', workdir='./'):
         f = open(os.path.join(workdir, "config.swarp"), "w")
         f.write(out)
         f.close()
-        msgs.info("config.swarp generated from SWarp default configuration")
+        if verbose:
+            msgs.info("config.swarp generated from SWarp default configuration")
     elif defaultconfig == "pyphot":
         os.system("cp " + os.path.join(config_dir,"swarp.config") + ' ' + os.path.join(workdir,"config.swarp"))
-        msgs.info("config.swarp generated from PyPhot default configuration")
+        if verbose:
+            msgs.info("config.swarp generated from PyPhot default configuration")
     else:
         os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,"config.swarp"))
-        msgs.info("Using user provided configuration for SWarp")
+        if verbose:
+            msgs.info("Using user provided configuration for SWarp")
 
     comd = ["-c", os.path.join(workdir, "config.swarp")]
     return comd
@@ -66,7 +69,7 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         msgs.info("SWarp version is {:}".format(swarpversion))
 
     ## Generate the configuration file
-    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
+    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, verbose=verbose)
 
     ## append your configuration
     ## ToDO: Not sure why set the weightout_name does not work

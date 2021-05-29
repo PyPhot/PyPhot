@@ -16,7 +16,7 @@ def get_version():
     return version
 
 
-def get_default_config(defaultconfig='pyphot', workdir='./'):
+def get_default_config(defaultconfig='pyphot', workdir='./', verbose=True):
     """
     To get the default SCAMP configuration file
     """
@@ -27,13 +27,16 @@ def get_default_config(defaultconfig='pyphot', workdir='./'):
         f = open(os.path.join(workdir, "config.scamp"), "w")
         f.write(out)
         f.close()
-        msgs.info("config.scamp generated from Scamp default configuration")
+        if verbose:
+            msgs.info("config.scamp generated from Scamp default configuration")
     elif defaultconfig == "pyphot":
         os.system("cp " + os.path.join(config_dir,"scamp.config") + ' ' + os.path.join(workdir,"config.scamp"))
-        msgs.info("config.scamp generated from PyPhot default configuration")
+        if verbose:
+            msgs.info("config.scamp generated from PyPhot default configuration")
     else:
         os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,"config.scamp"))
-        msgs.info("Using user provided configuration for Scamp")
+        if verbose:
+            msgs.info("Using user provided configuration for Scamp")
 
     comd = ["-c", os.path.join(workdir,"config.scamp")]
     return comd
@@ -69,7 +72,7 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         msgs.info("Scamp version is {:}".format(scampversion))
 
     ## Generate the configuration file
-    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
+    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, verbose=verbose)
 
     ## append your configuration
     if 'CHECKPLOT_NAME' in config:

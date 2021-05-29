@@ -22,7 +22,7 @@ from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgr
 from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
 from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
 
-from pyphot import msgs, io, utils
+from pyphot import msgs, io, utils, caloffset
 from pyphot import sex, scamp, swarp
 from pyphot import query, crossmatch
 
@@ -568,6 +568,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
             plt.savefig(outqaroot+'_zpt_hist.pdf')
             plt.close()
 
+            msgs.info('Make a scatter plot for the zpt')
             plt.plot(matched_ref_mag, matched_cat_mag+zp, 'k.')
             plt.plot([matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],[matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5],'r--')
             plt.xlim(matched_ref_mag.min()-0.5,matched_ref_mag.max()+0.5)
@@ -575,6 +576,20 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
             plt.xlabel('Reference magnitude',fontsize=14)
             plt.ylabel('Calibrated magnitude',fontsize=14)
             plt.savefig(outqaroot+'_zpt_scatter.pdf')
+            plt.close()
+
+            msgs.info('Make a scatter plot for the coordinate difference')
+            ## estimate the coordinates differences
+            delta_ra, delta_dec = caloffset.offset(ref_ra[ind[matched]], ref_dec[ind[matched]], ra[matched],
+                                                   dec[matched], center=False)
+            plt.plot([0.,0.],[delta_dec.min()-0.2,delta_dec.max()+0.2],'r:')
+            plt.plot([delta_ra.min()-0.2,delta_ra.max()+0.2],[0.,0.],'r:')
+            plt.plot(delta_ra,delta_dec,'k.')
+            plt.xlim(delta_ra.min()-0.2,delta_ra.max()+0.2)
+            plt.ylim(delta_dec.min()-0.2,delta_dec.max()+0.2)
+            plt.xlabel(r'$\Delta$ RA (arcsec)',fontsize=14)
+            plt.ylabel(r'$\Delta$ DEC (arcsec)',fontsize=14)
+            plt.savefig(outqaroot+'_pos_scatter.pdf')
             plt.close()
 
     return zp, zp_std, nstar
