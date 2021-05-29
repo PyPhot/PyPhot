@@ -56,6 +56,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                    "RESAMPLING_TYPE": 'NEAREST', #I would always set this to NEAREST for individual exposures to avoid interpolation
                    "HEADER_SUFFIX":"_cat.head"}
     # resample science image
+    msgs.info('Running Swarp for the first pass to align the science image.')
     swarp.swarpall(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                    coaddroot=None, delete=delete, log=log)
 
@@ -64,6 +65,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
     swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
     swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
+    msgs.info('Running Swarp for the first pass to align the flag image.')
     swarp.swarpall(flag_fits_list, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
                    coaddroot=None, delete=delete, log=False)
 
@@ -92,6 +94,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                   'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
                   'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
                   'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
+    msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
     sex.sexall(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
                defaultconfig='pyphot', conv='sex995', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
@@ -137,11 +140,13 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     ## configuration for the second swarp run
     swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
     # resample the science image
+    msgs.info('Running Swarp for the second pass to align the science image.')
     swarp.swarpall(sci_fits_list_resample, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                    coaddroot=None, delete=delete, log=log)
     # resample the flag image
     swarpconfig_flag['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
     swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
+    msgs.info('Running Swarp for the second pass to align the flag image.')
     swarp.swarpall(flag_fits_list_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
                    coaddroot=None, delete=delete, log=False)
 
@@ -175,6 +180,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
         par[0].writeto(flag_fits_list_resample[i], overwrite=True)
 
     ## Run SExtractor for the resampled images. The catalogs will be used for calibrating individual chips.
+    msgs.info('Running SExtractor for the second pass to extract catalog for resampled images.')
     sex.sexall(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
                defaultconfig='pyphot', conv='sex995', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
