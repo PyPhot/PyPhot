@@ -125,7 +125,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                        defaultconfig='pyphot', delete=delete, log=log)
         # copy the .head to .ahead
         for i in range(len(sci_fits_list_resample)):
-            os.system('cp {:} {:}'.format(cat_fits_list_resample[i].replace('.fits', '.head'),
+            os.system('mv {:} {:}'.format(cat_fits_list_resample[i].replace('.fits', '.head'),
                                           cat_fits_list_resample[i].replace('.fits', '.ahead')))
     # run the final scamp
     msgs.info('Running the final pass of SCAMP')
@@ -156,6 +156,11 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
         os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.fits')))
         os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.head')))
         os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp_cat.head')))
+
+    if scamp_second_pass:
+        for i in range(len(sci_fits_list)):
+            os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.ahead')))
+
     # Update fluxscale
     if solve_photom_scamp:
         msgs.info('The FLXSCALE was solved with scamp.')

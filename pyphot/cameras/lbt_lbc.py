@@ -308,7 +308,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['astrometry']['scamp_second_pass'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['position_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 10.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
         par['postproc']['astrometry']['detect_thresh'] = 15 # increasing this can improve the solution if your image is deep
         par['postproc']['astrometry']['analysis_thresh'] = 15
@@ -552,7 +552,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need two SCAMP passes for LBC
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['position_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 10.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
         par['postproc']['astrometry']['detect_thresh'] = 15 # increasing this can improve the solution if your image is deep
         par['postproc']['astrometry']['analysis_thresh'] = 15
