@@ -108,7 +108,7 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
 def scampall(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
 
     for catname in catlist:
-        msgs.info('Refine the astrometric solution with SCAMP {:} for {:}'.format(get_version(), catname))
+        msgs.info('Refine the astrometric solution with SCAMP {:} for {:}'.format(get_version(), os.path.basename(catname)))
         if config is not None:
             this_config = config.copy() # need to copy this since the config would be possibly changed in scampone!
         else:

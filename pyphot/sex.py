@@ -220,7 +220,7 @@ def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultc
         assert len(imglist) == len(weight_image_list), "weight_image_list should have the same length with imglist"
 
     for ii, imgname in enumerate(imglist):
-        msgs.info('Extracting photometric catalog with SExtractor {:} for {:}'.format(get_version(),imgname))
+        msgs.info('Extracting photometric catalog with SExtractor {:} for {:}'.format(get_version(),os.path.basename(imgname)))
         if flag_image_list is not None:
             flag_image = flag_image_list[ii]
         else:

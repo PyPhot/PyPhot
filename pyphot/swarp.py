@@ -154,7 +154,7 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
 
     else:
         for imgname in imglist:
-            msgs.info('Resampling {:} with Swarp {:}'.format(imgname, get_version()))
+            msgs.info('Resampling {:} with Swarp {:}'.format(os.path.basename(imgname), get_version()))
             if config is not None:
                 this_config = config.copy()# need to copy this since the config would be possibly changed in swarpone!
             else:
