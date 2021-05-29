@@ -305,13 +305,16 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
+        par['postproc']['astrometry']['scamp_second_pass'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['position_maxerr'] = 1.0
-        par['postproc']['astrometry']['detect_thresh'] = 10
-        par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 7
-        par['postproc']['astrometry']['crossid_radius'] = 5
+        par['postproc']['astrometry']['position_maxerr'] = 5.0
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
+        par['postproc']['astrometry']['posangle_maxerr'] = 1.0
+        par['postproc']['astrometry']['detect_thresh'] = 15 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 15
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 1
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 
@@ -523,7 +526,7 @@ class LBTLBCRCamera(LBTLBCCamera):
 
         # Calibrations
         # PyPhot default is 0.1. Use 0.03 to remove more bad pixels
-        par['calibrations']['pixelflatframe']['process']['maskpixvar'] =0.03
+        #par['calibrations']['pixelflatframe']['process']['maskpixvar'] =0.03 # This masks too many pixels. Not set maskpixvar
 
         # Image processing steps
         turn_off = dict(use_illumflat=False, use_biasimage=False, use_overscan=False,
@@ -547,13 +550,16 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
+        par['postproc']['astrometry']['scamp_second_pass'] = True # Need two SCAMP passes for LBC
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['detect_thresh'] = 10
-        par['postproc']['astrometry']['position_maxerr'] = 1.0
-        par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 7
-        par['postproc']['astrometry']['crossid_radius'] = 5
+        par['postproc']['astrometry']['position_maxerr'] = 5.0
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
+        par['postproc']['astrometry']['posangle_maxerr'] = 1.0
+        par['postproc']['astrometry']['detect_thresh'] = 15 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 15
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 1
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 

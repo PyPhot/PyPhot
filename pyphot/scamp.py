@@ -61,7 +61,7 @@ def get_config(config=None, workdir="./"):
     return configapp
 
 
-def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=True, log=False):
+def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=True, log=False):
 
     ## Get the version of your SCAMP
     scampversion = get_version()
@@ -75,21 +75,21 @@ def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         checkplot_name = config['CHECKPLOT_NAME'].split(',')
         checkplot_name_new = []
         for iname in checkplot_name:
-            tmp = os.path.join(QAdir,'{:}_{:}'.format(os.path.split(imgname)[1].replace('.fits',''),iname))
-            checkplot_name_new.append(tmp.replace('.','_'))
+            tmp = os.path.join(QAdir,'{:}_{:}'.format(os.path.split(catname)[1].replace('.fits',''),iname))
+            checkplot_name_new.append(tmp.replace('.','_').replace('_cat',''))
         separator = ','
         config['CHECKPLOT_NAME'] = separator.join(checkplot_name_new)
 
     configapp = get_config(config=config)
 
-    catname = imgname.replace('.fits','_cat.fits')
+    #catname = imgname.replace('.fits','_cat.fits')
     comd = ["scamp"] + [os.path.join(workdir, catname)] + configcomd + configapp
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     msgs.info("Header generated: " + os.path.join(workdir, catname[:-5]+".head"))
 
     if log:
-        logfile = open(os.path.join(workdir, imgname[:-5]+".scamp.log"), "w")
+        logfile = open(os.path.join(workdir, catname[:-5]+".scamp.log"), "w")
         logfile.write("SCAMP was called with :\n")
         logfile.write(" ".join(comd))
         logfile.write("\n\n####### stdout #######\n")
@@ -98,15 +98,15 @@ def scampone(imgname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         logfile.write(err.decode("utf-8"))
         logfile.write("\n")
         logfile.close()
-        msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".scamp.log"))
+        msgs.info("Processing log generated: " + os.path.join(workdir, catname[:-5]+".scamp.log"))
     if delete:
         os.system("rm " + os.path.join(workdir,"*.scamp"))
 
-def scampall(imglist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
+def scampall(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
 
-    for imgname in imglist:
+    for catname in catlist:
         if config is not None:
             this_config = config.copy() # need to copy this since the config would be possibly changed in scampone!
         else:
             this_config = None
-        scampone(imgname, config=this_config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig, delete=delete, log=log)
+        scampone(catname, config=this_config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig, delete=delete, log=log)

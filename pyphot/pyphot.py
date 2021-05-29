@@ -489,8 +489,12 @@ class PyPhot(object):
                                     astref_band=self.par['postproc']['astrometry']['astref_band'],
                                     position_maxerr=self.par['postproc']['astrometry']['position_maxerr'],
                                     pixscale_maxerr=self.par['postproc']['astrometry']['pixscale_maxerr'],
+                                    posangle_maxerr=self.par['postproc']['astrometry']['posangle_maxerr'],
+                                    distort_degrees=self.par['postproc']['astrometry']['distort_degrees'],
+                                    stability_type=self.par['postproc']['astrometry']['stability_type'],
                                     mosaic_type=self.par['postproc']['astrometry']['mosaic_type'],
                                     weight_type=self.par['postproc']['astrometry']['weight_type'],
+                                    scamp_second_pass=self.par['postproc']['astrometry']['scamp_second_pass'],
                                     solve_photom_scamp=self.par['postproc']['astrometry']['solve_photom_scamp'],
                                     delete=self.par['postproc']['astrometry']['delete'],
                                     log=self.par['postproc']['astrometry']['log'])

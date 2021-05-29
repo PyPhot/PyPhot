@@ -41,10 +41,10 @@ def defringing(sci_fits_list, masterfringeimg):
 
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
-                detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0,
-                pixscale_maxerr=1.1, mosaic_type='LOOSE',task='sex',
-                weight_type='MAP_WEIGHT', solve_photom_scamp=False, delete=False, log=True):
+                task='sex',detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=1.0,
+                astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0, distort_degrees=3,
+                pixscale_maxerr=1.1, posangle_maxerr=10.0, stability_type='INSTRUMENT', mosaic_type='LOOSE',
+                weight_type='MAP_WEIGHT', solve_photom_scamp=False, scamp_second_pass=False, delete=False, log=True):
 
     ## This step is basically align the image to N to the up and E to the left.
     ## this step is important if your image have a very different origination from the regular one.
@@ -97,28 +97,44 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
 
     # configuration for the scamp run
-    #
     if solve_photom_scamp:
         SOLVE_PHOTOM='Y'
     else:
         SOLVE_PHOTOM='N'
-    scampconfig0 = {"CROSSID_RADIUS": crossid_radius,
+    scampconfig = {"CROSSID_RADIUS": crossid_radius,
                     "ASTREF_CATALOG": astref_catalog,
                     "ASTREF_BAND": astref_band,
                     "POSITION_MAXERR": position_maxerr,
                     "PIXSCALE_MAXERR": pixscale_maxerr,
+                    "POSANGLE_MAXERR": posangle_maxerr, # ToDo: add to parset
+                    "STABILITY_TYPE": stability_type,
                     "MOSAIC_TYPE": mosaic_type,
                     "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                    "DISTORT_DEGREES":distort_degrees,
                     "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
                     "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
-    scamp.scampall(sci_fits_list_resample, config=scampconfig0, workdir=science_path, QAdir=qa_path,
+    if scamp_second_pass:
+        # first run with distort_degrees of 1
+        msgs.info('Running the first pass SCAMP with DISTORT_DEGREES of 1')
+        scampconfig1 = scampconfig.copy()
+        scampconfig1['DISTORT_DEGREES'] = 1
+        scamp.scampall(cat_fits_list_resample, config=scampconfig1, workdir=science_path, QAdir=qa_path,
+                       defaultconfig='pyphot', delete=delete, log=log)
+        # copy the .head to .ahead
+        for i in range(len(sci_fits_list_resample)):
+            os.system('cp {:} {:}'.format(cat_fits_list_resample[i].replace('.fits', '.head'),
+                                          cat_fits_list_resample[i].replace('.fits', '.ahead')))
+    # run the final scamp
+    msgs.info('Running the final pass of SCAMP')
+    scamp.scampall(cat_fits_list_resample, config=scampconfig, workdir=science_path, QAdir=qa_path,
                    defaultconfig='pyphot', delete=delete, log=log)
+
     ## copy the .head for flag images
     for i in range(len(sci_fits_list_resample)):
         os.system('cp {:} {:}'.format(sci_fits_list_resample[i].replace('.fits', '_cat.head'),
                                       flag_fits_list_resample[i].replace('.fits', '_cat.head')))
 
-    # configuration for the second swarp run
+    ## configuration for the second swarp run
     swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
     # resample the science image
     swarp.swarpall(sci_fits_list_resample, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',

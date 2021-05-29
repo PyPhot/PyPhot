@@ -547,9 +547,10 @@ class AstrometricPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
+    def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, weight_type=None, solve_photom_scamp=None,
+                 posangle_maxerr=None, stability_type=None, distort_degrees=None,
                  delete=None, log=None):
 
         # Grab the parameter names and values from the function
@@ -567,6 +568,10 @@ class AstrometricPar(ParSet):
         defaults['skip'] = False
         dtypes['skip'] = bool
         descr['skip'] = 'Skip the astrometry for individual detector image?'
+
+        defaults['scamp_second_pass'] = False
+        dtypes['scamp_second_pass'] = bool
+        descr['scamp_second_pass'] = 'Perform second pass with SCAMP? Useful for instrument with large distortions.'
 
         defaults['weight_type'] = 'MAP_WEIGHT'
         options['weight_type'] = AstrometricPar.valid_weight_type()
@@ -596,6 +601,20 @@ class AstrometricPar(ParSet):
         defaults['pixscale_maxerr'] = 1.1
         dtypes['pixscale_maxerr'] = [int, float]
         descr['pixscale_maxerr'] = 'Max scale-factor uncertainty'
+
+        defaults['posangle_maxerr'] = 10.0
+        dtypes['posangle_maxerr'] = [int, float]
+        descr['posangle_maxerr'] = 'Max position-angle uncertainty (deg)'
+
+        defaults['distort_degrees'] = 3
+        dtypes['distort_degrees'] = int
+        descr['distort_degrees'] = 'Polynom degree for each group'
+
+        defaults['stability_type'] = 'INSTRUMENT'
+        options['stability_type'] = AstrometricPar.valid_stability_methods()
+        dtypes['stability_type'] = str
+        descr['stability_type'] = 'Reference catalog  Options are: {0}'.format(
+                                       ', '.join(options['stability_type']))
 
         defaults['mosaic_type'] = 'LOOSE'
         options['mosaic_type'] = AstrometricPar.valid_mosaic_methods()
@@ -636,8 +655,9 @@ class AstrometricPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
+        parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
+                   'posangle_maxerr', 'stability_type', 'distort_degrees',
                    'weight_type', 'solve_photom_scamp', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -662,6 +682,13 @@ class AstrometricPar(ParSet):
         Return the valid methods for mosaic method.
         """
         return ['UNCHANGED', 'SAME_CRVAL', 'SHARE_PROJAXIS','FIX_FOCALPLANE','LOOSE']
+
+    @staticmethod
+    def valid_stability_methods():
+        """
+        Return the valid methods for SCAMP stability method.
+        """
+        return ['INSTRUMENT', 'EXPOSURE', 'PRE-DISTORTED']
 
     @staticmethod
     def valid_catalog_methods():
