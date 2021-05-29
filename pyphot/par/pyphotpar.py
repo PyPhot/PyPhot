@@ -578,11 +578,11 @@ class AstrometricPar(ParSet):
         dtypes['weight_type'] = str
         descr['weight_type'] = 'Background Options are: {0}'.format(', '.join(options['weight_type']))
 
-        defaults['detect_thresh'] = 3.0
+        defaults['detect_thresh'] = 5.0
         dtypes['detect_thresh'] = [int, float]
         descr['detect_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for detection'
 
-        defaults['analysis_thresh'] = 3.0
+        defaults['analysis_thresh'] = 5.0
         dtypes['analysis_thresh'] = [int, float]
         descr['analysis_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for analysis'
 

@@ -168,11 +168,11 @@ class CFHTWIRCAMCamera(camera.Camera):
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['detect_thresh'] = 10
+        par['postproc']['astrometry']['detect_thresh'] = 5
         par['postproc']['astrometry']['position_maxerr'] = 1.0
-        par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 7
-        par['postproc']['astrometry']['crossid_radius'] = 5
+        par['postproc']['astrometry']['analysis_thresh'] = 5
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 2
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 
