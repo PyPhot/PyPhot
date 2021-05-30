@@ -222,6 +222,10 @@ class PyPhot(object):
         detectors = PyPhot.select_detectors(detnum=self.par['rdx']['detnum'],
                                             ndet=self.camera.ndet)
 
+        ## Step one: process and calibrate individual exposures, do it chips by chips
+        # It includes: bias, dark subtraction, flat fielding, super-sky flattening, Fringe subtraction
+        #              cosmic ray rejection, astrometry calibration, and photometric calibrations
+        #              all these steps are performed chips by chips.
         # Iterate over each calibration group and reduce the science frames
         for i in range(self.fitstbl.n_calib_groups):
             # Find all the frames in this calibration group
@@ -543,7 +547,7 @@ class PyPhot(object):
                 ##       RESAMPLING_TYPE = NEAREST,
                 ##       Not sure whether its usful or not given that we can just ds9 -mosaic **resample.fits to check the image.
 
-        ## Do the coadding and source detection
+        ## Step two: coadding, second pass on the photometric calibration, and source detection
         ## The images are combined based on the coadd_id in your PyPhot file.
         ## Make sure to use different coadd_id for different filters
         objids = np.unique(self.fitstbl['coadd_id'][is_science]) ## number of combine groups
