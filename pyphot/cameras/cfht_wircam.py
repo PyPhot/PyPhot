@@ -7,6 +7,7 @@ import numpy as np
 
 from astropy import wcs
 from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
 
 from pyphot import msgs
 from pyphot import parse
@@ -358,7 +359,7 @@ class CFHTWIRCAMCamera(camera.Camera):
             msgs.error("Found {:d} files matching {:s}".format(len(fil)))
 
         # Read
-        msgs.info("Reading CFHT WIRCam sky-subtracted image: {:s}".format(fil[0]))
+        msgs.info("Reading CFHT WIRCam processed image: {:s}".format(fil[0]))
         hdu = fits.open(fil[0])
         head = fits.getheader(fil[0], 0)
         head_det = fits.getheader(fil[0], det)
@@ -418,12 +419,16 @@ class CFHTWIRCAMCamera(camera.Camera):
                 x_shift, y_shift = 2*(x_this-x_pos0), 2*(y_this-y_pos0)
                 this_dither = np.roll(this_dither,int(x_shift),axis=1)
                 this_dither = np.roll(this_dither,int(y_shift),axis=0)
-                cube[ii, :, :] = this_dither
+                cube[ii, :, :] = this_dither - np.median(this_dither[:7,:7])
                 cube_flag[ii, :, :] = (this_dither==0.) ## True for pixels=0
-            data_flag = np.sum(cube_flag, axis=0)
-            data = np.median(cube, axis=0)
-            data[data_flag.astype('bool')] = 0 ## make pixels affected by bad pixels to be zero
-
+            #data_flag = np.sum(cube_flag, axis=0)
+            #data = np.median(cube, axis=0)
+            #data[data_flag.astype('bool')] = 0 ## make pixels affected by bad pixels to be zero
+            #from IPython import embed
+            #embed()
+            _, data, _ = sigma_clipped_stats(cube, cube_flag, sigma=3, maxiters=1,
+                                             cenfunc='median', stdfunc='std', axis=0)
+            data[np.isnan(data)] = 0
             x1, x2, y1, y2 = x1*xbin, x2*xbin, y1*ybin, y2*ybin
             detector_par['platescale'] = detector_par['platescale'] / xbin
         else:

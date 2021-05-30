@@ -218,6 +218,10 @@ class PyPhot(object):
         # Frame indices
         frame_indx = np.arange(len(self.fitstbl))
 
+        # Find the detectors to reduce
+        detectors = PyPhot.select_detectors(detnum=self.par['rdx']['detnum'],
+                                            ndet=self.camera.ndet)
+
         # Iterate over each calibration group and reduce the science frames
         for i in range(self.fitstbl.n_calib_groups):
             # Find all the frames in this calibration group
@@ -229,10 +233,6 @@ class PyPhot(object):
                 grp_frames = frame_indx[in_grp]
                 # Find the indices of the science frames in this calibration group:
                 grp_science = frame_indx[is_science & in_grp]
-
-                # Find the detectors to reduce
-                detectors = PyPhot.select_detectors(detnum=self.par['rdx']['detnum'],
-                                                ndet=self.camera.ndet)
 
                 # Loop on Detectors for calibrations and processing images
                 for self.det in detectors:
@@ -543,234 +543,235 @@ class PyPhot(object):
                 ##       RESAMPLING_TYPE = NEAREST,
                 ##       Not sure whether its usful or not given that we can just ds9 -mosaic **resample.fits to check the image.
 
-                ## Do the coadding and source detection target by target and filter by filter
-                ## The images are combined based on the coadd_id in your PyPhot file.
-                objids = np.unique(self.fitstbl['coadd_id'][grp_science]) ## number of combine groups
-                for objid in objids:
-                    grp_iobj = frame_indx[is_science & in_grp & (self.fitstbl['coadd_id']==objid)]
-                    iobjfiles = self.fitstbl['filename'][grp_iobj]
-                    filter_iobj = self.fitstbl['filter'][grp_iobj][0]
-                    coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_ID{:03d}'.format(filter_iobj,objid)
-                    if ('.gz' in iobjfiles[0]) or ('.fz' in iobjfiles[0]):
-                        for ii in range(len(iobjfiles)):
-                            iobjfiles[ii] = iobjfiles[ii].replace('.gz','').replace('.fz','')
-                    # The name of reference catalog that will be saved to Master folder
-                    out_refcat = 'MasterRefCat_{:}_ID{:03d}.fits'.format(self.par['postproc']['photometry']['photref_catalog'],objid)
-                    out_refcat_fullpath = os.path.join(self.par['calibrations']['master_dir'], out_refcat)
+        ## Do the coadding and source detection
+        ## The images are combined based on the coadd_id in your PyPhot file.
+        ## Make sure to use different coadd_id for different filters
+        objids = np.unique(self.fitstbl['coadd_id'][is_science]) ## number of combine groups
+        for objid in objids:
+            grp_iobj = frame_indx[is_science & (self.fitstbl['coadd_id']==objid)] #& in_grp
+            iobjfiles = self.fitstbl['filename'][grp_iobj]
+            filter_iobj = self.fitstbl['filter'][grp_iobj][0]
+            coaddroot = self.fitstbl['target'][grp_iobj][0]+'_{:}_coadd_ID{:03d}'.format(filter_iobj,objid)
+            if ('.gz' in iobjfiles[0]) or ('.fz' in iobjfiles[0]):
+                for ii in range(len(iobjfiles)):
+                    iobjfiles[ii] = iobjfiles[ii].replace('.gz','').replace('.fz','')
+            # The name of reference catalog that will be saved to Master folder
+            out_refcat = 'MasterRefCat_{:}_ID{:03d}.fits'.format(self.par['postproc']['photometry']['photref_catalog'],objid)
+            out_refcat_fullpath = os.path.join(self.par['calibrations']['master_dir'], out_refcat)
 
-                    # compile the file list
-                    nscifits = np.size(iobjfiles)
-                    scifiles_iobj= []
-                    flagfiles_iobj= []
-                    whtfiles_iobj= []
-                    for idet in detectors:
-                        for ii in range(nscifits):
-                            #if self.par['postproc']['astrometry']['skip_astrometry']:
-                            if os.path.exists(os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                           '_det{:02d}_sci.resamp.fits'.format(idet)))):
-                                this_sci = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                     '_det{:02d}_sci.resamp.fits'.format(idet)))
-                                this_flag = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                     '_det{:02d}_flag.resamp.fits'.format(idet)))
-                                this_wht = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                     '_det{:02d}_sci.resamp.weight.fits'.format(idet)))
-                            else:
-                                this_sci = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                     '_det{:02d}_sci.fits'.format(idet)))
-                                this_flag = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                     '_det{:02d}_flag.fits'.format(idet)))
-                                this_wht = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
-                                                     '_det{:02d}_sci.weight.fits'.format(idet)))
-
-                            scifiles_iobj.append(this_sci)
-                            flagfiles_iobj.append(this_flag)
-                            whtfiles_iobj.append(this_wht)
-
-                    ## Do it
-                    if self.par['postproc']['coadd']['skip']:
-                        msgs.warn('Skipping coadding process. Make sure you have produced the coadded images !!!')
+            # compile the file list
+            nscifits = np.size(iobjfiles)
+            scifiles_iobj= []
+            flagfiles_iobj= []
+            whtfiles_iobj= []
+            for idet in detectors:
+                for ii in range(nscifits):
+                    #if self.par['postproc']['astrometry']['skip_astrometry']:
+                    if os.path.exists(os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                                   '_det{:02d}_sci.resamp.fits'.format(idet)))):
+                        this_sci = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                             '_det{:02d}_sci.resamp.fits'.format(idet)))
+                        this_flag = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                             '_det{:02d}_flag.resamp.fits'.format(idet)))
+                        this_wht = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                             '_det{:02d}_sci.resamp.weight.fits'.format(idet)))
                     else:
-                        coadd_file, coadd_wht_file, coadd_flag_file = postproc.coadd(scifiles_iobj, flagfiles_iobj, coaddroot,
-                                                    pixscale, self.science_path, self.coadd_path,
-                                                    weight_type=self.par['postproc']['coadd']['weight_type'],
-                                                    rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
-                                                    combine_type=self.par['postproc']['coadd']['combine_type'],
-                                                    clip_ampfrac=self.par['postproc']['coadd']['clip_ampfrac'],
-                                                    clip_sigma=self.par['postproc']['coadd']['clip_sigma'],
-                                                    blank_badpixels=self.par['postproc']['coadd']['blank_badpixels'],
-                                                    subtract_back=self.par['postproc']['coadd']['subtract_back'],
-                                                    back_type=self.par['postproc']['coadd']['back_type'],
-                                                    back_default=self.par['postproc']['coadd']['back_default'],
-                                                    back_size=self.par['postproc']['coadd']['back_size'],
-                                                    back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
-                                                    back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
-                                                    resampling_type=self.par['postproc']['coadd']['resampling_type'],
-                                                    delete=self.par['postproc']['coadd']['delete'],
-                                                    log=self.par['postproc']['coadd']['log'])
+                        this_sci = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                             '_det{:02d}_sci.fits'.format(idet)))
+                        this_flag = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                             '_det{:02d}_flag.fits'.format(idet)))
+                        this_wht = os.path.join(self.science_path,iobjfiles[ii].replace('.fits',
+                                             '_det{:02d}_sci.weight.fits'.format(idet)))
 
-                    ## Detection
-                    if self.par['postproc']['detection']['skip']:
-                        msgs.warn('Skipping detecting process. Make sure you have extracted source catalog !!!')
-                    else:
-                        if self.par['postproc']['detection']['detection_method'] == 'Photutils':
-                            # detection with photoutils
-                            data = fits.getdata(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
-                            flag = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_flag.fits'))
-                            mask = flag>0.
-                            header = fits.getheader(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
-                            wcs_info = wcs.WCS(header)
-                            effective_gain = header['EXPTIME']
+                    scifiles_iobj.append(this_sci)
+                    flagfiles_iobj.append(this_flag)
+                    whtfiles_iobj.append(this_wht)
 
-                            ## Run the detection
-                            phot_table, rmsmap, bkgmap = postproc.detect(data, wcs_info, mask=mask, rmsmap=None, bkgmap=None,
-                                                         effective_gain=effective_gain,
-                                                         nsigma=self.par['postproc']['detection']['detect_thresh'],
-                                                         npixels=self.par['postproc']['detection']['detect_minarea'],
-                                                         fwhm=self.par['postproc']['detection']['fwhm'],
-                                                         nlevels=self.par['postproc']['detection']['nlevels'],
-                                                         contrast=self.par['postproc']['detection']['contrast'],
-                                                         back_nsigma=self.par['postproc']['detection']['back_nsigma'],
-                                                         back_maxiters=self.par['postproc']['detection']['back_maxiters'],
-                                                         back_type=self.par['postproc']['detection']['back_type'],
-                                                         back_rms_type=self.par['postproc']['detection']['back_rms_type'],
-                                                         back_size=self.par['postproc']['detection']['back_size'],
-                                                         back_filter_size=self.par['postproc']['detection']['back_filtersize'],
-                                                         morp_filter=self.par['postproc']['detection']['morp_filter'],
-                                                         phot_apertures=self.par['postproc']['detection']['phot_apertures'])
-                            ## save the table and maps
-                            phot_table.write(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'), overwrite=True)
-                            par = fits.PrimaryHDU(rmsmap, header)
-                            par.writeto(os.path.join(self.coadd_path, coaddroot + '_rms.fits'), overwrite=True)
-                            #par = fits.PrimaryHDU(bkgmap, header)
-                            #par.writeto(os.path.join(self.coadd_path, coaddroot + '_bkg.fits'), overwrite=True)
+            ## Do it
+            if self.par['postproc']['coadd']['skip']:
+                msgs.warn('Skipping coadding process. Make sure you have produced the coadded images !!!')
+            else:
+                coadd_file, coadd_wht_file, coadd_flag_file = postproc.coadd(scifiles_iobj, flagfiles_iobj, coaddroot,
+                                            pixscale, self.science_path, self.coadd_path,
+                                            weight_type=self.par['postproc']['coadd']['weight_type'],
+                                            rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
+                                            combine_type=self.par['postproc']['coadd']['combine_type'],
+                                            clip_ampfrac=self.par['postproc']['coadd']['clip_ampfrac'],
+                                            clip_sigma=self.par['postproc']['coadd']['clip_sigma'],
+                                            blank_badpixels=self.par['postproc']['coadd']['blank_badpixels'],
+                                            subtract_back=self.par['postproc']['coadd']['subtract_back'],
+                                            back_type=self.par['postproc']['coadd']['back_type'],
+                                            back_default=self.par['postproc']['coadd']['back_default'],
+                                            back_size=self.par['postproc']['coadd']['back_size'],
+                                            back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
+                                            back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
+                                            resampling_type=self.par['postproc']['coadd']['resampling_type'],
+                                            delete=self.par['postproc']['coadd']['delete'],
+                                            log=self.par['postproc']['coadd']['log'])
 
-                        elif self.par['postproc']['detection']['detection_method'] == 'SExtractor':
-                            ## detection with SExtractor
-                            phot_apertures = self.par['postproc']['detection']['phot_apertures']
+            ## Detection
+            if self.par['postproc']['detection']['skip']:
+                msgs.warn('Skipping detecting process. Make sure you have extracted source catalog !!!')
+            else:
+                if self.par['postproc']['detection']['detection_method'] == 'Photutils':
+                    # detection with photoutils
+                    data = fits.getdata(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
+                    flag = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_flag.fits'))
+                    mask = flag>0.
+                    header = fits.getheader(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
+                    wcs_info = wcs.WCS(header)
+                    effective_gain = header['EXPTIME']
 
-                            ## configuration for the sextractor run
-                            # configuration for the first SExtractor run
-                            det_params = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
-                                          'ERRBWIN_IMAGE', 'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE',
-                                          'ISOAREA_IMAGE', 'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO',
-                                          'FLUXERR_AUTO', 'MAG_APER({:})'.format(len(phot_apertures)),
-                                          'MAGERR_APER({:})'.format(len(phot_apertures)),
-                                          'FLUX_APER({:})'.format(len(phot_apertures)),
-                                          'FLUXERR_APER({:})'.format(len(phot_apertures)),
-                                          'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
-                            det_config = {"CATALOG_TYPE": "FITS_LDAC",
-                                         "BACK_TYPE": self.par['postproc']['detection']['back_type'],
-                                         "BACK_VALUE": self.par['postproc']['detection']['back_default'],
-                                         "BACK_SIZE": self.par['postproc']['detection']['back_size'],
-                                         "BACK_FILTERSIZE": self.par['postproc']['detection']['back_filtersize'],
-                                         "BACKPHOTO_TYPE": self.par['postproc']['detection']['backphoto_type'],
-                                         "BACKPHOTO_THICK": self.par['postproc']['detection']['backphoto_thick'],
-                                         "WEIGHT_TYPE": self.par['postproc']['detection']['weight_type'],
-                                         "DETECT_THRESH": self.par['postproc']['detection']['detect_thresh'],
-                                         "ANALYSIS_THRESH": self.par['postproc']['detection']['detect_thresh'],
-                                         "DETECT_MINAREA": self.par['postproc']['detection']['detect_minarea'],
-                                         "DEBLEND_NTHRESH": self.par['postproc']['detection']['nlevels'],
-                                         "DEBLEND_MINCONT": self.par['postproc']['detection']['contrast'],
-                                         "CHECKIMAGE_TYPE": self.par['postproc']['detection']['check_type'],
-                                         "CHECKIMAGE_NAME": os.path.join(self.coadd_path, coaddroot + '_rms.fits'),
-                                         "PHOT_APERTURES": np.array(phot_apertures) / pixscale}
-                            sex.sexone(os.path.join(self.coadd_path,coaddroot+'_sci.fits'),
-                                       flag_image=os.path.join(self.coadd_path,coaddroot+'_flag.fits'),
-                                       weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.weight.fits'),
-                                       task=self.par['rdx']['sextractor'],
-                                       config=det_config, workdir=self.coadd_path, params=det_params,
-                                       defaultconfig='pyphot', dual=False,
-                                       conv=self.par['postproc']['detection']['conv'],
-                                       nnw=self.par['postproc']['detection']['nnw'],
-                                       delete=False,
-                                       log=self.par['postproc']['detection']['log'])
-                            if 'RMS' in self.par['postproc']['detection']['check_type']:
-                                rmsmap = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_rms.fits'))
-                            phot_table = Table.read(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),2)
+                    ## Run the detection
+                    phot_table, rmsmap, bkgmap = postproc.detect(data, wcs_info, mask=mask, rmsmap=None, bkgmap=None,
+                                                 effective_gain=effective_gain,
+                                                 nsigma=self.par['postproc']['detection']['detect_thresh'],
+                                                 npixels=self.par['postproc']['detection']['detect_minarea'],
+                                                 fwhm=self.par['postproc']['detection']['fwhm'],
+                                                 nlevels=self.par['postproc']['detection']['nlevels'],
+                                                 contrast=self.par['postproc']['detection']['contrast'],
+                                                 back_nsigma=self.par['postproc']['detection']['back_nsigma'],
+                                                 back_maxiters=self.par['postproc']['detection']['back_maxiters'],
+                                                 back_type=self.par['postproc']['detection']['back_type'],
+                                                 back_rms_type=self.par['postproc']['detection']['back_rms_type'],
+                                                 back_size=self.par['postproc']['detection']['back_size'],
+                                                 back_filter_size=self.par['postproc']['detection']['back_filtersize'],
+                                                 morp_filter=self.par['postproc']['detection']['morp_filter'],
+                                                 phot_apertures=self.par['postproc']['detection']['phot_apertures'])
+                    ## save the table and maps
+                    phot_table.write(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'), overwrite=True)
+                    par = fits.PrimaryHDU(rmsmap, header)
+                    par.writeto(os.path.join(self.coadd_path, coaddroot + '_rms.fits'), overwrite=True)
+                    #par = fits.PrimaryHDU(bkgmap, header)
+                    #par.writeto(os.path.join(self.coadd_path, coaddroot + '_bkg.fits'), overwrite=True)
 
-                    if self.par['postproc']['photometry']['cal_zpt']:
-                        msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits')))
-                        zp, zp_std, nstar = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),
-                                                            refcatalog=self.par['postproc']['photometry']['photref_catalog'],
-                                                            primary=self.par['postproc']['photometry']['primary'],
-                                                            secondary=self.par['postproc']['photometry']['secondary'],
-                                                            coefficients=self.par['postproc']['photometry']['coefficients'],
-                                                            FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
-                                                            external_flag=self.par['postproc']['photometry']['external_flag'],
-                                                            outqaroot=os.path.join(self.qa_path, coaddroot))
-                        par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
-                        par[0].header['ZP'] = zp
-                        par[0].header['ZP_STD'] = zp_std
-                        par[0].header['ZP_NSTAR'] = nstar
-                        par.writeto(os.path.join(self.coadd_path, coaddroot + '_sci.fits'),overwrite=True)
+                elif self.par['postproc']['detection']['detection_method'] == 'SExtractor':
+                    ## detection with SExtractor
+                    phot_apertures = self.par['postproc']['detection']['phot_apertures']
 
-                    '''
-                    ## Estimate Map rms
-                    zp = 24.1
-                    from astropy.stats import sigma_clipped_stats
-                    from photutils import CircularAperture, aperture_photometry
-                    mean, median, std = sigma_clipped_stats(data[flag==0.], sigma=3.0, maxiters=10)
-                    positions = np.zeros((5000,2))
-                    positions[:,0] = np.random.randint(2000,7000,5000)
-                    positions[:,1] = np.random.randint(2000,7000,5000)
-                    aperture = CircularAperture(positions, r=1.0/pixscale)
-                    maglim1 = zp - 2.5 * np.log10(np.sqrt(rms ** 2 * aperture.area) * 5.0)
-                    msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from variance map is {:0.2f}'.format(rms))
-                    phot_table = aperture_photometry(par[0].data, aperture)
-                    maglim2 = zp-2.5*np.log10(phot_table['aperture_sum'].data * 5.0)
-                    mean, median, std = sigma_clipped_stats(maglim2[~np.isnan(maglim2)], sigma=3.0)
-                    msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from random positions is {:0.2f}'.format(mean))
-
-
-                    ## Source detection with DAOFIND
-                    from photutils import DAOStarFinder
-                    daofind = DAOStarFinder(fwhm=1.0/pixscale, threshold=10.*rms)
-                    sources = daofind(par[0].data)
-
-                    ## Compute a variance map
-                    from astropy.stats import SigmaClip
-                    from photutils import Background2D, MedianBackground
-                    bkg_estimator = MedianBackground()
-                    sigma_clip = SigmaClip(sigma=3.0)
-
-                    par = fits.open(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
-                    bkg = Background2D(par[0].data, (100,100), filter_size=(3, 3), sigma_clip=sigma_clip,
-                                       bkg_estimator=bkg_estimator)
-                    var_image = np.power(bkg.background_rms, 2)
-                    par[0].data = bkg.background
-                    par.writeto(os.path.join(self.coadd_path, coaddroot+'_sci.bkg.fits'),overwrite=True)
-                    par[0].data = var_image
-                    par.writeto(os.path.join(self.coadd_path, coaddroot+'_sci.var.fits'),overwrite=True)
-
-                    sexconfig = {"CHECKIMAGE_TYPE": "OBJECTS", "WEIGHT_TYPE": "MAP_VAR", "CATALOG_NAME": "dummy.cat",
-                                  "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
-                                  "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "BACKPHOTO_TYPE":"GLOBAL",
-                                  "BACK_SIZE": 100}
+                    ## configuration for the sextractor run
+                    # configuration for the first SExtractor run
+                    det_params = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
+                                  'ERRBWIN_IMAGE', 'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE',
+                                  'ISOAREA_IMAGE', 'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO',
+                                  'FLUXERR_AUTO', 'MAG_APER({:})'.format(len(phot_apertures)),
+                                  'MAGERR_APER({:})'.format(len(phot_apertures)),
+                                  'FLUX_APER({:})'.format(len(phot_apertures)),
+                                  'FLUXERR_APER({:})'.format(len(phot_apertures)),
+                                  'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
+                    det_config = {"CATALOG_TYPE": "FITS_LDAC",
+                                 "BACK_TYPE": self.par['postproc']['detection']['back_type'],
+                                 "BACK_VALUE": self.par['postproc']['detection']['back_default'],
+                                 "BACK_SIZE": self.par['postproc']['detection']['back_size'],
+                                 "BACK_FILTERSIZE": self.par['postproc']['detection']['back_filtersize'],
+                                 "BACKPHOTO_TYPE": self.par['postproc']['detection']['backphoto_type'],
+                                 "BACKPHOTO_THICK": self.par['postproc']['detection']['backphoto_thick'],
+                                 "WEIGHT_TYPE": self.par['postproc']['detection']['weight_type'],
+                                 "DETECT_THRESH": self.par['postproc']['detection']['detect_thresh'],
+                                 "ANALYSIS_THRESH": self.par['postproc']['detection']['detect_thresh'],
+                                 "DETECT_MINAREA": self.par['postproc']['detection']['detect_minarea'],
+                                 "DEBLEND_NTHRESH": self.par['postproc']['detection']['nlevels'],
+                                 "DEBLEND_MINCONT": self.par['postproc']['detection']['contrast'],
+                                 "CHECKIMAGE_TYPE": self.par['postproc']['detection']['check_type'],
+                                 "CHECKIMAGE_NAME": os.path.join(self.coadd_path, coaddroot + '_rms.fits'),
+                                 "PHOT_APERTURES": np.array(phot_apertures) / pixscale}
                     sex.sexone(os.path.join(self.coadd_path,coaddroot+'_sci.fits'),
                                flag_image=os.path.join(self.coadd_path,coaddroot+'_flag.fits'),
-                               weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.var.fits'),
-                               task=self.par['rdx']['sextractor'], config=sexconfig, workdir=self.coadd_path, params=sexparams,
-                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
+                               weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.weight.fits'),
+                               task=self.par['rdx']['sextractor'],
+                               config=det_config, workdir=self.coadd_path, params=det_params,
+                               defaultconfig='pyphot', dual=False,
+                               conv=self.par['postproc']['detection']['conv'],
+                               nnw=self.par['postproc']['detection']['nnw'],
+                               delete=False,
+                               log=self.par['postproc']['detection']['log'])
+                    if 'RMS' in self.par['postproc']['detection']['check_type']:
+                        rmsmap = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_rms.fits'))
+                    phot_table = Table.read(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),2)
 
-                    # refine the astrometry with the coadded image against with GAIA
-                    scampconfig = {"CROSSID_RADIUS": 2.0, "ASTREF_CATALOG": "GAIA-DR2", "ASTREF_BAND": "DEFAULT",
-                                    "PIXSCALE_MAXERR": 1.1, "MOSAIC_TYPE": "UNCHANGED"}
-                    scamp.scampone(os.path.join(self.coadd_path,coaddroot+'.fits'), config=scampconfig, workdir=self.coadd_path, defaultconfig='pyphot',
-                                   delete=False, log=True)
-                    swarp.swarpone(os.path.join(self.coadd_path,coaddroot+'.fits'), config=swarpconfig, workdir=self.coadd_path, defaultconfig='pyphot',
-                                   delete=True, log=False)
-                    sex.sexone(os.path.join(self.coadd_path,coaddroot+'.resamp.fits'), task=self.par['rdx']['sextractor'], config=sexconfig, workdir=self.coadd_path, params=None,
-                               defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
+            if self.par['postproc']['photometry']['cal_zpt']:
+                msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits')))
+                zp, zp_std, nstar = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),
+                                                    refcatalog=self.par['postproc']['photometry']['photref_catalog'],
+                                                    primary=self.par['postproc']['photometry']['primary'],
+                                                    secondary=self.par['postproc']['photometry']['secondary'],
+                                                    coefficients=self.par['postproc']['photometry']['coefficients'],
+                                                    FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
+                                                    external_flag=self.par['postproc']['photometry']['external_flag'],
+                                                    outqaroot=os.path.join(self.qa_path, coaddroot))
+                par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
+                par[0].header['ZP'] = zp
+                par[0].header['ZP_STD'] = zp_std
+                par[0].header['ZP_NSTAR'] = nstar
+                par.writeto(os.path.join(self.coadd_path, coaddroot + '_sci.fits'),overwrite=True)
 
-                    # rerun the SExtractor with the zero point
-                    zp = 24.1 # zeropoint for the NB919, calibrated with Legacy survey z-band
-                    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                                 "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 2.0, "ANALYSIS_THRESH": 2.0,
-                                 "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "MAG_ZEROPOINT": zp}
-                    sex.sexone(os.path.join(self.coadd_path, coaddroot + '.resamp.fits'), task=self.par['rdx']['sextractor'], config=sexconfig, workdir=self.coadd_path,
-                               params=None, defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
+                '''
+                ## Estimate Map rms
+                zp = 24.1
+                from astropy.stats import sigma_clipped_stats
+                from photutils import CircularAperture, aperture_photometry
+                mean, median, std = sigma_clipped_stats(data[flag==0.], sigma=3.0, maxiters=10)
+                positions = np.zeros((5000,2))
+                positions[:,0] = np.random.randint(2000,7000,5000)
+                positions[:,1] = np.random.randint(2000,7000,5000)
+                aperture = CircularAperture(positions, r=1.0/pixscale)
+                maglim1 = zp - 2.5 * np.log10(np.sqrt(rms ** 2 * aperture.area) * 5.0)
+                msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from variance map is {:0.2f}'.format(rms))
+                phot_table = aperture_photometry(par[0].data, aperture)
+                maglim2 = zp-2.5*np.log10(phot_table['aperture_sum'].data * 5.0)
+                mean, median, std = sigma_clipped_stats(maglim2[~np.isnan(maglim2)], sigma=3.0)
+                msgs.info('The 5-sigma limit of 2.0 arcsec diameter aperture measured from random positions is {:0.2f}'.format(mean))
 
-                    '''
+
+                ## Source detection with DAOFIND
+                from photutils import DAOStarFinder
+                daofind = DAOStarFinder(fwhm=1.0/pixscale, threshold=10.*rms)
+                sources = daofind(par[0].data)
+
+                ## Compute a variance map
+                from astropy.stats import SigmaClip
+                from photutils import Background2D, MedianBackground
+                bkg_estimator = MedianBackground()
+                sigma_clip = SigmaClip(sigma=3.0)
+
+                par = fits.open(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
+                bkg = Background2D(par[0].data, (100,100), filter_size=(3, 3), sigma_clip=sigma_clip,
+                                   bkg_estimator=bkg_estimator)
+                var_image = np.power(bkg.background_rms, 2)
+                par[0].data = bkg.background
+                par.writeto(os.path.join(self.coadd_path, coaddroot+'_sci.bkg.fits'),overwrite=True)
+                par[0].data = var_image
+                par.writeto(os.path.join(self.coadd_path, coaddroot+'_sci.var.fits'),overwrite=True)
+
+                sexconfig = {"CHECKIMAGE_TYPE": "OBJECTS", "WEIGHT_TYPE": "MAP_VAR", "CATALOG_NAME": "dummy.cat",
+                              "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 1.5, "ANALYSIS_THRESH": 1.5,
+                              "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "BACKPHOTO_TYPE":"GLOBAL",
+                              "BACK_SIZE": 100}
+                sex.sexone(os.path.join(self.coadd_path,coaddroot+'_sci.fits'),
+                           flag_image=os.path.join(self.coadd_path,coaddroot+'_flag.fits'),
+                           weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.var.fits'),
+                           task=self.par['rdx']['sextractor'], config=sexconfig, workdir=self.coadd_path, params=sexparams,
+                           defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=True)
+
+                # refine the astrometry with the coadded image against with GAIA
+                scampconfig = {"CROSSID_RADIUS": 2.0, "ASTREF_CATALOG": "GAIA-DR2", "ASTREF_BAND": "DEFAULT",
+                                "PIXSCALE_MAXERR": 1.1, "MOSAIC_TYPE": "UNCHANGED"}
+                scamp.scampone(os.path.join(self.coadd_path,coaddroot+'.fits'), config=scampconfig, workdir=self.coadd_path, defaultconfig='pyphot',
+                               delete=False, log=True)
+                swarp.swarpone(os.path.join(self.coadd_path,coaddroot+'.fits'), config=swarpconfig, workdir=self.coadd_path, defaultconfig='pyphot',
+                               delete=True, log=False)
+                sex.sexone(os.path.join(self.coadd_path,coaddroot+'.resamp.fits'), task=self.par['rdx']['sextractor'], config=sexconfig, workdir=self.coadd_path, params=None,
+                           defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
+
+                # rerun the SExtractor with the zero point
+                zp = 24.1 # zeropoint for the NB919, calibrated with Legacy survey z-band
+                sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
+                             "CATALOG_TYPE": "FITS_LDAC", "DETECT_THRESH": 2.0, "ANALYSIS_THRESH": 2.0,
+                             "DETECT_MINAREA": 3, "PHOT_APERTURES": aper / pixscale, "MAG_ZEROPOINT": zp}
+                sex.sexone(os.path.join(self.coadd_path, coaddroot + '.resamp.fits'), task=self.par['rdx']['sextractor'], config=sexconfig, workdir=self.coadd_path,
+                           params=None, defaultconfig='pyphot', conv='995', nnw=None, dual=False, delete=True, log=False)
+
+                '''
 
 
                 '''
