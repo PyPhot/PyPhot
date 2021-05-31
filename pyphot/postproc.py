@@ -127,7 +127,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                     "ASTREF_BAND": astref_band,
                     "POSITION_MAXERR": position_maxerr,
                     "PIXSCALE_MAXERR": pixscale_maxerr,
-                    "POSANGLE_MAXERR": posangle_maxerr, # ToDo: add to parset
+                    "POSANGLE_MAXERR": posangle_maxerr,
                     "STABILITY_TYPE": stability_type,
                     "MOSAIC_TYPE": mosaic_type,
                     "SOLVE_PHOTOM": SOLVE_PHOTOM,
