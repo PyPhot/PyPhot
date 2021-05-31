@@ -308,12 +308,13 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['astrometry']['scamp_second_pass'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['position_maxerr'] = 15.0
+        par['postproc']['astrometry']['posangle_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 5.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
-        par['postproc']['astrometry']['detect_thresh'] = 15 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 15
+        par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 20
         par['postproc']['astrometry']['detect_minarea'] = 5
-        par['postproc']['astrometry']['crossid_radius'] = 2
+        par['postproc']['astrometry']['crossid_radius'] = 1
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 
@@ -552,12 +553,13 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need two SCAMP passes for LBC
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['position_maxerr'] = 15.0
+        par['postproc']['astrometry']['posangle_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 5.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
-        par['postproc']['astrometry']['detect_thresh'] = 15 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 15
+        par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 20
         par['postproc']['astrometry']['detect_minarea'] = 5
-        par['postproc']['astrometry']['crossid_radius'] = 2
+        par['postproc']['astrometry']['crossid_radius'] = 1
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 

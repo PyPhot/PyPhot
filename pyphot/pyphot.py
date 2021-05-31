@@ -417,7 +417,6 @@ class PyPhot(object):
                                     #sigfrac=self.par['scienceframe']['process']['sigfrac'],
                                     #objlim=self.par['scienceframe']['process']['objlim'],
                                     replace=self.par['scienceframe']['process']['replace'])
-
                     ## Master Fringing.
                     if self.par['scienceframe']['process']['use_fringe']:
                         masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(master_key))
@@ -455,6 +454,14 @@ class PyPhot(object):
                                                     sextractor_task=self.par['rdx']['sextractor'])
                         _, masterfringeimg, maskfringeimg = io.load_fits(masterfringe_name)
                         postproc.defringing(sci_fits_list, masterfringeimg)
+
+                    if self.par['scienceframe']['process']['mask_negative_star']:
+                        postproc.negativestar(sci_fits_list, wht_fits_list, flag_fits_list,
+                                              sigma=self.par['scienceframe']['process']['comb_sigrej'],
+                                              maxiters=self.par['scienceframe']['process']['comb_maxiter'],
+                                              brightstar_nsigma=self.par['scienceframe']['process']['brightstar_nsigma'],
+                                              maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
+                                              sextractor_task=self.par['rdx']['sextractor'])
 
                     ## Astrometric calibration and photometric calibration of individual chips
                     # get pixel scale for resampling with SCAMP

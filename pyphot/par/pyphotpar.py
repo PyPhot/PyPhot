@@ -166,7 +166,7 @@ class ProcessImagesPar(ParSet):
     def __init__(self, trim=None, apply_gain=None, orient=None,
                  overscan_method=None, overscan_par=None,
                  comb_cenfunc=None, comb_stdfunc=None, clip=None, comb_maxiter=None,comb_sigrej=None,
-                 satpix=None, mask_proc=None, window_size=None, maskpixvar=None,
+                 satpix=None, mask_proc=None, window_size=None, maskpixvar=None, mask_negative_star=None,
                  mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,brightstar_method=None,
                  mask_cr=None, contrast=None,
                  cr_threshold=None, neighbor_threshold=None,
@@ -248,6 +248,10 @@ class ProcessImagesPar(ParSet):
         defaults['use_fringe'] = False
         dtypes['use_fringe'] = bool
         descr['use_fringe'] = 'Subtract off a fringing pattern. This pattern usually appears for thin CCD at red wavelength.'
+
+        defaults['mask_negative_star'] = False
+        dtypes['mask_negative_star'] = bool
+        descr['mask_negative_star'] = 'Mask negative stars? Need set to True for  dirty image like WIRCam long exposure image'
 
         defaults['comb_cenfunc'] = 'median'
         options['comb_cenfunc'] = ProcessImagesPar.valid_combine_methods()
@@ -405,7 +409,7 @@ class ProcessImagesPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['trim', 'apply_gain', 'orient',
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
-                   'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe',
+                   'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe', 'mask_negative_star',
                    'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc', 'mask_vig','minimum_vig',
                    'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',

@@ -139,14 +139,19 @@ class CFHTWIRCAMCamera(camera.Camera):
         turn_off = dict(use_illumflat=False, use_biasimage=False, use_overscan=False,
                         use_darkimage=False)
         par.reset_all_processimages_par(**turn_off)
-        ## ToDo: I am currently using the ??????p.fits images which are detrended (dark subtracted, flat fielded, etc) and are sky subtracted
-        ##       The only process I will do is supersky which would help to improve the flatness a little bit
+        ## ToDo: I am currently using the ??????s.fits images which are pre-processed images (dark subtracted, flat fielded, etc)
+        ## You can also use ??????p.fits images which are sky-background subtracted images. However, the sky subtraction
+        ##  by CFHT is not ideal in some cases (i.e. >60s exposures), so use that with caution.
+        ## In order to get a better sky-subtraction, you can group your science images accordingly, so you can perform the
+        ## fringe subtraction for a list of images that obtained at similar time-scale. The fringe subtraction here is
+        ## for subtracting off dirty stuff not the same with fringe in optical CCD.
         par['scienceframe']['process']['use_biasimage'] = False
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = False
         par['scienceframe']['process']['use_illumflat'] = False
-        par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_supersky'] = False
         par['scienceframe']['process']['use_fringe'] = True
+        par['scienceframe']['process']['mask_negative_star'] = True # detector 4 is very dirty, need to mask out some negative stars
 
         ## the zeropints for WIRCam are for e/s, so please set apply_gain to True
         par['scienceframe']['process']['apply_gain'] = True
@@ -154,6 +159,7 @@ class CFHTWIRCAMCamera(camera.Camera):
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
+        par['scienceframe']['process']['brightstar_nsigma'] = 3
 
         # The WIRCam processed replace bad pixels with zero, so I would also replace with zeros.
         par['scienceframe']['process']['replace'] = 'zero'
