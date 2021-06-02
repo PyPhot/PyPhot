@@ -5,6 +5,7 @@ Implements the master frame base class.
 .. include:: ../include/links.rst
 
 """
+import gc
 import numpy as np
 from scipy.ndimage import gaussian_filter,median_filter
 
@@ -41,6 +42,9 @@ def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc=
     else:
         stack = mean
 
+    del images, bpm, bpms
+    gc.collect()
+
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 0.0
 
@@ -71,6 +75,9 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
         stack = median
     else:
         stack = mean
+
+    del images, bpm, bpms
+    gc.collect()
 
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 1.0
@@ -152,6 +159,9 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
 
     # bpm for the flat
     stack_bpm = bpm_pixvar | (np.isnan(stack))
+
+    del images, masks
+    gc.collect()
 
     return header, stack, stack_bpm
 
@@ -249,6 +259,9 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
         stack = median
     else:
         stack = mean
+
+    del data3D, mask3D
+    gc.collect()
 
     bpm = (np.isnan(stack)).astype('int16')
     stack[np.isnan(stack)] = 0.

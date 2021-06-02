@@ -132,18 +132,26 @@ pyphot_colorterm VISTA-K TMASS-K TMASS-H --path /Volumes/Work/Imaging/all_dr2_fi
  ==> VISTA-K=TMASS-K + (-0.031*(TMASS-K-TMASS-H)) + (0.023)
 
 ## SDSS vs PanStarrs
+pyphot_colorterm SDSS-G PS1-G PS1-R --path /Volumes/Work/Imaging/all_dr2_fits
+ ==> SDSS-G=PS1-G + (0.160*(PS1-G-PS1-R)) + (0.016)
 pyphot_colorterm SDSS-R PS1-R PS1-I --path /Volumes/Work/Imaging/all_dr2_fits
  ==> SDSS-R=PS1-R + (0.024*(PS1-R-PS1-I)) + (0.002) #ToDo: Need second order for this!!!
 pyphot_colorterm SDSS-I PS1-I PS1-Z --path /Volumes/Work/Imaging/all_dr2_fits
  ==> SDSS-I=PS1-I + (0.058*(PS1-I-PS1-Z)) + (-0.000)
 pyphot_colorterm SDSS-Z PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
- ==> SDSS-Z=PS1-Z + (-0.258*(PS1-Z-PS1-Y)) + (-0.011)
-
+ ==> SDSS-Z=PS1-Z + (-0.258*(PS1-Z-PS1-Y)) + (-0.011) # seems better than using Z-I
+pyphot_colorterm SDSS-Z PS1-Z PS1-I --path /Volumes/Work/Imaging/all_dr2_fits
+ ==> SDSS-Z=PS1-Z + (0.120*(PS1-Z-PS1-I)) + (-0.018)
+ 
 ## IMACS NB919 VS PanStarrs
 pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
  ==> IMACSF2-NB919=PS1-Z + (-0.618*(PS1-Z-PS1-Y)) + (0.015)
 
-
+## LBT
+pyphot_colorterm LBC-BESS_R PS1-R PS1-I --path /Volumes/Work/Imaging/all_dr2_fits
+ ==> LBC-BESS_R=PS1-R + (-0.218*(PS1-R-PS1-I)) + (-0.010) # ToDo: need second order
+pyphot_colorterm LBC-BESS_I PS1-I PS1-Z --path /Volumes/Work/Imaging/all_dr2_fits
+ ==> LBC-BESS_I=PS1-I + (-0.411*(PS1-I-PS1-Z)) + (-0.003)
 '''
 
 '''

@@ -1,4 +1,4 @@
-import os
+import os,gc
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -62,30 +62,43 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                 task='sex',detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=1.0,
                 astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0, distort_degrees=3,
                 pixscale_maxerr=1.1, posangle_maxerr=10.0, stability_type='INSTRUMENT', mosaic_type='LOOSE',
-                weight_type='MAP_WEIGHT', solve_photom_scamp=False, scamp_second_pass=False, delete=False, log=True):
+                weight_type='MAP_WEIGHT', skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
+                delete=False, log=True):
 
-    ## This step is basically align the image to N to the up and E to the left.
-    ## this step is important if your image have a very different origination from the regular one.
-    # configuration for the first swarp run
+    # configuration for the swarp run
     # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
-    swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                   "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT":1.0,
-                   "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
-                   "RESAMPLING_TYPE": 'NEAREST', #I would always set this to NEAREST for individual exposures to avoid interpolation
-                   "HEADER_SUFFIX":"_cat.head"}
     # resample science image
-    msgs.info('Running Swarp for the first pass to align the science image.')
-    swarp.swarpall(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                   coaddroot=None, delete=delete, log=log)
-
-    # resample flag image
+    swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
+                   "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT": 1.0,
+                   "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
+                   "RESAMPLING_TYPE": 'NEAREST',
+                   # I would always set this to NEAREST for individual exposures to avoid interpolation
+                   "HEADER_SUFFIX": "_cat.head"}
+    # configuration for swarp the flag image
     swarpconfig_flag = swarpconfig.copy()
     swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
     swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
     swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
-    msgs.info('Running Swarp for the first pass to align the flag image.')
-    swarp.swarpall(flag_fits_list, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                   coaddroot=None, delete=delete, log=False)
+
+    if skip_swarp_align:
+        msgs.warn('Skipping alignment with Swarp')
+        for i in range(len(sci_fits_list)):
+            os.system('cp {:} {:}'.format(sci_fits_list[i],
+                                          sci_fits_list[i].replace('.fits', '.resamp.fits')))
+            os.system('cp {:} {:}'.format(sci_fits_list[i].replace('.fits', '.weight.fits'),
+                                          sci_fits_list[i].replace('.fits', '.resamp.weight.fits')))
+            os.system('cp {:} {:}'.format(flag_fits_list[i],
+                                          flag_fits_list[i].replace('.fits', '.resamp.fits')))
+    else:
+        ## This step is basically align the image to N to the up and E to the left.
+        ## It is important if your image has a ~180 degree from the nominal orientation.
+        msgs.info('Running Swarp for the first pass to align the science image.')
+        swarp.swarpall(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
+                       coaddroot=None, delete=delete, log=log)
+        # resample flag image
+        msgs.info('Running Swarp for the first pass to align the flag image.')
+        swarp.swarpall(flag_fits_list, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
+                       coaddroot=None, delete=delete, log=False)
 
     ## remove useless data and change flag image type to int32
     sci_fits_list_resample = []
@@ -93,14 +106,19 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     flag_fits_list_resample = []
     cat_fits_list_resample = []
     for i in range(len(sci_fits_list)):
-        os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
         sci_fits_list_resample.append(sci_fits_list[i].replace('.fits', '.resamp.fits'))
         wht_fits_list_resample.append(sci_fits_list[i].replace('.fits', '.resamp.weight.fits'))
         flag_fits_list_resample.append(flag_fits_list[i].replace('.fits', '.resamp.fits'))
         cat_fits_list_resample.append(sci_fits_list[i].replace('.fits', '.resamp_cat.fits'))
-        par = fits.open(flag_fits_list[i].replace('.fits', '.resamp.fits'))
-        par[0].data = par[0].data.astype('int32') # change the dtype to be int32
-        par[0].writeto(flag_fits_list[i].replace('.fits', '.resamp.fits'), overwrite=True)
+        if not skip_swarp_align:
+            par = fits.open(flag_fits_list[i].replace('.fits', '.resamp.fits'), memmap=False)
+            par[0].data = par[0].data.astype('int32')  # change the dtype to be int32
+            par[0].writeto(flag_fits_list[i].replace('.fits', '.resamp.fits'), overwrite=True)
+            del par[0].data
+            par.close()
+            gc.collect()
+
+            os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
 
     # configuration for the first SExtractor run
     sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
@@ -136,11 +154,15 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                     "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
     if scamp_second_pass:
         # first run with distort_degrees of 1
-        msgs.info('Running the first pass SCAMP with DISTORT_DEGREES of {:}'.format(distort_degrees))
         scampconfig1 = scampconfig.copy()
-        #scampconfig1['DISTORT_DEGREES'] = 1
+        scampconfig1['DISTORT_DEGREES'] = np.max([1,distort_degrees-2])
+        msgs.info('Running the first pass SCAMP with DISTORT_DEGREES of {:}'.format(scampconfig1['DISTORT_DEGREES']))
         scamp.scampall(cat_fits_list_resample, config=scampconfig1, workdir=science_path, QAdir=qa_path,
                        defaultconfig='pyphot', delete=delete, log=log)
+        ## we can make the maximum errors to be smaller for the second pass.
+        scampconfig['POSITION_MAXERR'] = np.min([1.0,position_maxerr])
+        scampconfig['PIXSCALE_MAXERR'] = np.min([1.2,pixscale_maxerr])
+        scampconfig['POSANGLE_MAXERR'] = np.min([5.0,posangle_maxerr])
         # copy the .head to .ahead
         for i in range(len(sci_fits_list_resample)):
             os.system('mv {:} {:}'.format(cat_fits_list_resample[i].replace('.fits', '.head'),
@@ -185,16 +207,18 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     else:
         for i in range(len(sci_fits_list)):
             msgs.info('Solving the FLXSCALE for {:} with 1/EXPTIME.'.format(os.path.basename(sci_fits_list_resample[i])))
-            par = fits.open(sci_fits_list_resample[i])
+            par = fits.open(sci_fits_list_resample[i], memmap=False)
             # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
             # in order to get the correct flag when doing the coadd with swarp in the later step
             par[0].header['FLXSCALE'] = utils.inverse(par[0].header['EXPTIME'])
             par[0].writeto(sci_fits_list_resample[i], overwrite=True)
+            del par[0].data
+            par.close()
 
     # change flag image type to int32, flux scale to 1.0
     for i in range(len(sci_fits_list)):
         msgs.info('Saving FLAG image {:} to int32.'.format(os.path.basename(flag_fits_list_resample[i])))
-        par = fits.open(flag_fits_list_resample[i])
+        par = fits.open(flag_fits_list_resample[i], memmap=False)
         # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
         # in order to get the correct flag when doing the coadd with swarp in the later step
         par[0].header['EXPTIME'] = 1.0
@@ -202,6 +226,10 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
         par[0].header['FLASCALE'] = 1.0
         par[0].data = par[0].data.astype('int32')
         par[0].writeto(flag_fits_list_resample[i], overwrite=True)
+        del par[0].data
+        par.close()
+        gc.collect()
+
 
     ## Run SExtractor for the resampled images. The catalogs will be used for calibrating individual chips.
     msgs.info('Running SExtractor for the second pass to extract catalog for resampled images.')
@@ -261,7 +289,7 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     coadd_wht_file = os.path.join(coadddir, coaddroot + '_sci.weight.fits')
 
     # change flag image type to int32
-    par = fits.open(coadd_flag_file)
+    par = fits.open(coadd_flag_file, memmap=False)
     par[0].data = np.round(par[0].data).astype('int32')
     par[0].writeto(coadd_flag_file, overwrite=True)
 
@@ -335,7 +363,7 @@ def detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None, effective_g
         bkgrms_estimator = BiweightScaleBackgroundRMS()
 
     if (rmsmap is None) or (bkgmap is None):
-        bkg = Background2D(data, back_size, mask=mask, filter_size=back_filter_size, sigma_clip=sigma_clip,
+        bkg = Background2D(data.copy(), back_size, mask=mask, filter_size=back_filter_size, sigma_clip=sigma_clip,
                            bkg_estimator=bkg_estimator, bkgrms_estimator=bkgrms_estimator)
         if rmsmap is None:
             rmsmap = bkg.background_rms
@@ -491,6 +519,11 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
     if (out_refcat is not None) and os.path.exists(out_refcat):
         msgs.info('Using the existing reference catalog {:} rather than downloading a new one.'.format(out_refcat))
         ref_data = Table.read(out_refcat, format='fits')
+        ref_ra_cen, ref_dec_ren =  np.median(ref_data['RA']), np.median(ref_data['DEC'])
+        dist_cen = np.sqrt((ref_ra_cen-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (ref_dec_ren-dec_cen)**2)
+        if dist_cen>0.7*radius:
+            msgs.info('Existing catalog does not fully cover the field, re-download the catalog.')
+            ref_data = query.query_standard(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
     else:
         ref_data = query.query_standard(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
     # save the reference catalog to fits
@@ -638,7 +671,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         else:
             msgs.info('Calibrating the zero point for {:}'.format(this_sci_fits))
 
-        par = fits.open(this_sci_fits)
+        par = fits.open(this_sci_fits, memmap=False)
         ## ToDo: If we read in FLXSCALE, the zpt would change if you run this code twice
         ##  Maybe just give the input of 1.0/EXPTIME and measure the FLXSCALE use calzpt?
         ##  Thus that the ZPT won't change no matter how many times you run the code.
@@ -662,9 +695,12 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
             mag_ext = ZP-zp_this
             if mag_ext>0.5:
-                msgs.warn('{:} has an extinction of {:} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
+                msgs.warn('{:} has an extinction of {:0.3f} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
+            elif mag_ext>0.1:
+                msgs.info('{:} has an extinction of {:0.3f} magnitude, good conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
             else:
-                msgs.info('{:} has an extinction of {:} magnitude, great conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
+                msgs.info('{:} has an extinction of {:0.3f} magnitude, Excellent conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
+
 
             FLXSCALE *= 10**(0.4*(mag_ext))
             par[0].header['FLXSCALE'] = FLXSCALE

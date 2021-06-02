@@ -143,7 +143,7 @@ class MagellanIMACSCamera(camera.Camera):
 
         # Read
         msgs.info("Reading IMACS F2 file: {:s}".format(fil[0]))
-        hdu = fits.open(fil[0])
+        hdu = fits.open(fil[0], memmap=False)
         head1 = fits.getheader(fil[0], 0)
 
         # get the x and y binning factors...
@@ -400,14 +400,14 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 27.72
-            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coefficients'] = [0.016, 0.160, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.18
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_r':
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['zpt'] = 27.77
-            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coefficients'] = [0.002, 0.024, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.10
         elif self.get_meta_value(scifile, 'filter') == 'Sloan_i':
             # There is no need to subtract fringing for i-band and other bands

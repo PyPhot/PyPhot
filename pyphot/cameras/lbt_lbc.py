@@ -142,9 +142,9 @@ class LBTLBCCamera(camera.Camera):
 
         # Read
         msgs.info("Reading LBT LBC file: {:s}".format(fil[0]))
-        hdu = fits.open(fil[0])
-        head = fits.getheader(fil[0], 0)
-        head_det = fits.getheader(fil[0], det)
+        hdu = fits.open(fil[0], memmap=False)
+        head = hdu[0].header
+        head_det = hdu[det].header
 
         detector_par = self.get_detector_par(hdu, det if det is not None else 1)
         '''
@@ -194,6 +194,13 @@ class LBTLBCCamera(camera.Camera):
             exptime = hdu[self.meta['exptime']['ext']].header[self.meta['exptime']['card']]
         except:
             exptime = head_det[self.meta['exptime']['card']]
+
+        # release the memory
+        del hdu[1].data
+        del hdu[2].data
+        del hdu[3].data
+        del hdu[4].data
+        hdu.close()
 
         # Return, transposing array back to orient the overscan properly
         return detector_par, array, head, exptime, gainimage, rnimage
@@ -305,11 +312,11 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True
+        par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['posangle_maxerr'] = 5.0
-        par['postproc']['astrometry']['position_maxerr'] = 5.0
+        par['postproc']['astrometry']['posangle_maxerr'] = 10.0
+        par['postproc']['astrometry']['position_maxerr'] = 10.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
         par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
         par['postproc']['astrometry']['analysis_thresh'] = 20
@@ -380,18 +387,26 @@ class LBTLBCBCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.15 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'g-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'g'
+            #par['postproc']['photometry']['secondary'] = 'r'
+            #par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
+            par['postproc']['photometry']['coefficients'] = [0.016, 0.160, 0.]
             par['postproc']['photometry']['zpt'] = 29.11 #2.5*np.log10(2.09)+28.31
-            par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.17 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'r'
+            #par['postproc']['photometry']['secondary'] = 'g'
+            #par['postproc']['photometry']['coefficients'] = [0., 0.016, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'r'
-            par['postproc']['photometry']['secondary'] = 'g'
+            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['coefficients'] = [0.002, 0.024, 0.]
             par['postproc']['photometry']['zpt'] = 28.55 #2.5*np.log10(2.09)+27.75, consistent with J0100, 27.67 for 1ADU/s
-            par['postproc']['photometry']['coefficients'] = [0., 0.016, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.11 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
 
         return par
@@ -550,12 +565,12 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True # Need two SCAMP passes for LBC
+        par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['posangle_maxerr'] = 5.0
-        par['postproc']['astrometry']['position_maxerr'] = 5.0
-        par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
+        par['postproc']['astrometry']['posangle_maxerr'] = 10.0
+        par['postproc']['astrometry']['position_maxerr'] = 10.0
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.2
         par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
         par['postproc']['astrometry']['analysis_thresh'] = 20
         par['postproc']['astrometry']['detect_minarea'] = 5
@@ -603,39 +618,59 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.16 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'R-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'r'
+            #par['postproc']['photometry']['secondary'] = 'g'
+            #par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'r'
-            par['postproc']['photometry']['secondary'] = 'g'
+            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['coefficients'] = [-0.010,-0.218, 0.]
             par['postproc']['photometry']['zpt'] = 28.69 #2.5*np.log10(2.14)+27.86
-            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.13 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'I-Bessel':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
-            par['postproc']['photometry']['primary'] = 'i'
-            par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
-            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
-            par['postproc']['photometry']['primary'] = 'r'
-            par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 28.86 #2.5*np.log10(2.14)+28.03
-            par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.09 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'i'
+            #par['postproc']['photometry']['secondary'] = 'r'
+            #par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
+            par['postproc']['photometry']['coefficients'] = [-0.003,-0.411,0.]
+            par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
+            par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'r'
+            #par['postproc']['photometry']['secondary'] = 'i'
+            #par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'r'
+            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['coefficients'] = [0.002, 0.024, 0.]
+            par['postproc']['photometry']['zpt'] = 28.86 #2.5*np.log10(2.14)+28.03
+            par['postproc']['photometry']['coeff_airmass'] = 0.09 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'i'
+            #par['postproc']['photometry']['secondary'] = 'z'
+            #par['postproc']['photometry']['coefficients'] = [0.,0.072, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'i'
+            par['postproc']['photometry']['secondary'] = 'z'
+            par['postproc']['photometry']['coefficients'] = [0.,0.058,0.]
             par['postproc']['photometry']['zpt'] = 28.66 #2.5*np.log10(2.14)+27.83, measured from J0100 observations
-            par['postproc']['photometry']['coefficients'] = [0.,0.072, 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.03 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'z'
+            #par['postproc']['photometry']['secondary'] = 'i'
+            #par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
-            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['secondary'] = 'y'
             par['postproc']['photometry']['zpt'] = 28.03 # For 1 e/s, 2.5*np.log10(2.14)+27.2, consistent with J0100, 27.25 for 1ADU/s
-            par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
+            par['postproc']['photometry']['coefficients'] = [-0.011,-0.258,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
 
         return par

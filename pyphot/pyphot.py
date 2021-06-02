@@ -505,14 +505,15 @@ class PyPhot(object):
                                     stability_type=self.par['postproc']['astrometry']['stability_type'],
                                     mosaic_type=self.par['postproc']['astrometry']['mosaic_type'],
                                     weight_type=self.par['postproc']['astrometry']['weight_type'],
+                                    skip_swarp_align=self.par['postproc']['astrometry']['skip_swarp_align'],
                                     scamp_second_pass=self.par['postproc']['astrometry']['scamp_second_pass'],
                                     solve_photom_scamp=self.par['postproc']['astrometry']['solve_photom_scamp'],
                                     delete=self.par['postproc']['astrometry']['delete'],
                                     log=self.par['postproc']['astrometry']['log'])
 
                     ## Photometrically calibrating individual chips
-                    msgs.info('Photometrically calibrating individual chips.')
                     if self.par['postproc']['photometry']['cal_chip_zpt']:
+                        msgs.info('Photometrically calibrating individual chips.')
                         # Prepare the reference catalog list. These catalogs will be used for photometrically calibrating individual chips.
                         coadd_ids = self.fitstbl['coadd_id'][grp_science]
                         photref_catalog = self.par['postproc']['photometry']['photref_catalog']

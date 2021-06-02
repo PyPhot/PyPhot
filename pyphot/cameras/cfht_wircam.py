@@ -366,7 +366,7 @@ class CFHTWIRCAMCamera(camera.Camera):
 
         # Read
         msgs.info("Reading CFHT WIRCam processed image: {:s}".format(fil[0]))
-        hdu = fits.open(fil[0])
+        hdu = fits.open(fil[0], memmap=False)
         head = fits.getheader(fil[0], 0)
         head_det = fits.getheader(fil[0], det)
 

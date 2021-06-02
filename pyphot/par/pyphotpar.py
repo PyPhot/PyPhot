@@ -554,7 +554,7 @@ class AstrometricPar(ParSet):
     def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, weight_type=None, solve_photom_scamp=None,
-                 posangle_maxerr=None, stability_type=None, distort_degrees=None,
+                 posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None,
                  delete=None, log=None):
 
         # Grab the parameter names and values from the function
@@ -572,6 +572,10 @@ class AstrometricPar(ParSet):
         defaults['skip'] = False
         dtypes['skip'] = bool
         descr['skip'] = 'Skip the astrometry for individual detector image?'
+
+        defaults['skip_swarp_align'] = False
+        dtypes['skip_swarp_align'] = bool
+        descr['skip_swarp_align'] = 'Skip aligning the image before solving the astrometric solutions?'
 
         defaults['scamp_second_pass'] = False
         dtypes['scamp_second_pass'] = bool
@@ -661,7 +665,7 @@ class AstrometricPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
-                   'posangle_maxerr', 'stability_type', 'distort_degrees',
+                   'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
