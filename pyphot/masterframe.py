@@ -42,13 +42,12 @@ def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc=
     else:
         stack = mean
 
-    del images, bpm, bpms
-    gc.collect()
-
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 0.0
 
     io.save_fits(masterbias_name, stack, header, 'MasterBias', mask=bpm.astype('int16'), overwrite=True)
+    del images, bpm, bpms
+    gc.collect()
 
 
 def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfunc='median', stdfunc='std',
@@ -76,12 +75,11 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
     else:
         stack = mean
 
-    del images, bpm, bpms
-    gc.collect()
-
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 1.0
     io.save_fits(masterdark_name, stack, header, 'MasterDark', mask=bpm.astype('int16'), overwrite=True)
+    del images, bpm, bpms
+    gc.collect()
 
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
@@ -260,12 +258,11 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
     else:
         stack = mean
 
-    del data3D, mask3D
-    gc.collect()
-
     bpm = (np.isnan(stack)).astype('int16')
     stack[np.isnan(stack)] = 0.
     header['OLDTIME'] = (header['EXPTIME'], 'Original exposure time')
     header['EXPTIME'] = 1.0
     # save master fringe frame
     io.save_fits(masterfringe_name, stack, header, 'MasterFringe', mask=bpm, overwrite=True)
+    del data3D, mask3D
+    gc.collect()
