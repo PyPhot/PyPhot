@@ -2,7 +2,7 @@
 Module for LBT/LBC
 
 """
-import glob
+import glob,gc
 import numpy as np
 
 from astropy import wcs
@@ -201,6 +201,7 @@ class LBTLBCCamera(camera.Camera):
         del hdu[3].data
         del hdu[4].data
         hdu.close()
+        gc.collect()
 
         # Return, transposing array back to orient the overscan properly
         return detector_par, array, head, exptime, gainimage, rnimage

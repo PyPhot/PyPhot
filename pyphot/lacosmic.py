@@ -4,7 +4,7 @@ Module to remove cosmic rays from an astronomical image using the
 L.A.Cosmic algorithm (van Dokkum 2001; PASP 113, 1420).
 This code was downloaded from https://github.com/larrybradley/lacosmic and with some modification.
 """
-
+import gc
 import numpy as np
 from scipy import ndimage
 
@@ -174,6 +174,9 @@ def lacosmic(data, contrast, cr_threshold, neighbor_threshold,
         msgs.info('Iteration {0}: Found {1} cosmic-ray pixels, '
                  'Total: {2}'.format(iteration + 1, ncosmics, ncosmics_tot))
 
+    del clean_data
+    gc.collect()
+
     return  final_crmask
 
 
@@ -215,6 +218,9 @@ def _clean_masked_pixels(data, mask, size=5, exclude_mask=None):
     if nexpanded > 0:
         msgs.info('    Found {0} {1}x{1} masked regions while '
                  'cleaning.'.format(nexpanded, size))
+    del data_nanmask
+    gc.collect()
+
     return data
 
 

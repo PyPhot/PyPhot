@@ -634,6 +634,7 @@ class PyPhot(object):
                 if self.par['postproc']['detection']['skip']:
                     msgs.warn('Skipping detecting process. Make sure you have extracted source catalog !!!')
                 else:
+                    ## ToDo: merger the following to be within postproc.detect
                     if self.par['postproc']['detection']['detection_method'] == 'Photutils':
                         # detection with photoutils
                         data = fits.getdata(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
