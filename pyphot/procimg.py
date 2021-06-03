@@ -189,6 +189,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 starmask = np.zeros_like(data, dtype=bool)
 
             # estimate the 2D background with all masks
+            # ToDo: the following seems having memory leaking, need to solve the issue or switch to SExtractor.
             msgs.info('Subtracting 2D background')
             mask_bkg = mask | starmask
             bkg = Background2D(data.copy(), back_size, mask=mask_bkg, filter_size=back_filtersize,
