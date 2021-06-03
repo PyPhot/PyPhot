@@ -442,7 +442,7 @@ class LBTLBCBCamera(LBTLBCCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on LBCB")
+        msgs.info("Using hard-coded BPM for det={:} on LBCB".format(det))
 
         # Get the binning
         #hdu = fits.open(filename)
