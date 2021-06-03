@@ -168,7 +168,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
             os.system('mv {:} {:}'.format(cat_fits_list_resample[i].replace('.fits', '.head'),
                                           cat_fits_list_resample[i].replace('.fits', '.ahead')))
     # run the final scamp
-    msgs.info('Running the final pass of SCAMP')
+    msgs.info('Running the final pass of SCAMP with DISTORT_DEGREES of {:}'.format(distort_degrees))
     scamp.scampall(cat_fits_list_resample, config=scampconfig, workdir=science_path, QAdir=qa_path,
                    defaultconfig='pyphot', delete=delete, log=log)
 
