@@ -349,6 +349,8 @@ def mmirs_read_amp(img, namps=32):
     Imported from MMIRS IDL pipeline refpix.pro
     """
 
+    ## ToDo: Import ramp fitting from https://github.com/spacetelescope/stcal/tree/main/src/stcal/ramp_fitting
+
     # number of channels for reading out
     if namps is None:
         namps = 32

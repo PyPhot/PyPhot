@@ -3,7 +3,7 @@
 .. include common links, assuming primary doc root is up one directory
 .. include:: ../include/links.rst
 """
-import os
+import os, gc
 import numpy as np
 from scipy import signal, ndimage
 from scipy.optimize import curve_fit
@@ -189,17 +189,24 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 starmask = np.zeros_like(data, dtype=bool)
 
             # estimate the 2D background with all masks
+            # ToDo: the following seems having memory leaking, need to solve the issue or switch to SExtractor.
             msgs.info('Subtracting 2D background')
             mask_bkg = mask | starmask
-            bkg = Background2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
+            bkg = Background2D(data.copy(), back_size, mask=mask_bkg, filter_size=back_filtersize,
                                sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
-            sci_image = data-bkg.background
+            background_array = bkg.background
+            background_rms = bkg.background_rms
+            # subtract the background
+            sci_image = data-background_array
+            # clean up memory
+            del bkg, data, mask_bkg
+            gc.collect()
 
             # CR mask
             if mask_cr:
                 msgs.info('Identifying cosmic rays using the L.A.Cosmic algorithm')
                 bpm_cr = lacosmic(sci_image, contrast, cr_threshold, neighbor_threshold,
-                                  error=bkg.background_rms, mask=mask, background=bkg.background, effective_gain=None,
+                                  error=background_rms, mask=mask, background=background_array, effective_gain=None,
                                   readnoise=None, maxiter=maxiter, border_mode='mirror')
                 # seems not working as good as lacosmic.py
                 # grow=1.5, remove_compact_obj=True, sigfrac=0.3, objlim=5.0,
@@ -230,7 +237,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 msgs.info('Not replacing bad pixel values')
 
             # Generate weight map used for SExtractor and SWarp (WEIGHT_TYPE = MAP_WEIGHT)
-            wht_image = utils.inverse(bkg.background)
+            wht_image = utils.inverse(background_array)
 
             # Always set original zero values to be zero, this can avoid significant negative values after sky subtraction
             # Set bad pixel's weight to be zero

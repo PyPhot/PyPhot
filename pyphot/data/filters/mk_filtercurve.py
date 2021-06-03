@@ -405,6 +405,35 @@ def append_IMACS_NB919_F2():
     # Write
     hdulist.writeto('filtercurves.fits', overwrite=True)
 
+def append_LBT_LBC():
+    ## LBT/LBC
+    # Load
+    hdulist = fits.open('filtercurves.fits')
+    curr_filters = [hdu.name for hdu in hdulist]
+    #
+    filters = ['BESS_U', 'BESS_B', 'BESS_V', 'BESS_R', 'BESS_I', 'Y']
+
+    for filt in filters:
+        flt_name = 'LBC-{:}'.format(filt)
+        wfc = Table.read('/Users/feige/Downloads/{:}.txt'.format(filt), format='ascii.basic')
+        if flt_name in curr_filters:
+            print("Filter {} already there, skipping".format(flt_name))
+            continue
+        # First column wavelength 'lam' in angstrom, second column transmission 'Rlam'.
+        if filt in ['BESS_R', 'BESS_I', 'Y']:
+            wave = wfc['wave']*10.0
+            trans = wfc['trans']
+            indwave = np.argsort(wave)
+            wave, trans = wave[indwave], trans[indwave]
+        else:
+            wave = wfc['wave']
+            trans = wfc['trans']
+        # Add it
+        hdu = tohdu(wave,trans,flt_name)
+        hdulist.append(hdu)
+    # Write
+    hdulist.writeto('filtercurves.fits', overwrite=True)
+
 def write_filter_list():
     # Write the filter list
     hdulist = fits.open('filtercurves.fits')
@@ -464,6 +493,10 @@ def main(flg):
     # ADD NB919
     if flg & (2**10):
         append_IMACS_NB919_F2()
+
+    # ADD LBC
+    if flg & (2**11):
+        append_LBT_LBC()
 
 # Command line execution
 if __name__ == '__main__':

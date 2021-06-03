@@ -7,6 +7,7 @@ import numpy as np
 
 from astropy import wcs
 from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
 
 from pyphot import msgs
 from pyphot import parse
@@ -138,14 +139,19 @@ class CFHTWIRCAMCamera(camera.Camera):
         turn_off = dict(use_illumflat=False, use_biasimage=False, use_overscan=False,
                         use_darkimage=False)
         par.reset_all_processimages_par(**turn_off)
-        ## ToDo: I am currently using the ??????p.fits images which are detrended (dark subtracted, flat fielded, etc) and are sky subtracted
-        ##       The only process I will do is supersky which would help to improve the flatness a little bit
+        ## ToDo: I am currently using the ??????s.fits images which are pre-processed images (dark subtracted, flat fielded, etc)
+        ## You can also use ??????p.fits images which are sky-background subtracted images. However, the sky subtraction
+        ##  by CFHT is not ideal in some cases (i.e. >60s exposures), so use that with caution.
+        ## In order to get a better sky-subtraction, you can group your science images accordingly, so you can perform the
+        ## fringe subtraction for a list of images that obtained at similar time-scale. The fringe subtraction here is
+        ## for subtracting off dirty stuff not the same with fringe in optical CCD.
         par['scienceframe']['process']['use_biasimage'] = False
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = False
         par['scienceframe']['process']['use_illumflat'] = False
-        par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_supersky'] = False
         par['scienceframe']['process']['use_fringe'] = True
+        par['scienceframe']['process']['mask_negative_star'] = True # detector 4 is very dirty, need to mask out some negative stars
 
         ## the zeropints for WIRCam are for e/s, so please set apply_gain to True
         par['scienceframe']['process']['apply_gain'] = True
@@ -153,6 +159,7 @@ class CFHTWIRCAMCamera(camera.Camera):
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
+        par['scienceframe']['process']['brightstar_nsigma'] = 3
 
         # The WIRCam processed replace bad pixels with zero, so I would also replace with zeros.
         par['scienceframe']['process']['replace'] = 'zero'
@@ -168,11 +175,11 @@ class CFHTWIRCAMCamera(camera.Camera):
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
-        par['postproc']['astrometry']['detect_thresh'] = 10
         par['postproc']['astrometry']['position_maxerr'] = 1.0
-        par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 7
-        par['postproc']['astrometry']['crossid_radius'] = 5
+        par['postproc']['astrometry']['detect_thresh'] = 5
+        par['postproc']['astrometry']['analysis_thresh'] = 5
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 2
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 
@@ -358,8 +365,8 @@ class CFHTWIRCAMCamera(camera.Camera):
             msgs.error("Found {:d} files matching {:s}".format(len(fil)))
 
         # Read
-        msgs.info("Reading CFHT WIRCam sky-subtracted image: {:s}".format(fil[0]))
-        hdu = fits.open(fil[0])
+        msgs.info("Reading CFHT WIRCam processed image: {:s}".format(fil[0]))
+        hdu = fits.open(fil[0], memmap=False)
         head = fits.getheader(fil[0], 0)
         head_det = fits.getheader(fil[0], det)
 
@@ -403,6 +410,7 @@ class CFHTWIRCAMCamera(camera.Camera):
 
             # data
             cube = np.zeros((N_microdither, head_det['NAXIS1']*xbin,head_det['NAXIS2']*ybin))
+            cube_flag = np.zeros((N_microdither, head_det['NAXIS1']*xbin,head_det['NAXIS2']*ybin))
             pos0 = head_det['MDCOORD1'].split(',')
             x_pos0, y_pos0 = float(pos0[0][1:]), float(pos0[1][:-1])
             for ii in range(N_microdither):
@@ -417,10 +425,16 @@ class CFHTWIRCAMCamera(camera.Camera):
                 x_shift, y_shift = 2*(x_this-x_pos0), 2*(y_this-y_pos0)
                 this_dither = np.roll(this_dither,int(x_shift),axis=1)
                 this_dither = np.roll(this_dither,int(y_shift),axis=0)
-                cube[ii, :, :] = this_dither
-
-            data = np.median(cube, axis=0)
-
+                cube[ii, :, :] = this_dither - np.median(this_dither[:7,:7])
+                cube_flag[ii, :, :] = (this_dither==0.) ## True for pixels=0
+            #data_flag = np.sum(cube_flag, axis=0)
+            #data = np.median(cube, axis=0)
+            #data[data_flag.astype('bool')] = 0 ## make pixels affected by bad pixels to be zero
+            #from IPython import embed
+            #embed()
+            _, data, _ = sigma_clipped_stats(cube, cube_flag, sigma=3, maxiters=1,
+                                             cenfunc='median', stdfunc='std', axis=0)
+            data[np.isnan(data)] = 0
             x1, x2, y1, y2 = x1*xbin, x2*xbin, y1*ybin, y2*ybin
             detector_par['platescale'] = detector_par['platescale'] / xbin
         else:

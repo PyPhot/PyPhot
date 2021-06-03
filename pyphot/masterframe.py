@@ -5,6 +5,7 @@ Implements the master frame base class.
 .. include:: ../include/links.rst
 
 """
+import gc
 import numpy as np
 from scipy.ndimage import gaussian_filter,median_filter
 
@@ -45,6 +46,8 @@ def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc=
     header['EXPTIME'] = 0.0
 
     io.save_fits(masterbias_name, stack, header, 'MasterBias', mask=bpm.astype('int16'), overwrite=True)
+    del images, bpm, bpms
+    gc.collect()
 
 
 def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfunc='median', stdfunc='std',
@@ -75,6 +78,8 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 1.0
     io.save_fits(masterdark_name, stack, header, 'MasterDark', mask=bpm.astype('int16'), overwrite=True)
+    del images, bpm, bpms
+    gc.collect()
 
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
@@ -152,6 +157,9 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
 
     # bpm for the flat
     stack_bpm = bpm_pixvar | (np.isnan(stack))
+
+    del images, masks
+    gc.collect()
 
     return header, stack, stack_bpm
 
@@ -256,3 +264,5 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
     header['EXPTIME'] = 1.0
     # save master fringe frame
     io.save_fits(masterfringe_name, stack, header, 'MasterFringe', mask=bpm, overwrite=True)
+    del data3D, mask3D
+    gc.collect()

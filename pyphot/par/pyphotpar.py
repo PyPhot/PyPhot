@@ -166,7 +166,7 @@ class ProcessImagesPar(ParSet):
     def __init__(self, trim=None, apply_gain=None, orient=None,
                  overscan_method=None, overscan_par=None,
                  comb_cenfunc=None, comb_stdfunc=None, clip=None, comb_maxiter=None,comb_sigrej=None,
-                 satpix=None, mask_proc=None, window_size=None, maskpixvar=None,
+                 satpix=None, mask_proc=None, window_size=None, maskpixvar=None, mask_negative_star=None,
                  mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,brightstar_method=None,
                  mask_cr=None, contrast=None,
                  cr_threshold=None, neighbor_threshold=None,
@@ -248,6 +248,10 @@ class ProcessImagesPar(ParSet):
         defaults['use_fringe'] = False
         dtypes['use_fringe'] = bool
         descr['use_fringe'] = 'Subtract off a fringing pattern. This pattern usually appears for thin CCD at red wavelength.'
+
+        defaults['mask_negative_star'] = False
+        dtypes['mask_negative_star'] = bool
+        descr['mask_negative_star'] = 'Mask negative stars? Need set to True for  dirty image like WIRCam long exposure image'
 
         defaults['comb_cenfunc'] = 'median'
         options['comb_cenfunc'] = ProcessImagesPar.valid_combine_methods()
@@ -405,7 +409,7 @@ class ProcessImagesPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['trim', 'apply_gain', 'orient',
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
-                   'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe',
+                   'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe', 'mask_negative_star',
                    'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc', 'mask_vig','minimum_vig',
                    'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
@@ -547,9 +551,10 @@ class AstrometricPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
+    def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, weight_type=None, solve_photom_scamp=None,
+                 posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None,
                  delete=None, log=None):
 
         # Grab the parameter names and values from the function
@@ -568,16 +573,24 @@ class AstrometricPar(ParSet):
         dtypes['skip'] = bool
         descr['skip'] = 'Skip the astrometry for individual detector image?'
 
+        defaults['skip_swarp_align'] = False
+        dtypes['skip_swarp_align'] = bool
+        descr['skip_swarp_align'] = 'Skip aligning the image before solving the astrometric solutions?'
+
+        defaults['scamp_second_pass'] = False
+        dtypes['scamp_second_pass'] = bool
+        descr['scamp_second_pass'] = 'Perform second pass with SCAMP? Useful for instrument with large distortions.'
+
         defaults['weight_type'] = 'MAP_WEIGHT'
         options['weight_type'] = AstrometricPar.valid_weight_type()
         dtypes['weight_type'] = str
         descr['weight_type'] = 'Background Options are: {0}'.format(', '.join(options['weight_type']))
 
-        defaults['detect_thresh'] = 3.0
+        defaults['detect_thresh'] = 5.0
         dtypes['detect_thresh'] = [int, float]
         descr['detect_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for detection'
 
-        defaults['analysis_thresh'] = 3.0
+        defaults['analysis_thresh'] = 5.0
         dtypes['analysis_thresh'] = [int, float]
         descr['analysis_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for analysis'
 
@@ -596,6 +609,20 @@ class AstrometricPar(ParSet):
         defaults['pixscale_maxerr'] = 1.1
         dtypes['pixscale_maxerr'] = [int, float]
         descr['pixscale_maxerr'] = 'Max scale-factor uncertainty'
+
+        defaults['posangle_maxerr'] = 10.0
+        dtypes['posangle_maxerr'] = [int, float]
+        descr['posangle_maxerr'] = 'Max position-angle uncertainty (deg)'
+
+        defaults['distort_degrees'] = 3
+        dtypes['distort_degrees'] = int
+        descr['distort_degrees'] = 'Polynom degree for each group'
+
+        defaults['stability_type'] = 'INSTRUMENT'
+        options['stability_type'] = AstrometricPar.valid_stability_methods()
+        dtypes['stability_type'] = str
+        descr['stability_type'] = 'Reference catalog  Options are: {0}'.format(
+                                       ', '.join(options['stability_type']))
 
         defaults['mosaic_type'] = 'LOOSE'
         options['mosaic_type'] = AstrometricPar.valid_mosaic_methods()
@@ -636,8 +663,9 @@ class AstrometricPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
+        parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
+                   'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -662,6 +690,13 @@ class AstrometricPar(ParSet):
         Return the valid methods for mosaic method.
         """
         return ['UNCHANGED', 'SAME_CRVAL', 'SHARE_PROJAXIS','FIX_FOCALPLANE','LOOSE']
+
+    @staticmethod
+    def valid_stability_methods():
+        """
+        Return the valid methods for SCAMP stability method.
+        """
+        return ['INSTRUMENT', 'EXPOSURE', 'PRE-DISTORTED']
 
     @staticmethod
     def valid_catalog_methods():
@@ -1047,8 +1082,8 @@ class PhotometryPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, primary=None, secondary=None,
-                 coefficients=None, coeff_airmass=None, nstar_min=None):
+    def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, external_flag=None,
+                 primary=None, secondary=None, coefficients=None, coeff_airmass=None, nstar_min=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1073,6 +1108,10 @@ class PhotometryPar(ParSet):
         defaults['cal_chip_zpt'] = True
         dtypes['cal_chip_zpt'] = bool
         descr['cal_chip_zpt'] = 'Calibrating the zeropoint for individual chips'
+
+        defaults['external_flag'] = True
+        dtypes['external_flag'] = bool
+        descr['external_flag'] = 'Apply external flag cut when calibrating zeropoint? '
 
         defaults['photref_catalog'] = 'PS1'
         options['photref_catalog'] = PhotometryPar.valid_catalog_methods()
@@ -1115,7 +1154,7 @@ class PhotometryPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'primary', 'secondary',
+        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'external_flag', 'primary', 'secondary',
                    'coefficients', 'coeff_airmass', 'nstar_min']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -1153,7 +1192,8 @@ class ReduxPar(ParSet):
     see :ref:`pyphotpar`.
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
-                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None):
+                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, skip_step_one=None,
+                 skip_step_two=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1203,6 +1243,14 @@ class ReduxPar(ParSet):
         dtypes['ignore_bad_headers'] = bool
         descr['ignore_bad_headers'] = 'Ignore bad headers (NOT recommended unless you know it is safe).'
 
+        defaults['skip_step_one'] = False
+        dtypes['skip_step_one'] = bool
+        descr['skip_step_one'] = 'Skip all the calibrations and individual chip processing?'
+
+        defaults['skip_step_two'] = False
+        dtypes['skip_step_two'] = bool
+        descr['skip_step_two'] = 'Skip all the coadding, detection and photometry?'
+
         defaults['scidir'] = 'Science'
         dtypes['scidir'] = str
         descr['scidir'] = 'Directory relative to calling directory to write science files.'
@@ -1236,7 +1284,7 @@ class ReduxPar(ParSet):
 
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
-                    'redux_path', 'ignore_bad_headers']
+                    'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):

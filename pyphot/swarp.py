@@ -18,7 +18,7 @@ def get_version():
     return version
 
 
-def get_default_config(defaultconfig='pyphot', workdir='./'):
+def get_default_config(defaultconfig='pyphot', workdir='./',verbose=True):
     """
     To get the default SWARP configuration file
     """
@@ -29,13 +29,16 @@ def get_default_config(defaultconfig='pyphot', workdir='./'):
         f = open(os.path.join(workdir, "config.swarp"), "w")
         f.write(out)
         f.close()
-        msgs.info("config.swarp generated from SWarp default configuration")
+        if verbose:
+            msgs.info("config.swarp generated from SWarp default configuration")
     elif defaultconfig == "pyphot":
         os.system("cp " + os.path.join(config_dir,"swarp.config") + ' ' + os.path.join(workdir,"config.swarp"))
-        msgs.info("config.swarp generated from PyPhot default configuration")
+        if verbose:
+            msgs.info("config.swarp generated from PyPhot default configuration")
     else:
         os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,"config.swarp"))
-        msgs.info("Using user provided configuration for SWarp")
+        if verbose:
+            msgs.info("Using user provided configuration for SWarp")
 
     comd = ["-c", os.path.join(workdir, "config.swarp")]
     return comd
@@ -58,14 +61,15 @@ def get_config(config=None):
     return configapp
 
 
-def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=True, log=False):
+def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=True, log=False, verbose=True):
 
-    ## Get the version of your swarp
-    swarpversion = get_version()
-    msgs.info("SWarp version is {:}".format(swarpversion))
+    if verbose:
+        ## Get the version of your swarp
+        swarpversion = get_version()
+        msgs.info("SWarp version is {:}".format(swarpversion))
 
     ## Generate the configuration file
-    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
+    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, verbose=verbose)
 
     ## append your configuration
     ## ToDO: Not sure why set the weightout_name does not work
@@ -89,7 +93,8 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         logfile.write(err.decode("utf-8"))
         logfile.write("\n")
         logfile.close()
-        msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
+        if verbose:
+            msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5]+".swarp.log"))
     if delete:
         os.system("rm " + os.path.join(workdir, "*.swarp"))
         if os.path.exists(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))):
@@ -99,7 +104,6 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
 def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None, delete=False, log=False):
 
     if coaddroot is not None:
-
         if coadddir is None:
             coadddir = os.path.join(workdir, "Coadd")
         if not os.path.exists(coadddir):
@@ -151,12 +155,13 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
         else:
             os.system("mv {:} {:}".format(os.path.join(workdir, "*.swarp"), coadddir))
 
-
     else:
         for imgname in imglist:
+            msgs.info('Resampling {:} with Swarp {:}'.format(os.path.basename(imgname), get_version()))
             if config is not None:
                 this_config = config.copy()# need to copy this since the config would be possibly changed in swarpone!
             else:
                 this_config = None
-            swarpone(imgname,config=this_config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log)
+            swarpone(imgname, config=this_config, workdir=workdir, defaultconfig=defaultconfig,
+                     delete=delete, log=log, verbose=False)
 

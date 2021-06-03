@@ -24,7 +24,7 @@ def get_version(task='sex'):
     return version
 
 
-def get_default_config(task='sex', defaultconfig='pyphot', workdir='./'):
+def get_default_config(task='sex', defaultconfig='pyphot', workdir='./', verbose=True):
     """
     To get the default SExtractor configuration file
     """
@@ -35,14 +35,17 @@ def get_default_config(task='sex', defaultconfig='pyphot', workdir='./'):
         f = open(workdir + "config.sex", "w")
         f.write(out)
         f.close()
-        msgs.info("config.sex generated from SExtractor default configuration")
+        if verbose:
+            msgs.info("config.sex generated from SExtractor default configuration")
 
     elif defaultconfig == "pyphot":
         os.system("cp " + os.path.join(config_dir,"sex.config") + ' ' + os.path.join(workdir,"config.sex"))
-        msgs.info("config.sex generated from PyPhot default configuration")
+        if verbose:
+            msgs.info("config.sex generated from PyPhot default configuration")
     else:
         os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,"config.sex"))
-        msgs.info("Using user provided configuration for SExtractor")
+        if verbose:
+            msgs.info("Using user provided configuration for SExtractor")
 
     comd = ["-c", os.path.join(workdir,"config.sex")]
     return comd
@@ -93,34 +96,39 @@ def get_config(config=None, workdir="./", dual=False):
     return configapp
 
 
-def get_nnw(nnw=None, workdir='./'):
+def get_nnw(nnw=None, workdir='./', verbose=True):
     """
     To get the default SExtractor configuration file
     """
     if (nnw == None) or (nnw=='sex'):
         os.system("cp " + os.path.join(config_dir,"sex.nnw") + ' ' + os.path.join(workdir,"nnw.sex"))
-        msgs.info("nnw.sex generated from PyPhot default NNW")
+        if verbose:
+            msgs.info("nnw.sex generated from PyPhot default NNW")
     else:
         os.system("cp " + nnw + ' ' + os.path.join(workdir,"nnw.sex"))
-        msgs.info("Using user provided NNW")
+        if verbose:
+            msgs.info("Using user provided NNW")
 
     comd = ["-STARNNW_NAME", os.path.join(workdir,"nnw.sex")]
     return comd
 
 
-def get_conv(conv=None, workdir='./'):
+def get_conv(conv=None, workdir='./', verbose=True):
     """
     Get the default convolution matrix, if needed.
     """
     if (conv == None) or (conv == "sex"):
         os.system("cp " + os.path.join(config_dir,"sex.conv") + ' ' + os.path.join(workdir,"conv.sex"))
-        msgs.info("conv.sex using 3x3 ``all-ground'' convolution mask with FWHM = 2 pixels")
+        if verbose:
+            msgs.info("conv.sex using 3x3 ``all-ground'' convolution mask with FWHM = 2 pixels")
     elif conv == "sex995":
         os.system("cp " + os.path.join(config_dir, "sex995.conv") + ' ' + os.path.join(workdir, "conv.sex"))
-        msgs.info("conv.sex using 9x9 convolution mask of a gaussian PSF with FWHM = 5.0 pixels")
+        if verbose:
+            msgs.info("conv.sex using 9x9 convolution mask of a gaussian PSF with FWHM = 5.0 pixels")
     else:
         os.system("cp " + conv + ' ' + os.path.join(workdir,"conv.sex"))
-        msgs.info("Using user provided conv")
+        if verbose:
+            msgs.info("Using user provided conv")
 
     comd = ["-FILTER_NAME", os.path.join(workdir,"conv.sex")]
     return comd
@@ -151,20 +159,21 @@ def get_params(params=None, workdir='./'):
 
 def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
            conv=None, nnw=None, dual=False, flag_image=None, weight_image=None,
-           delete=True, log=False):
+           delete=True, log=False, verbose=True):
 
-    ## Get the version of your SExtractor
-    sexversion = get_version(task=task)
-    msgs.info("SExtractor version is {:}".format(sexversion))
+    if verbose:
+        ## Get the version of your SExtractor
+        sexversion = get_version(task=task)
+        msgs.info("SExtractor version is {:}".format(sexversion))
 
     ## Generate the configuration file
-    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
+    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, verbose=verbose)
 
     ## Generate the convolution matrix
-    convcomd = get_conv(conv=conv, workdir=workdir)
+    convcomd = get_conv(conv=conv, workdir=workdir, verbose=verbose)
 
     ## Generate the NNW file
-    nnwcomd = get_nnw(nnw=nnw, workdir=workdir)
+    nnwcomd = get_nnw(nnw=nnw, workdir=workdir, verbose=verbose)
 
     ## Generate the parameters file
     paramscomd = get_params(params=params, workdir=workdir)
@@ -188,7 +197,8 @@ def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultc
         comd = [task] + [os.path.join(workdir,imgname)] + configcomd + convcomd + nnwcomd + paramscomd + configapp
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    msgs.info("Catalog generated: " + config['CATALOG_NAME'])
+    if verbose:
+        msgs.info("Catalog generated: " + config['CATALOG_NAME'])
 
     if log:
         if dual:
@@ -203,12 +213,14 @@ def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultc
         logfile.write(err.decode("utf-8"))
         logfile.write("\n")
         logfile.close()
-        msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5] + ".sex.log"))
+        if verbose:
+            msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5] + ".sex.log"))
     if delete:
         os.system("rm {:}".format(os.path.join(workdir,"*.sex")))
 
 def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
-           conv=None, nnw=None, dual=False, flag_image_list=None, weight_image_list=None, delete=True, log=False):
+           conv=None, nnw=None, dual=False, flag_image_list=None, weight_image_list=None,
+           delete=True, log=False):
 
     if flag_image_list is not None:
         assert len(imglist) == len(flag_image_list), "flag_image_list should have the same length with imglist"
@@ -216,6 +228,7 @@ def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultc
         assert len(imglist) == len(weight_image_list), "weight_image_list should have the same length with imglist"
 
     for ii, imgname in enumerate(imglist):
+        msgs.info('Extracting photometric catalog with SExtractor {:} for {:}'.format(get_version(),os.path.basename(imgname)))
         if flag_image_list is not None:
             flag_image = flag_image_list[ii]
         else:
@@ -229,5 +242,5 @@ def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultc
         else:
             this_config = None
         sexone(imgname, task=task, config=this_config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
-               nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log)
+               nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log, verbose=False)
 
