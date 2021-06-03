@@ -173,9 +173,8 @@ class ProcessImagesPar(ParSet):
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
-                 use_pixelflat=None, use_illumflat=None, use_supersky=None,
-                 use_fringe=None,
-                 background=None, back_size=None, back_filtersize=None):
+                 use_pixelflat=None, use_illumflat=None, use_supersky=None, use_fringe=None,
+                 back_type=None, back_rms_type=None, back_size=None, back_filtersize=None, back_maxiters=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -379,11 +378,16 @@ class ProcessImagesPar(ParSet):
                            'Options are: {0}'.format(', '.join(options['replace']))
 
         ## Background methods
-        defaults['background'] = 'median'
-        options['background'] = ProcessImagesPar.valid_background_methods()
-        dtypes['background'] = str
-        descr['background'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
-                                       ', '.join(options['background']))
+        defaults['back_type'] = 'median'
+        options['back_type'] = ProcessImagesPar.valid_back_type()
+        dtypes['back_type'] = str
+        descr['back_type'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
+                                       ', '.join(options['back_type']))
+
+        defaults['back_rms_type'] = 'STD'
+        options['back_rms_type'] = ProcessImagesPar.valid_backrms_type()
+        dtypes['back_rms_type'] = str
+        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
         defaults['back_size'] = (200,200)
         dtypes['back_size'] = [tuple, list]
@@ -392,6 +396,11 @@ class ProcessImagesPar(ParSet):
         defaults['back_filtersize'] = (3,3)
         dtypes['back_filtersize'] = [tuple, list]
         descr['back_filtersize'] = 'Filter size for background estimation'
+
+        defaults['back_maxiters'] = 5
+        dtypes['back_maxiters'] = int
+        descr['back_maxiters'] = 'Maximum number of iterations for background estimation.'
+
 
         # Instantiate the parameter set
         super(ProcessImagesPar, self).__init__(list(pars.keys()),
@@ -414,7 +423,7 @@ class ProcessImagesPar(ParSet):
                    'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
                    'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
-                   'background','back_size','back_filtersize']
+                   'back_type', 'back_rms_type','back_size','back_filtersize','back_maxiters']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -454,11 +463,19 @@ class ProcessImagesPar(ParSet):
         return ['photoutils', 'sextractor' ]
 
     @staticmethod
-    def valid_background_methods():
+    def valid_back_type():
         """
-        Return the valid methods for combining frames.
+        Return the valid methods for background estimator method.
         """
-        return ['median', 'mean', 'sextractor' ]
+        return ['MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE',
+                'median','mean','sextractor', 'mmm', 'biweight', 'mode']
+
+    @staticmethod
+    def valid_backrms_type():
+        """
+        Return the valid methods for background rms estimator method.
+        """
+        return ['STD', 'MAD', 'BIWEIGHT', 'std', 'mad', 'biweight']
 
     @staticmethod
     def valid_saturation_handling():
@@ -983,7 +1000,7 @@ class DetectionPar(ParSet):
         defaults['back_rms_type'] = 'STD'
         options['back_rms_type'] = DetectionPar.valid_backrms_type()
         dtypes['back_rms_type'] = str
-        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_type']))
+        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
         defaults['back_nsigma'] = 3
         dtypes['back_nsigma'] = [int, float]

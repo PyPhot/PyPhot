@@ -3,7 +3,7 @@
 .. include common links, assuming primary doc root is up one directory
 .. include:: ../include/links.rst
 """
-import os, gc
+import os
 import numpy as np
 from scipy import signal, ndimage
 from scipy.optimize import curve_fit
@@ -15,11 +15,9 @@ from pyphot import utils
 from pyphot import io
 from pyphot import postproc
 from pyphot.lacosmic import lacosmic
+from pyphot.background import BKG2D
 
 from astropy import stats
-from astropy.stats import SigmaClip
-from photutils import Background2D
-from photutils import MeanBackground, MedianBackground, SExtractorBackground
 
 def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
             masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, #mask vignetting
@@ -135,9 +133,9 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
     return sci_fits_list, flag_fits_list
 
 def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_airmass=0.,
-            background='median', back_size=(200,200), back_filtersize=(3, 3), maskbrightstar=True, brightstar_nsigma=3,
-            maskbrightstar_method='sextractor', sextractor_task='sex',
-            mask_cr=True, contrast=2, maxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
+            back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5,
+            maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', sextractor_task='sex',
+            mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
             replace=None):
 
     sci_fits_list = []
@@ -172,42 +170,49 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 mag_ext = coeff_airmass * (airmass[ii]-1)
                 data *= 10**(0.4*mag_ext)
 
-            ## Sky background subtraction
-            sigma_clip = SigmaClip(sigma=sigclip)
-            if background == 'median':
-                bkg_estimator = MedianBackground()
-            elif background == 'mean':
-                bkg_estimator = MeanBackground()
-            else:
-                bkg_estimator = SExtractorBackground()
-
             # mask bright stars before estimating the background
             if maskbrightstar:
-                starmask = postproc.mask_bright_star(data.copy(), mask=mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
-                                                     back_maxiters=maxiter, method=maskbrightstar_method, task=sextractor_task)
+                starmask = postproc.mask_bright_star(data, mask=mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+                                                     back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task)
             else:
                 starmask = np.zeros_like(data, dtype=bool)
 
             # estimate the 2D background with all masks
-            # ToDo: the following seems having memory leaking, need to solve the issue or switch to SExtractor.
-            msgs.info('Subtracting 2D background')
             mask_bkg = mask | starmask
-            bkg = Background2D(data.copy(), back_size, mask=mask_bkg, filter_size=back_filtersize,
-                               sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
-            background_array = bkg.background
-            background_rms = bkg.background_rms
-            # subtract the background
-            sci_image = data-background_array
+            background_array, background_rms = BKG2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
+                                                     sigclip=sigclip, back_type=back_type, back_rms_type=back_rms_type,
+                                                     back_maxiters=back_maxiters,sextractor_task=sextractor_task)
+            ## OLD Sky background subtraction
+            # ToDo: the following seems having memory leaking, need to solve the issue or switch to SExtractor.
+            #from astropy.stats import SigmaClip
+            #from photutils import Background2D
+            #from photutils import MeanBackground, MedianBackground, SExtractorBackground
+            #sigma_clip = SigmaClip(sigma=sigclip)
+            #if back_type == 'median':
+            #    bkg_estimator = MedianBackground()
+            #elif back_type == 'mean':
+            #    bkg_estimator = MeanBackground()
+            #else:
+            #    bkg_estimator = SExtractorBackground()
+            #tmp = data.copy()
+            #bkg = Background2D(tmp, back_size, mask=mask_bkg, filter_size=back_filtersize,
+            #                   sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+            #background_array = bkg.background
+            #background_rms = bkg.background_rms
             # clean up memory
-            del bkg, data, mask_bkg
-            gc.collect()
+            #del tmp, bkg, data, mask_bkg
+            #gc.collect()
+
+            # subtract the background
+            msgs.info('Subtracting 2D background')
+            sci_image = data-background_array
 
             # CR mask
             if mask_cr:
                 msgs.info('Identifying cosmic rays using the L.A.Cosmic algorithm')
                 bpm_cr = lacosmic(sci_image, contrast, cr_threshold, neighbor_threshold,
                                   error=background_rms, mask=mask, background=background_array, effective_gain=None,
-                                  readnoise=None, maxiter=maxiter, border_mode='mirror')
+                                  readnoise=None, maxiter=lamaxiter, border_mode='mirror')
                 # seems not working as good as lacosmic.py
                 # grow=1.5, remove_compact_obj=True, sigfrac=0.3, objlim=5.0,
                 #bpm_cr = lacosmic_pypeit(sci_image, saturation, nonlinear, varframe=None, maxiter=maxiter, grow=grow,

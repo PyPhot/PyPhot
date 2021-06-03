@@ -7,7 +7,6 @@ from astropy import units as u
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy import stats
-from astropy.stats import SigmaClip
 from astropy.convolution import Gaussian2DKernel
 from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.coordinates import SkyCoord
@@ -18,13 +17,11 @@ from photutils import source_properties
 from photutils import SkyCircularAperture
 from photutils import aperture_photometry
 from photutils.utils import calc_total_error
-from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgroundRMS
-from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
-from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
 
 from pyphot import msgs, io, utils, caloffset
 from pyphot import sex, scamp, swarp
 from pyphot import query, crossmatch
+from pyphot.background import BKG2D
 
 def defringing(sci_fits_list, masterfringeimg):
 
@@ -298,7 +295,7 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
 
 def detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None, effective_gain=None, nsigma=2., npixels=5, fwhm=5,
            nlevels=32, contrast=0.001, back_nsigma=3, back_maxiters=10, back_type='median', back_rms_type='std',
-           back_size=(200, 200), back_filter_size=(3, 3), morp_filter=False,
+           back_size=(200, 200), back_filter_size=(3, 3), morp_filter=False, sextractor_task='sex',
            phot_apertures=[1.0,2.0,3.0,4.0,5.0], return_seg_only=False):
     '''
         Identify cosmic rays using the L.A.Cosmic algorithm
@@ -337,38 +334,14 @@ def detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None, effective_g
     if effective_gain is None:
         effective_gain = 1.0
 
-    sigma_clip = SigmaClip(sigma=back_nsigma, maxiters=back_maxiters)
-
-    if back_type.lower() == 'median':
-        bkg_estimator = MedianBackground()
-    elif back_type.lower() == 'mean':
-        bkg_estimator = MeanBackground()
-    elif back_type.lower() == 'sextractor':
-        bkg_estimator = SExtractorBackground()
-    elif back_type.lower() == 'mmm':
-        bkg_estimator = MMMBackground()
-    elif back_type.lower() == 'biweight':
-        bkg_estimator = BiweightLocationBackground()
-    elif back_type.lower() == 'mode':
-        bkg_estimator = ModeEstimatorBackground()
-    else:
-        msgs.warn('{:}Background is not found, using MedianBackground Instead.'.format(back_type))
-        bkg_estimator = MedianBackground()
-
-    if back_rms_type.lower() == 'std':
-        bkgrms_estimator = StdBackgroundRMS()
-    elif back_rms_type.lower() == 'mad':
-        bkgrms_estimator = MADStdBackgroundRMS()
-    elif back_rms_type.lower() == 'biweight':
-        bkgrms_estimator = BiweightScaleBackgroundRMS()
-
     if (rmsmap is None) or (bkgmap is None):
-        bkg = Background2D(data.copy(), back_size, mask=mask, filter_size=back_filter_size, sigma_clip=sigma_clip,
-                           bkg_estimator=bkg_estimator, bkgrms_estimator=bkgrms_estimator)
+        background_array, background_rms = BKG2D(data, back_size, mask=mask, filter_size=back_filter_size,
+                                                 sigclip=back_nsigma, back_type=back_type, back_rms_type=back_rms_type,
+                                                 back_maxiters=back_maxiters, sextractor_task=sextractor_task)
         if rmsmap is None:
-            rmsmap = bkg.background_rms
+            rmsmap = background_rms
         if bkgmap is None:
-            bkgmap = bkg.background
+            bkgmap = background_array
 
     threshold = bkgmap + nsigma * rmsmap
     error = calc_total_error(data,rmsmap, effective_gain)
@@ -448,11 +421,14 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
 
     if method.lower()=='photoutils':
         msgs.info('Masking bright stars with Photoutils')
-        back_box_size = (data.shape[0] // 10, data.shape[1] // 10)
-        seg = detect(data, nsigma=brightstar_nsigma, npixels=npixels, fwhm=fwhm,
+        tmp = data.copy()
+        back_box_size = (tmp.shape[0] // 10, tmp.shape[1] // 10)
+        seg = detect(tmp, nsigma=brightstar_nsigma, npixels=npixels, fwhm=fwhm,
                      back_type='median', back_rms_type='mad', back_nsigma=back_nsigma, back_maxiters=back_maxiters,
                      back_size=back_box_size, back_filter_size=(3, 3), return_seg_only=True)
         mask = seg.data>0
+        del tmp, seg
+        gc.collect()
     else:
         msgs.info('Masking bright stars with SExtractor.')
         tmp_root = 'mask_bright_star_tmp_{:03d}'.format(np.random.randint(1,999))
