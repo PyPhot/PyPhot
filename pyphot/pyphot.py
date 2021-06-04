@@ -632,8 +632,31 @@ class PyPhot(object):
                                                 back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
                                                 back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
                                                 resampling_type=self.par['postproc']['coadd']['resampling_type'],
+                                                sextractor_task=self.par['rdx']['sextractor'],
+                                                detect_thresh=self.par['postproc']['detection']['detect_thresh'],
+                                                analysis_thresh=self.par['postproc']['detection']['analysis_thresh'],
+                                                detect_minarea=self.par['postproc']['detection']['detect_minarea'],
                                                 delete=self.par['postproc']['coadd']['delete'],
                                                 log=self.par['postproc']['coadd']['log'])
+
+                ## calibrate the zeropoint for the final stacked image
+                if self.par['postproc']['photometry']['cal_zpt']:
+                    msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits')))
+                    zpt, zpt_std, nstar = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits'),
+                                                        refcatalog=self.par['postproc']['photometry']['photref_catalog'],
+                                                        primary=self.par['postproc']['photometry']['primary'],
+                                                        secondary=self.par['postproc']['photometry']['secondary'],
+                                                        coefficients=self.par['postproc']['photometry']['coefficients'],
+                                                        FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
+                                                        external_flag=self.par['postproc']['photometry']['external_flag'],
+                                                        outqaroot=os.path.join(self.qa_path, coaddroot))
+                    par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
+                    par[0].header['ZP'] = zpt
+                    par[0].header['ZP_STD'] = zpt_std
+                    par[0].header['ZP_NSTAR'] = nstar
+                    par.writeto(os.path.join(self.coadd_path, coaddroot + '_sci.fits'),overwrite=True)
+                else:
+                    zpt = self.par['postproc']['photometry']['zpt']
 
                 ## Detection
                 if self.par['postproc']['detection']['skip']:
@@ -644,7 +667,7 @@ class PyPhot(object):
                                                  weight_image='{:}_sci.weight.fits'.format(coaddroot),
                                                  bkg_image=None, rms_image=None, workdir=self.coadd_path,
                                                  detection_method=self.par['postproc']['detection']['detection_method'],
-                                                 effective_gain=None, pixscale=pixscale,
+                                                 zpt=zpt, effective_gain=None, pixscale=pixscale,
                                                  detect_thresh=self.par['postproc']['detection']['detect_thresh'],
                                                  analysis_thresh=self.par['postproc']['detection']['analysis_thresh'],
                                                  detect_minarea=self.par['postproc']['detection']['detect_minarea'],
@@ -671,22 +694,6 @@ class PyPhot(object):
                                                  sextractor_task=self.par['rdx']['sextractor'],
                                                  phot_apertures=self.par['postproc']['detection']['phot_apertures'])
 
-                ## calibrate the zeropoint for the final stacked image
-                if self.par['postproc']['photometry']['cal_zpt']:
-                    msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits')))
-                    zp, zp_std, nstar = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),
-                                                        refcatalog=self.par['postproc']['photometry']['photref_catalog'],
-                                                        primary=self.par['postproc']['photometry']['primary'],
-                                                        secondary=self.par['postproc']['photometry']['secondary'],
-                                                        coefficients=self.par['postproc']['photometry']['coefficients'],
-                                                        FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
-                                                        external_flag=self.par['postproc']['photometry']['external_flag'],
-                                                        outqaroot=os.path.join(self.qa_path, coaddroot))
-                    par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
-                    par[0].header['ZP'] = zp
-                    par[0].header['ZP_STD'] = zp_std
-                    par[0].header['ZP_NSTAR'] = nstar
-                    par.writeto(os.path.join(self.coadd_path, coaddroot + '_sci.fits'),overwrite=True)
 
                     '''
                     ## Estimate Map rms

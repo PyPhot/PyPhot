@@ -46,6 +46,7 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
         bkg_estimator = ModeEstimatorBackground()
     else:
         msgs.warn('{:} Background is not found, using MedianBackground Instead.'.format(back_type))
+        back_type = 'median'
         bkg_estimator = MedianBackground()
 
     if back_rms_type.lower() == 'std':
@@ -102,7 +103,7 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
 
 
 def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
-                     effective_gain=None, nsigma=2., npixels=5, fwhm=5,
+                     effective_gain=None, nsigma=2., npixels=5, fwhm=5, zpt=0.,
                      nlevels=32, contrast=0.001, back_nsigma=3, back_maxiters=10, back_type='median', back_rms_type='std',
                      back_size=(200, 200), back_filter_size=(3, 3), morp_filter=False, sextractor_task='sex',
                      phot_apertures=[1.0,2.0,3.0,4.0,5.0], return_seg_only=False):
@@ -158,12 +159,14 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
 
     ## Do the detection using the Image Segmentation technique
     ## The return is a SegmentationImage
+    msgs.info('Detecting targets with detect_sources')
     segm = detect_sources(data, threshold, npixels=npixels, filter_kernel=kernel)
 
     if return_seg_only:
         return segm
 
     # Source Deblending
+    msgs.info('Deblending with deblend_sources')
     segm_deblend = deblend_sources(data, segm, npixels=npixels, filter_kernel=kernel,
                                    nlevels=nlevels, contrast=contrast)
 
@@ -183,6 +186,7 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
     '''
 
     ## measure the source properties
+    msgs.info('Measuring source properties with source_properties')
     if morp_filter:
         cat = source_properties(data, segm_deblend, mask=mask, background=bkgmap, error=error,
                                 filter_kernel=kernel, wcs=wcs_info)
@@ -190,7 +194,7 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
         cat = source_properties(data, segm_deblend, mask=mask, background=bkgmap, error=error, wcs=wcs_info)
     tbl = cat.to_table()
     tbl = tbl[np.invert(np.isnan(tbl['xcentroid']))] # remove sources with nan positions
-    tbl['MAG_AUTO'] = -2.5*np.log10(tbl['source_sum'])
+    tbl['MAG_AUTO'] = -2.5*np.log10(tbl['source_sum']) + zpt
     tbl['MAGERR_AUTO'] = 2.5/np.log(10)*tbl['source_sum_err']/tbl['source_sum']
     tbl['FLUX_AUTO'] = tbl['source_sum']
     tbl['FLUXERR_AUTO'] = tbl['source_sum_err']
@@ -207,7 +211,7 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
     for ii in range(np.size(phot_apertures)):
         flux_aper[:,ii] = tbl_aper['aperture_sum_{:d}'.format(ii)]
         fluxerr_aper[:,ii] = tbl_aper['aperture_sum_err_{:d}'.format(ii)]
-        mag_aper[:,ii] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(ii)])
+        mag_aper[:,ii] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(ii)]) + zpt
         magerr_aper[:,ii] = 2.5/np.log(10)*tbl_aper['aperture_sum_err_{:d}'.format(ii)]/tbl_aper['aperture_sum_{:d}'.format(ii)]
     tbl['MAG_APER'] = mag_aper
     tbl['MAGERR_APER'] = magerr_aper

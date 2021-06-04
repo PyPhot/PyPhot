@@ -1054,7 +1054,7 @@ class DetectionPar(ParSet):
         """
         Return the valid methods for mosaic method.
         """
-        return ['Photutils', 'SExtractor', 'DAOStar', 'IRAFStar']
+        return ['Photutils', 'SExtractor', 'photutils', 'sextractor', 'DAOStar', 'IRAFStar']
 
     @staticmethod
     def valid_check_type():

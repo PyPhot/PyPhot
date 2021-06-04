@@ -45,7 +45,7 @@ def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters
 
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
-                task='sex',detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=1.0,
+                task='sex',detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
                 astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0, distort_degrees=3,
                 pixscale_maxerr=1.1, posangle_maxerr=10.0, stability_type='INSTRUMENT', mosaic_type='LOOSE',
                 weight_type='MAP_WEIGHT', skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
@@ -107,8 +107,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
             os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
 
     # configuration for the first SExtractor run
-    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                  "CATALOG_TYPE": "FITS_LDAC",
+    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
                   "DETECT_THRESH": detect_thresh,
                   "ANALYSIS_THRESH": analysis_thresh,
                   "DETECT_MINAREA": detect_minarea}
@@ -118,7 +117,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                   'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
     msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
     sex.sexall(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-               defaultconfig='pyphot', conv='sex995', nnw=None, dual=False, delete=delete, log=log,
+               defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
 
     # configuration for the scamp run
@@ -230,7 +229,8 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
 def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=200, back_filtersize=3,
-          back_filtthresh=0.0, resampling_type='LANCZOS3', delete=True, log=True):
+          back_filtthresh=0.0, resampling_type='LANCZOS3', detect_thresh=5, analysis_thresh=5,
+          detect_minarea=5, sextractor_task='sex',delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
     msgs.info('Coadding image for {:}'.format(os.path.join(coadddir,coaddroot)))
@@ -279,10 +279,26 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     par[0].data = np.round(par[0].data).astype('int32')
     par[0].writeto(coadd_flag_file, overwrite=True)
 
+    # Extract a catalog for zero point calibration in the next step.
+    # configuration for the SExtractor run
+    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
+                  "DETECT_THRESH": detect_thresh,
+                  "ANALYSIS_THRESH": analysis_thresh,
+                  "DETECT_MINAREA": detect_minarea}
+    sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
+                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
+                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
+                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
+    msgs.info('Running SExtractor for the coadded image. The catalog will be used for zero-point calibration.')
+    sex.sexone(coadd_file, catname=coadd_file.replace('.fits','_zptcat.fits'),
+               flag_image=coadd_flag_file, weight_image=coadd_wht_file,
+               task=sextractor_task, config=sexconfig, workdir=coadddir, params=sexparams,
+               defaultconfig='pyphot', dual=False, conv='sex', nnw=None, delete=True, log=False)
+
     return coadd_file, coadd_wht_file, coadd_flag_file
 
 def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_image=None, rms_image=None,
-           workdir='./', detection_method='sextractor',
+           workdir='./', detection_method='sextractor', zpt=0.,
            effective_gain=None, pixscale=1.0, detect_thresh=2., analysis_thresh=2., detect_minarea=5, fwhm=5, nlevels=32, contrast=0.001,
            back_type='median', back_rms_type='std', back_size=(200, 200), back_filter_size=(3, 3), back_default=0.,
            backphoto_type='GLOBAL', backphoto_thick=100, weight_type='MAP_WEIGHT', check_type='BACKGROUND_RMS',
@@ -292,6 +308,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
 
     if detection_method.lower() == 'photutils':
         # detection with photoutils
+        msgs.info('Detecting sources with Photutils.')
         header, data, _ = io.load_fits(os.path.join(workdir,sci_image))
         wcs_info = wcs.WCS(header)
         if effective_gain is None:
@@ -318,7 +335,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
             bkgmap = None
 
         # do the detection with photutils
-        phot_table, phot_rmsmap, phot_bkgmap = photutils_detect(data, wcs_info, mask=mask, rmsmap=rmsmap, bkgmap=bkgmap,
+        phot_table, phot_rmsmap, phot_bkgmap = photutils_detect(data, wcs_info, mask=mask, rmsmap=rmsmap, bkgmap=bkgmap, zpt=zpt,
                                                       effective_gain=effective_gain, nsigma=detect_thresh, npixels=detect_minarea,
                                                       fwhm=fwhm, nlevels=nlevels, contrast=contrast, back_nsigma=back_nsigma,
                                                       back_maxiters=back_maxiters, back_type=back_type, back_rms_type=back_rms_type,
@@ -333,6 +350,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
 
     elif detection_method.lower() == 'sextractor':
         # detection with SExtractor
+        msgs.info('Detecting sources with SExtractor.')
         if check_type is not None:
             check_list = check_type.split(',')
             check_name_tmp = []
@@ -358,6 +376,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
                       'FLUXERR_APER({:})'.format(len(phot_apertures)),
                       'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
         det_config = {"CATALOG_TYPE": "FITS_LDAC",
+                      "MAG_ZEROPOINT": zpt,
                       "BACK_TYPE": back_type, "BACK_VALUE": back_default, "BACK_SIZE": back_size,
                       "BACK_FILTERSIZE": back_filter_size, "BACKPHOTO_TYPE": backphoto_type,
                       "BACKPHOTO_THICK": backphoto_thick, "WEIGHT_TYPE": weight_type,
