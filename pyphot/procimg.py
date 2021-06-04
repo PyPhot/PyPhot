@@ -13,9 +13,8 @@ from IPython import embed
 from pyphot import msgs
 from pyphot import utils
 from pyphot import io
-from pyphot import postproc
 from pyphot.lacosmic import lacosmic
-from pyphot.background import BKG2D
+from pyphot.photometry import BKG2D, mask_bright_star
 
 from astropy import stats
 
@@ -172,8 +171,8 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
 
             # mask bright stars before estimating the background
             if maskbrightstar:
-                starmask = postproc.mask_bright_star(data, mask=mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
-                                                     back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task)
+                starmask = mask_bright_star(data, mask=mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+                                            back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task)
             else:
                 starmask = np.zeros_like(data, dtype=bool)
 

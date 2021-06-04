@@ -2,7 +2,7 @@
 Module for LBT/LBC
 
 """
-import glob,gc
+import glob
 import numpy as np
 
 from astropy import wcs

@@ -14,8 +14,7 @@ from astropy.stats import sigma_clipped_stats
 from astropy.convolution import Gaussian2DKernel
 
 from pyphot import io,msgs
-from pyphot import postproc
-from pyphot.background import BKG2D
+from pyphot.photometry import BKG2D, mask_bright_star
 
 
 def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc='std',
@@ -107,8 +106,8 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
 
         ## Mask bright stars
         if maskbrightstar:
-            starmask = postproc.mask_bright_star(array, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
-                                                 back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+            starmask = mask_bright_star(array, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
+                                        back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
         else:
             starmask = np.zeros_like(array, dtype=bool)
 
@@ -246,8 +245,8 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
             #                                                 cenfunc=cenfunc, stdfunc=stdfunc)
             #segm = detect_sources(this_data, brightstar_nsigma*stddev, npixels=5)
             #starmask = segm.data.astype('bool')
-            starmask = postproc.mask_bright_star(this_data, mask=this_mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
-                                                 back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+            starmask = mask_bright_star(this_data, mask=this_mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
+                                        back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
             this_mask = np.logical_or(this_mask, starmask)
 
         data3D[:, :, iimg] = this_data / this_header['EXPTIME']

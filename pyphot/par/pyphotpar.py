@@ -741,7 +741,7 @@ class CoaddPar(ParSet):
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None,
                  clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
                  back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None, resampling_type=None,
-                 delete=None, log=None):
+                 pixscale=None, delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -815,6 +815,10 @@ class CoaddPar(ParSet):
         dtypes['resampling_type'] = str
         descr['resampling_type'] = 'Swarp resampling type options are: {0}'.format(', '.join(options['resampling_type']))
 
+        defaults['pixscale'] = None
+        dtypes['pixscale'] = [int, float]
+        descr['pixscale'] = 'pixel scale for the final coadd image'
+
         defaults['delete'] = False
         dtypes['delete'] = bool
         descr['delete'] = 'Delete the configuration files for SWARP?'
@@ -836,7 +840,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh','resampling_type', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'pixscale', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -891,7 +895,7 @@ class DetectionPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None,
+    def __init__(self, skip=None, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None, analysis_thresh=None,
                  back_default=None, back_size=None, back_filtersize=None, detect_minarea=None,check_type=None,
                  weight_type=None, backphoto_type=None, backphoto_thick=None, conv=None, nnw=None, delete=None, log=None,
                  back_rms_type=None, back_nsigma=None,back_maxiters=None,fwhm=None,nlevels=None,contrast=None,morp_filter=None):
@@ -925,6 +929,10 @@ class DetectionPar(ParSet):
         defaults['detect_thresh'] = 1.5
         dtypes['detect_thresh'] = [int, float]
         descr['detect_thresh'] = ' <sigmas> or <threshold> for detection'
+
+        defaults['analysis_thresh'] = 1.5
+        dtypes['analysis_thresh'] = [int, float]
+        descr['analysis_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for analysis'
 
         defaults['back_type'] = 'AUTO'
         options['back_type'] = DetectionPar.valid_back_type()
@@ -1027,7 +1035,7 @@ class DetectionPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip','detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default',
+        parkeys = ['skip','detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default', 'analysis_thresh',
                    'back_size', 'back_filtersize', 'detect_minarea', 'check_type','weight_type','backphoto_type',
                    'backphoto_thick','conv','nnw', 'delete', 'log','back_rms_type','back_nsigma','back_maxiters',
                    'fwhm','nlevels','contrast','morp_filter']
