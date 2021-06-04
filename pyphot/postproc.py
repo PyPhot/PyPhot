@@ -306,6 +306,14 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
            defaultconfig='pyphot', dual=False, conv=None, nnw=None, delete=True, log=False,
            sextractor_task='sex', phot_apertures=[1.0,2.0,3.0,4.0,5.0]):
 
+    if outroot is None:
+        if dual:
+            outroot = sci_image[0].replace('.fits','')
+        else:
+            outroot = sci_image.replace('.fits','')
+
+    catname = outroot+'_cat.fits'
+
     if detection_method.lower() == 'photutils':
         # detection with photoutils
         msgs.info('Detecting sources with Photutils.')
@@ -342,7 +350,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
                                                       back_size=back_size, back_filter_size=back_filter_size,
                                                       morp_filter=morp_filter, phot_apertures=phot_apertures)
         ## save the table and maps
-        phot_table.write(os.path.join(workdir, sci_image.replace('.fits','_cat.fits')), overwrite=True)
+        phot_table.write(os.path.join(workdir, catname), overwrite=True)
         if rms_image is None:
             io.save_fits(os.path.join(workdir, '{:}_rms.fits'.format(outroot)), phot_rmsmap, header, 'RMSMAP', overwrite=True)
         if bkg_image is None:
@@ -397,7 +405,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
             tmp_flag=None
 
         # do the source extraction
-        sex.sexone(sci_image, flag_image=flag_image, weight_image=weight_image,
+        sex.sexone(sci_image, catname=catname, flag_image=flag_image, weight_image=weight_image,
                    task=sextractor_task, config=det_config, workdir=workdir, params=det_params,
                    defaultconfig=defaultconfig, dual=dual, conv=conv, nnw=nnw, delete=delete, log=log)
 
@@ -405,15 +413,15 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
         if tmp_flag is not None:
             os.system('rm {:}'.format(tmp_flag))
 
-        if 'BACKGROUND_RMS' in check_type:
+        if 'BACKGROUND_RMS' in check_list:
             phot_rmsmap = fits.getdata(os.path.join(workdir, '{:}_rms.fits'.format(outroot)))
         elif rms_image is not None:
             _, phot_rmsmap, _ = io.load_fits(os.path.join(workdir,rms_image))
         else:
             phot_rmsmap = None
 
-        if 'BACKGROUND' in check_type:
-            phot_bkgmap = fits.getdata(os.path.join(workdir, '{:}_rms.fits'.format(outroot)))
+        if 'BACKGROUND' in check_list:
+            phot_bkgmap = fits.getdata(os.path.join(workdir, '{:}_bkg.fits'.format(outroot)))
         elif bkg_image is not None:
             _, phot_bkgmap, _ = io.load_fits(os.path.join(workdir,bkg_image))
         else:
