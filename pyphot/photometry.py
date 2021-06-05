@@ -89,6 +89,8 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
         os.system('rm {:}_bkg.fits'.format(tmp_root))
         os.system('rm {:}_rms.fits'.format(tmp_root))
         os.system('rm {:}_cat.fits'.format(tmp_root))
+        del tmp_data, filtered_data
+        gc.collect()
     else:
         msgs.info('Estimating {:} BACKGROUND with Photutils Background2D.'.format(back_type))
         tmp = data.copy()
@@ -225,23 +227,22 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
 def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_maxiters=10, npixels=5, fwhm=5,
                      method='sextractor', task='sex'):
 
+    data_copy = data.copy()
     if mask is not None:
-        data[mask] = 0. # zero out bad pixels
-
+        data_copy[mask] = 0. # zero out bad pixels
     if method.lower()=='photoutils':
         msgs.info('Masking bright stars with Photoutils')
-        tmp = data.copy()
-        back_box_size = (tmp.shape[0] // 10, tmp.shape[1] // 10)
-        seg = photutils_detect(tmp, nsigma=brightstar_nsigma, npixels=npixels, fwhm=fwhm,
+        back_box_size = (data_copy.shape[0] // 10, data_copy.shape[1] // 10)
+        seg = photutils_detect(data_copy, nsigma=brightstar_nsigma, npixels=npixels, fwhm=fwhm,
                                back_type='median', back_rms_type='mad', back_nsigma=back_nsigma, back_maxiters=back_maxiters,
                                back_size=back_box_size, back_filter_size=(3, 3), return_seg_only=True)
         mask = seg.data>0
-        del tmp, seg
+        del data_copy, seg
         gc.collect()
     else:
         msgs.info('Masking bright stars with SExtractor.')
         tmp_root = 'mask_bright_star_tmp_{:03d}'.format(np.random.randint(1,999))
-        par = fits.PrimaryHDU(data)
+        par = fits.PrimaryHDU(data_copy)
         par.writeto('{:}.fits'.format(tmp_root),overwrite=True)
         # configuration for the first SExtractor run
         sexconfig0 = {"CHECKIMAGE_TYPE": "OBJECTS", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
@@ -262,6 +263,8 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
         os.system('rm {:}.fits'.format(tmp_root))
         os.system('rm {:}_check.fits'.format(tmp_root))
         os.system('rm {:}_cat.fits'.format(tmp_root))
+        del data_copy
+        gc.collect()
 
     return mask
 

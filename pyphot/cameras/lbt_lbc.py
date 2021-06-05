@@ -319,8 +319,8 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
         par['postproc']['astrometry']['position_maxerr'] = 5.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
-        par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 20
+        par['postproc']['astrometry']['detect_thresh'] = 40 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 40
         par['postproc']['astrometry']['detect_minarea'] = 5
         par['postproc']['astrometry']['crossid_radius'] = 1
         par['postproc']['astrometry']['delete'] = True
@@ -365,7 +365,7 @@ class LBTLBCBCamera(LBTLBCCamera):
             par['postproc']['photometry']['zpt'] = 28.13 #2.5*np.log10(2.09)+27.33
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.47 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'U-Bessel':
+        elif self.get_meta_value(scifile, 'filter') == 'U-BESSEL':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
@@ -373,14 +373,14 @@ class LBTLBCBCamera(LBTLBCCamera):
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.48 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'B-Bessel':
+        elif self.get_meta_value(scifile, 'filter') == 'B-BESSEL':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
             par['postproc']['photometry']['zpt'] = 28.73 #2.5*np.log10(2.09)+27.93
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.22 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'V-Bessel':
+        elif self.get_meta_value(scifile, 'filter') == 'V-BESSEL':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
@@ -572,8 +572,8 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
         par['postproc']['astrometry']['position_maxerr'] = 5.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.2
-        par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 20
+        par['postproc']['astrometry']['detect_thresh'] = 40 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 40
         par['postproc']['astrometry']['detect_minarea'] = 5
         par['postproc']['astrometry']['crossid_radius'] = 1
         par['postproc']['astrometry']['delete'] = True
@@ -610,7 +610,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
         # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
         # ZP_ADU = ZP_e - 2.5*np.log10(gain)
-        if self.get_meta_value(scifile, 'filter') == 'V-Bessel':
+        if self.get_meta_value(scifile, 'filter') == 'V-BESSEL':
             par['postproc']['photometry']['photref_catalog'] = 'Sloan'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
@@ -618,7 +618,7 @@ class LBTLBCRCamera(LBTLBCCamera):
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.16 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'R-Bessel':
+        elif self.get_meta_value(scifile, 'filter') == 'R-BESSEL':
             #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             #par['postproc']['photometry']['primary'] = 'r'
             #par['postproc']['photometry']['secondary'] = 'g'
@@ -629,7 +629,7 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['coefficients'] = [-0.010,-0.218, 0.]
             par['postproc']['photometry']['zpt'] = 28.69 #2.5*np.log10(2.14)+27.86
             par['postproc']['photometry']['coeff_airmass'] = 0.13 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-        elif self.get_meta_value(scifile, 'filter') == 'I-Bessel':
+        elif self.get_meta_value(scifile, 'filter') == 'I-BESSEL':
             #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             #par['postproc']['photometry']['primary'] = 'i'
             #par['postproc']['photometry']['secondary'] = 'r'
@@ -638,7 +638,8 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['coefficients'] = [-0.003,-0.411,0.]
-            par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
+            #par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
+            par['postproc']['photometry']['zpt'] = 28.56 #measured from 2019A observations
             par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             #par['postproc']['photometry']['photref_catalog'] = 'SDSS'

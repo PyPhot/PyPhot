@@ -25,12 +25,14 @@ def query_region(ra, dec, radius=0.1, catalog='Panstarrs', data_release='dr2'):
 
     msgs.info('Loading catalogs from {:}'.format(catalog))
     if catalog in mast_cat.keys():
-        result = Catalogs.query_region(SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg), frame='icrs'), radius=radius*u.deg,
+        result = Catalogs.query_region(SkyCoord(ra=round(ra,7), dec=round(dec,7), unit=(u.deg, u.deg), frame='icrs'), radius=radius*u.deg,
                                        catalog=mast_cat[catalog], data_release=data_release)
     elif catalog in vizier_cat.keys():
+        #ToDo: a bug in SkyCoord. The following does not work ra=106.46233492244818, dec=29.100575319582383
+        # I round it to 7 digits and then works!!!
         v = Vizier(columns=["**", "+_r"], catalog=vizier_cat[catalog])
         v.ROW_LIMIT = -1
-        result = v.query_region(SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg), frame='icrs'), radius=radius*u.deg)
+        result = v.query_region(SkyCoord(ra=round(ra,7), dec=round(dec,7), unit=(u.deg, u.deg), frame='icrs'), radius=radius*u.deg)
 
         if len(result)>0:
             result = result[0]

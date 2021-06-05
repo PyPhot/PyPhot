@@ -1138,7 +1138,7 @@ class PhotometryPar(ParSet):
         dtypes['external_flag'] = bool
         descr['external_flag'] = 'Apply external flag cut when calibrating zeropoint? '
 
-        defaults['photref_catalog'] = 'PS1'
+        defaults['photref_catalog'] = 'Panstarrs'
         options['photref_catalog'] = PhotometryPar.valid_catalog_methods()
         dtypes['photref_catalog'] = str
         descr['photref_catalog'] = 'Background Options are: {0}'.format(', '.join(options['photref_catalog']))

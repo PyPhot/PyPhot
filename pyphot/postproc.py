@@ -427,10 +427,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
         else:
             phot_bkgmap = None
 
-        if dual:
-            phot_table = Table.read(os.path.join(workdir, sci_image[0].replace('.fits','_cat.fits')), 2)
-        else:
-            phot_table = Table.read(os.path.join(workdir, sci_image.replace('.fits','_cat.fits')), 2)
+        phot_table = Table.read(os.path.join(workdir, catname), 2)
 
     else:
         msgs.warn('{:} is not supported yet.'.format(detection_method))
