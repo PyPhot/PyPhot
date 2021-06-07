@@ -9,7 +9,8 @@ from astropy import stats
 
 from pyphot import msgs, io, utils, caloffset
 from pyphot import sex, scamp, swarp
-from pyphot import query, crossmatch
+from pyphot import crossmatch
+from pyphot.query import query
 from pyphot.photometry import mask_bright_star, photutils_detect
 
 def defringing(sci_fits_list, masterfringeimg):
@@ -486,38 +487,41 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         msgs.info('Saving the reference catalog to {:}'.format(out_refcat))
         ref_data.write(out_refcat, format='fits')
 
-    # Select high S/N stars
-    good_ref = (1.0857/ref_data['{:}_MAG_ERR'.format(primary)]>10)
-    if coefficients[1]*coefficients[2] !=0:
-        good_ref &= (1.0857/ref_data['{:}_MAG_ERR'.format(secondary)]>10)
-    try:
-        ref_data = ref_data[good_ref.data]
-    except:
-        ref_data = ref_data[good_ref]
+    if ref_data is not None:
+        # Select high S/N stars
+        good_ref = (1.0857/ref_data['{:}_MAG_ERR'.format(primary)]>10)
+        if coefficients[1]*coefficients[2] !=0:
+            good_ref &= (1.0857/ref_data['{:}_MAG_ERR'.format(secondary)]>10)
+        try:
+            ref_data = ref_data[good_ref.data]
+        except:
+            ref_data = ref_data[good_ref]
 
-    #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-    #try:
-    #    good_ref &= (ref_data['class']==6).data
-    #except:
-    #    msgs.warn('No point-source selection was applied to the reference catalog')
+        #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+        #try:
+        #    good_ref &= (ref_data['class']==6).data
+        #except:
+        #    msgs.warn('No point-source selection was applied to the reference catalog')
 
-    ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
-    ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
-              coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
-              coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
+        ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
+        ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
+                  coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
+                  coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
 
-    ref_pos = np.zeros((len(ref_ra), 2))
-    ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
+        ref_pos = np.zeros((len(ref_ra), 2))
+        ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
 
-    ## cross-match with 1 arcsec
-    dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
-    matched = np.invert(np.isinf(dist))
+        ## cross-match with 1 arcsec
+        dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
+        matched = np.invert(np.isinf(dist))
 
-    matched_cat_mag = catalog['MAG_AUTO'][matched] - 2.5*np.log10(FLXSCALE*FLASCALE)
-    matched_ref_mag = ref_mag[ind[matched]]
-    #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
+        matched_cat_mag = catalog['MAG_AUTO'][matched] - 2.5*np.log10(FLXSCALE*FLASCALE)
+        matched_ref_mag = ref_mag[ind[matched]]
+        #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
 
-    nstar = np.sum(matched)
+        nstar = np.sum(matched)
+    else:
+        nstar=0
 
     if nstar==0:
         msgs.warn('No matched standard stars were found')
