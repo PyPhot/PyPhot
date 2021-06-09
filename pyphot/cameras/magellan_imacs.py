@@ -459,7 +459,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on IMACS")
+        msgs.info("Using hard-coded BPM for det={:} on IMACS".format(det))
 
         # Get the binning
         #hdu = fits.open(filename)
