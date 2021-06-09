@@ -13,13 +13,14 @@ from astropy.table import Table
 
 from configobj import ConfigObj
 
-from pyphot import msgs, io
+from pyphot import msgs, io, utils
 from pyphot import procimg, postproc
 from pyphot.par.util import parse_pyphot_file
 from pyphot.par import PyPhotPar
 from pyphot.metadata import PyPhotMetaData
 from pyphot.cameras.util import load_camera
 from pyphot import masterframe
+from pyphot.psf import  psf
 
 
 class PyPhot(object):
@@ -530,7 +531,7 @@ class PyPhot(object):
                                 outqa_list.append(os.path.join(self.qa_path, this_qa))
 
                             # Do the calibrations
-                            zp_all, zp_std_all, nstar_all = postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
+                            zp_all, zp_std_all, nstar_all, fwhm_all = postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
                                                             ref_fits_list=master_ref_cats, outqa_root_list = outqa_list,
                                                             refcatalog=self.par['postproc']['photometry']['photref_catalog'],
                                                             primary=self.par['postproc']['photometry']['primary'],
@@ -538,7 +539,8 @@ class PyPhot(object):
                                                             coefficients=self.par['postproc']['photometry']['coefficients'],
                                                             ZP=self.par['postproc']['photometry']['zpt'],
                                                             nstar_min=self.par['postproc']['photometry']['nstar_min'],
-                                                            external_flag=self.par['postproc']['photometry']['external_flag'])
+                                                            external_flag=self.par['postproc']['photometry']['external_flag'],
+                                                            pixscale=pixscale)
 
                             # The FITS table that stores individual zero-points
                             master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],
@@ -550,9 +552,26 @@ class PyPhot(object):
                             master_zpt_tbl['airmass'] = self.fitstbl['airmass'][grp_science].astype('double')
                             master_zpt_tbl['ZPT'] = zp_all
                             master_zpt_tbl['ZPT_Std'] = zp_std_all
+                            master_zpt_tbl['FWHM'] = fwhm_all
                             master_zpt_tbl['NStar'] = nstar_all.astype('int32')
                             master_zpt_tbl['Detector'] = (np.ones_like(nstar_all)*self.det).astype('int32')
                             master_zpt_tbl.write(master_zpt_name, overwrite=True)
+
+                        ## Making QA image for calibrated individual chips
+                        if self.par['postproc']['qa']['skip']:
+                            msgs.warn('Skipping QA for individual chips.')
+                        else:
+                            outroots = []
+                            for this_image in sci_resample_list:
+                                outroots.append(os.path.join(self.qa_path, os.path.basename(this_image).replace('.fits','_img')))
+                            utils.showimages(sci_resample_list, outroots=outroots,
+                                             interval_method=self.par['postproc']['qa']['interval_method'],
+                                             vmin=self.par['postproc']['qa']['vmin'],
+                                             vmax=self.par['postproc']['qa']['vmax'],
+                                             stretch_method=self.par['postproc']['qa']['stretch_method'],
+                                             cmap=self.par['postproc']['qa']['cmap'],
+                                             plot_wcs=self.par['postproc']['qa']['plot_wcs'],
+                                             show=self.par['postproc']['qa']['show'])
 
                     ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here? Probably not?
                     ##       using swarp to combine different detectors, if only one detector then skip this step.
@@ -642,7 +661,7 @@ class PyPhot(object):
                 ## calibrate the zeropoint for the final stacked image
                 if self.par['postproc']['photometry']['cal_zpt']:
                     msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits')))
-                    zpt, zpt_std, nstar = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits'),
+                    zpt, zpt_std, nstar, matched_table = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits'),
                                                         refcatalog=self.par['postproc']['photometry']['photref_catalog'],
                                                         primary=self.par['postproc']['photometry']['primary'],
                                                         secondary=self.par['postproc']['photometry']['secondary'],
@@ -650,10 +669,20 @@ class PyPhot(object):
                                                         FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
                                                         external_flag=self.par['postproc']['photometry']['external_flag'],
                                                         outqaroot=os.path.join(self.qa_path, coaddroot))
+
+                    if matched_table is not None:
+                        star_table = Table()
+                        star_table['x'] = matched_table['XWIN_IMAGE']
+                        star_table['y'] = matched_table['YWIN_IMAGE']
+                        fwhm, _ = psf.buildPSF(star_table, os.path.join(self.coadd_path, coaddroot + '_sci.fits'), pixscale=pixscale,
+                                               outroot=os.path.join(self.qa_path, coaddroot))
+                    else:
+                        fwhm = 0.
                     par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
-                    par[0].header['ZP'] = zpt
-                    par[0].header['ZP_STD'] = zpt_std
-                    par[0].header['ZP_NSTAR'] = nstar
+                    par[0].header['ZP'] = (zpt, 'Zero point measured from stars')
+                    par[0].header['ZP_STD'] = (zpt_std, 'The standard deviration of ZP')
+                    par[0].header['ZP_NSTAR'] = (nstar, 'The number of stars used for ZP and FWHM')
+                    par[0].header['FWHM'] = (fwhm, 'FWHM in units of arcsec measured from stars')
                     par.writeto(os.path.join(self.coadd_path, coaddroot + '_sci.fits'),overwrite=True)
                 else:
                     zpt = self.par['postproc']['photometry']['zpt']

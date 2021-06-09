@@ -12,6 +12,8 @@ from pyphot import sex, scamp, swarp
 from pyphot import crossmatch
 from pyphot.query import query
 from pyphot.photometry import mask_bright_star, photutils_detect
+from pyphot.psf import  psf
+
 
 def defringing(sci_fits_list, masterfringeimg):
 
@@ -68,7 +70,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
 
     if skip_swarp_align:
-        msgs.warn('Skipping alignment with Swarp')
+        msgs.info('Skipping the first alignment step with Swarp')
         for i in range(len(sci_fits_list)):
             os.system('cp {:} {:}'.format(sci_fits_list[i],
                                           sci_fits_list[i].replace('.fits', '.resamp.fits')))
@@ -525,12 +527,12 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     if nstar==0:
         msgs.warn('No matched standard stars were found')
-        return 0., 0., nstar
+        return 0., 0., nstar, None
     elif nstar < 10:
             msgs.warn('Only {:} standard stars were found'.format(nstar))
             _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
                                                       sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
-            return zp, zp_std, nstar
+            return zp, zp_std, nstar, catalog[matched]
     else:
         _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
                                                   sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
@@ -603,14 +605,15 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
             plt.savefig(outqaroot+'_pos_scatter.pdf')
             plt.close()
 
-    return zp, zp_std, nstar
+    return zp, zp_std, nstar, catalog[matched]
 
 def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0, external_flag=True,
-              refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10):
+              refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10, pixscale=None):
 
 
     zp_all, zp_std_all = np.zeros(len(cat_fits_list)), np.zeros(len(cat_fits_list))
     nstar_all = np.zeros(len(cat_fits_list))
+    fwhm_all = np.zeros(len(cat_fits_list))
     for ii, this_cat in enumerate(cat_fits_list):
         if sci_fits_list is None:
             this_sci_fits = this_cat.replace('.cat','.fits')
@@ -647,12 +650,13 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             FLASCALE = 1.0
 
 
-        zp_this, zp_this_std, nstar = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
+        zp_this, zp_this_std, nstar, cat_matched = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
                                    coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE, external_flag=external_flag,
                                    out_refcat=this_ref_name, outqaroot=this_qa_root)
         if nstar>nstar_min:
             msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
             mag_ext = ZP-zp_this
+            FLXSCALE *= 10**(0.4*(mag_ext))
             if mag_ext>0.5:
                 msgs.warn('{:} has an extinction of {:0.3f} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
             elif mag_ext>0.1:
@@ -660,19 +664,31 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             else:
                 msgs.info('{:} has an extinction of {:0.3f} magnitude, Excellent conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
 
+            # measure the PSF
+            star_table=Table()
+            try:
+                star_table['x'] = cat_matched['XWIN_IMAGE']
+                star_table['y'] = cat_matched['YWIN_IMAGE']
+            except:
+                star_table['x'] = cat_matched['xcentroid']
+                star_table['y'] = cat_matched['ycentroid']
+            fwhm, _ = psf.buildPSF(star_table, this_sci_fits, size=51, sigclip=5, maxiters=10, norm_radius=2.5,
+                                   pixscale=pixscale, cenfunc='median', outroot=this_qa_root)
 
-            FLXSCALE *= 10**(0.4*(mag_ext))
+            # Save the important parameters
             par[0].header['FLXSCALE'] = FLXSCALE
             par[0].header['FLASCALE'] = FLASCALE
-            par[0].header['ZP'] = zp_this
-            par[0].header['ZP_STD'] = zp_this_std
-            par[0].header['ZP_NSTAR'] = nstar
+            par[0].header['ZP'] = (zp_this, 'Zero point measured from stars')
+            par[0].header['ZP_STD'] = (zp_this_std, 'The standard deviration of ZP')
+            par[0].header['ZP_NSTAR'] = (nstar, 'The number of stars used for ZP and FWHM')
+            par[0].header['FWHM'] = (fwhm, 'FWHM in units of arcsec measured from stars')
             par.writeto(this_sci_fits, overwrite=True)
         else:
             msgs.warn('The number of stars found for calibration is smaller than nstar_min. skipping the ZPT calibrations.')
-
+            fwhm = 0
         zp_all[ii] = zp_this
         zp_std_all[ii] = zp_this_std
         nstar_all[ii] = nstar
+        fwhm_all[ii] = fwhm
 
-    return zp_all, zp_std_all, nstar_all
+    return zp_all, zp_std_all, nstar_all, fwhm_all

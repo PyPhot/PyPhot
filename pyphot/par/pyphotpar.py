@@ -1204,6 +1204,90 @@ class PhotometryPar(ParSet):
         """
         pass
 
+class QAPar(ParSet):
+    """
+    A parameter set holding the arguments for how to perform the flux
+    calibration.
+
+    For a table with the current keywords, defaults, and descriptions,
+    see :ref:`pyphotpar`.
+    """
+    def __init__(self, skip=None, vmin = None, vmax = None, interval_method=None, stretch_method=None, cmap=None,
+                 plot_wcs=None, show=None):
+
+        # Grab the parameter names and values from the function
+        # arguments
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        pars = OrderedDict([(k,values[k]) for k in args[1:]])
+
+        # Initialize the other used specifications for this parameter
+        # set
+        defaults = OrderedDict.fromkeys(pars.keys())
+        options = OrderedDict.fromkeys(pars.keys())
+        dtypes = OrderedDict.fromkeys(pars.keys())
+        descr = OrderedDict.fromkeys(pars.keys())
+
+        defaults['skip'] = False
+        dtypes['skip'] = bool
+        descr['skip'] = 'Skip producing QA plots?'
+
+
+
+        defaults['plot_wcs'] = True
+        dtypes['plot_wcs'] = bool
+        descr['plot_wcs'] = 'Using WCS information?'
+
+        defaults['vmin'] = None
+        dtypes['vmin'] = [int, float]
+        descr['vmin'] = 'vmin used for the plot'
+
+        defaults['vmax'] = None
+        dtypes['vmax'] = [int, float]
+        descr['vmax'] = 'vmax used for the plot'
+
+        defaults['show'] = False
+        dtypes['show'] = bool
+        descr['show'] = 'Show the QA plot?'
+
+        defaults['interval_method'] = 'zscale'
+        dtypes['interval_method'] = str
+        descr['interval_method'] = 'interval method when showing image'
+
+        defaults['stretch_method'] = 'linear'
+        dtypes['stretch_method'] = str
+        descr['stretch_method'] = 'stretching method when showing image'
+
+        defaults['cmap'] = 'gist_yarg_r'
+        dtypes['cmap'] = str
+        descr['cmap'] = 'color map used for showing image'
+
+        # Instantiate the parameter set
+        super(QAPar, self).__init__(list(pars.keys()),
+                                                 values=list(pars.values()),
+                                                 defaults=list(defaults.values()),
+                                                 dtypes=list(dtypes.values()),
+                                                 descr=list(descr.values()))
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, cfg):
+        k = numpy.array([*cfg.keys()])
+        parkeys = ['skip','vmin', 'vmax', 'interval_method', 'stretch_method', 'cmap', 'plot_wcs', 'show']
+        badkeys = numpy.array([pk not in parkeys for pk in k])
+        if numpy.any(badkeys):
+            raise ValueError('{0} not recognized key(s) for DetectionPar.'.format(k[badkeys]))
+
+        kwargs = {}
+        for pk in parkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
+        return cls(**kwargs)
+
+    def validate(self):
+        """
+        Check the parameters are valid for the provided method.
+        """
+        pass
+
 class ReduxPar(ParSet):
     """
     The parameter set used to hold arguments for functionality relevant
@@ -1339,7 +1423,7 @@ class PostProcPar(ParSet):
     see :ref:`pyphotpar`.
     """
 
-    def __init__(self, astrometry=None, coadd=None, detection=None, photometry=None):
+    def __init__(self, astrometry=None, coadd=None, detection=None, photometry=None, qa=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1369,6 +1453,10 @@ class PostProcPar(ParSet):
         dtypes['photometry'] = [ParSet, dict]
         descr['photometry'] = 'Parameters for solving photometry.'
 
+        defaults['qa'] = QAPar()
+        dtypes['qa'] = [ParSet, dict]
+        descr['qa'] = 'Parameters for solving photometry.'
+
         # Instantiate the parameter set
         super(PostProcPar, self).__init__(list(pars.keys()),
                                              values=list(pars.values()),
@@ -1382,7 +1470,7 @@ class PostProcPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['astrometry', 'coadd', 'detection', 'photometry']
+        allkeys = ['astrometry', 'coadd', 'detection', 'photometry', 'qa']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))
@@ -1396,6 +1484,8 @@ class PostProcPar(ParSet):
         kwargs[pk] = DetectionPar.from_dict(cfg[pk]) if pk in k else None
         pk = 'photometry'
         kwargs[pk] = PhotometryPar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'qa'
+        kwargs[pk] = QAPar.from_dict(cfg[pk]) if pk in k else None
 
         return cls(**kwargs)
 

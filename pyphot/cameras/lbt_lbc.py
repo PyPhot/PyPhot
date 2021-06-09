@@ -568,7 +568,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         # astrometry
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2' # change to PANSTARRS-1 could be benefited if your image is deep
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
         par['postproc']['astrometry']['position_maxerr'] = 5.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.2
@@ -639,7 +639,7 @@ class LBTLBCRCamera(LBTLBCCamera):
             par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['coefficients'] = [-0.003,-0.411,0.]
             #par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
-            par['postproc']['photometry']['zpt'] = 28.56 #measured from 2019A observations
+            par['postproc']['photometry']['zpt'] = 28.56 #measured from 2020A observations of J0706
             par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
             #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
