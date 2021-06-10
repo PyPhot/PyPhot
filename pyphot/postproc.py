@@ -439,7 +439,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
     return phot_table, phot_rmsmap, phot_bkgmap
 
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.],
-           FLXSCALE=1.0, FLASCALE=1.0, external_flag=True, # This two paramers are exactly same with that used in SCAMP
+           oversize=1.0, external_flag=True, FLXSCALE=1.0, FLASCALE=1.0, # This two paramers are exactly same with that used in SCAMP
            out_refcat=None, outqaroot=None):
 
     try:
@@ -471,7 +471,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     ra_cen, dec_cen = np.median(ra), np.median(dec)
     distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
-    radius = np.nanmax(distance)*2.0 # query a bigger radius for safe given that you might have a big dither when re-use this catalog
+    radius = np.nanmax(distance)*oversize
 
     # Read/Query a reference catalog
     if (out_refcat is not None) and os.path.exists(out_refcat):
@@ -649,10 +649,10 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             msgs.warn('FLASCALE was not found in the FITS Image Header.')
             FLASCALE = 1.0
 
-
+        # query a bigger (by a factor of 2 as specified by oversize) radius for safe given that you might have a big dither when re-use this catalog
         zp_this, zp_this_std, nstar, cat_matched = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
                                    coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE, external_flag=external_flag,
-                                   out_refcat=this_ref_name, outqaroot=this_qa_root)
+                                   oversize=2.0, out_refcat=this_ref_name, outqaroot=this_qa_root)
         if nstar>nstar_min:
             msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
             mag_ext = ZP-zp_this
