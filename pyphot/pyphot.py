@@ -674,7 +674,7 @@ class PyPhot(object):
                         star_table = Table()
                         star_table['x'] = matched_table['XWIN_IMAGE']
                         star_table['y'] = matched_table['YWIN_IMAGE']
-                        fwhm, _ = psf.buildPSF(star_table, os.path.join(self.coadd_path, coaddroot + '_sci.fits'), pixscale=pixscale,
+                        fwhm, _, _, _ = psf.buildPSF(star_table, os.path.join(self.coadd_path, coaddroot + '_sci.fits'), pixscale=pixscale,
                                                outroot=os.path.join(self.qa_path, coaddroot))
                     else:
                         fwhm = 0.

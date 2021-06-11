@@ -389,7 +389,7 @@ class ProcessImagesPar(ParSet):
         dtypes['back_rms_type'] = str
         descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
-        defaults['back_size'] = (200,200)
+        defaults['back_size'] = 200
         dtypes['back_size'] = [tuple, list]
         descr['back_size'] = 'Box size for background estimation'
 

@@ -277,6 +277,8 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     coadd_flag_file = os.path.join(coadddir, coaddroot + '_flag.fits')
     coadd_wht_file = os.path.join(coadddir, coaddroot + '_sci.weight.fits')
 
+    # ToDO: Subtract background for the final coadded image
+
     # change flag image type to int32
     par = fits.open(coadd_flag_file, memmap=False)
     par[0].data = np.round(par[0].data).astype('int32')
@@ -371,7 +373,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
                 elif icheck=='BACKGROUND':
                     check_name_tmp.append('{:}_bkg.fits'.format(outroot))
                 else:
-                    check_name_tmp.append('{:}_{:}.fits'.format(outroot, icheck.lower))
+                    check_name_tmp.append('{:}_{:}.fits'.format(outroot, icheck.lower()))
 
             check_name = ','.join([str(elem) for elem in check_name_tmp])
         else:
@@ -672,7 +674,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             except:
                 star_table['x'] = cat_matched['xcentroid']
                 star_table['y'] = cat_matched['ycentroid']
-            fwhm, _ = psf.buildPSF(star_table, this_sci_fits, size=51, sigclip=5, maxiters=10, norm_radius=2.5,
+            fwhm, _, _,_ = psf.buildPSF(star_table, this_sci_fits, size=51, sigclip=5, maxiters=10, norm_radius=2.5,
                                    pixscale=pixscale, cenfunc='median', outroot=this_qa_root)
 
             # Save the important parameters

@@ -3,6 +3,7 @@ import numpy as np
 import numpy.ma as ma
 
 from astropy import wcs
+from astropy import stats
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.stats import SigmaClip, sigma_clip
@@ -22,7 +23,7 @@ from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgr
 from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
 from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
 
-from pyphot import msgs, sex
+from pyphot import msgs, sex, io, utils
 from pyphot import crossmatch
 
 
@@ -268,7 +269,315 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
 
     return mask
 
-def ForcedAperPhot(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):
+def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], Npositions=10000,
+              sigclip=3, maxiters=10, back_type='median', back_size=(200,200), back_filtersize=(3, 3),
+              maskbrightstar_method='sextractor', brightstar_nsigma=5, sextractor_task='sex'):
+    '''
+        Estimating limiting magnitude for a given fits image
+    Args:
+        image (str): image name
+        Nsigma (int or float): 5-sigma limit?
+        image_type (str): the image type of your input image: science, rms, variance, or inverse variance
+        zero_point (int or float): zeropoint of your image, if None it will find ZP keyword from the image header
+        phot_apertures (int, float, or list): aperture diameters
+        Npoints (int): the number of random positions that we be measure from the image
+        sigclip (int or float): how many sigma you want to use for rejections
+        maxiters (int): The maximum iterations for the rejection
+        back_type (str): Bakcground type for estimating the variance map. Only used for science image_type
+        back_size (int or list): The size for estimating the varinace map.  Only used for science image_type
+        back_filtersize (int or list):  The filter size for estimating the varinace map.  Only used for science image_type
+        maskbrightstar_method (str): Method for masking bright stars. Only used for science image_type
+        brightstar_nsigma (int or float): Nsigma used for masking bright star. Only used for science image_type
+        sextractor_task (str): how to call your sextractor, sex or sextractor? Only used for science image_type
+    Returns:
+        maglims (1D numpy array): limiting magnitudes for the given apertures.
+    '''
+
+    if np.isscalar(phot_apertures):
+        phot_apertures = [phot_apertures]
+
+    # Load the data
+    header, data, flag = io.load_fits(image)
+    wcs_info = wcs.WCS(header)
+    #pixscale = np.mean(wcs.utils.proj_plane_pixel_scales(wcs_info)) * 3600.0
+
+    if zero_point is None:
+        try:
+            zpt = header['ZP']
+        except:
+            msgs.warn('Zero point was not given, set zpt=0')
+            zpt = 0.
+    else:
+        zpt = zero_point
+
+    # Determine the image type
+    if image_type=='science':
+        msgs.info('Getting limiting magnitudes from Science image {:}'.format(image))
+        starmask = mask_bright_star(data, mask=flag>0, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+                                    back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+        mask_bkg = (flag>0) | starmask
+        _, rmsmap = BKG2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
+                          sigclip=sigclip, back_type=back_type, back_rms_type='std',
+                          back_maxiters=maxiters, sextractor_task=sextractor_task)
+        variancemap = rmsmap**2
+    elif image_type=='rms':
+        msgs.info('Getting limiting magnitudes from RMS image {:}'.format(image))
+        variancemap = data**2
+    elif image_type=='variance':
+        msgs.info('Getting limiting magnitudes from Variance image {:}'.format(image))
+        variancemap = data
+    elif image_type=='invar':
+        msgs.info('Getting limiting magnitudes from Variance image {:}'.format(image))
+        variancemap = utils.inverse(data)
+    else:
+        msgs.error('Only the following image_type are acceptable: science, rms, variance, invar.')
+        variancemap = None
+
+    # Generate random positions
+    nx, ny = data.shape
+    xx = np.random.randint(0,nx,Npositions)
+    yy = np.random.randint(0,ny,Npositions)
+    positions = wcs_info.pixel_to_world(xx, yy)
+
+    apertures = [SkyCircularAperture(positions, r= d/2*u.arcsec) for d in phot_apertures]
+    tbl_aper = aperture_photometry(variancemap, apertures, error=None, mask=None, method='exact', wcs=wcs_info)
+
+    maglims = np.zeros(len(phot_apertures))
+    for ii in range(len(phot_apertures)):
+        flux = tbl_aper['aperture_sum_{:d}'.format(ii)]
+        mask = np.isnan(flux) | (flux==0.)
+        mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
+                                                         cenfunc='median', stdfunc='std')
+        maglims[ii] = round(zpt - 2.5*np.log10(np.sqrt(median)*Nsigma),2)
+        msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude'.format(Nsigma, phot_apertures[ii], maglims[ii]))
+
+    return maglims
+
+def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
+
+    ncat = np.size(catalogs)
+    if cat_ids is None:
+        cat_ids = (np.arange(ncat)+1).astype('U').tolist()
+    if ncat != np.size(cat_ids):
+        msgs.error('The numbers of cat_ids and catalogs should be the same')
+
+    ## Identify the coordinates of the unique sources
+    Table0 = Table.read(catalogs[0], 2)
+    Table_Merged = Table()
+    Table_Merged['DET_CAT_ID'] = [cat_ids[0]]*len(Table0)
+    try:
+        Table_Merged['RA'] = Table0['ALPHA_J2000']
+        Table_Merged['DEC'] = Table0['DELTA_J2000']
+    except:
+        Table_Merged['RA'] = Table0['sky_centroid_icrs.ra']
+        Table_Merged['DEC'] = Table0['sky_centroid_icrs.dec']
+
+    for icat in range(1,ncat):
+        table_icat = Table.read(catalogs[icat], 2)
+        table_icat['DET_CAT_ID'] = cat_ids[icat]
+
+        pos1 = np.zeros((len(Table_Merged), 2))
+        pos1[:, 0], pos1[:, 1] = Table_Merged['RA'],Table_Merged['DEC']
+
+        pos2 = np.zeros((len(table_icat), 2))
+        try:
+            pos2[:, 0], pos2[:, 1] = table_icat['ALPHA_J2000'],table_icat['DELTA_J2000']
+        except:
+            pos2[:, 0], pos2[:, 1] = table_icat['sky_centroid_icrs.ra'],table_icat['sky_centroid_icrs.dec']
+
+        ## cross-match with pos2 as the left table and pos1 as the right table
+        ## i.e. For every pos2 target, we will check whether it has a counterpart in pos1
+        dist, ind = crossmatch.crossmatch_angular(pos2, pos1, max_distance=unique_dist / 3600.)
+        no_match = np.isinf(dist)
+
+        ## stack the catalog
+        this_table = Table()
+        this_table['DET_CAT_ID'] = table_icat[no_match]['DET_CAT_ID']
+        this_table['RA'] = pos2[:, 0][no_match]
+        this_table['DEC'] = pos2[:, 1][no_match]
+
+        Table_Merged =vstack([Table_Merged, this_table])
+
+    ## Add a source_id column
+    Table_Merged.add_column(np.arange(len(Table_Merged))+1, name='SOURCE_ID', index=0)
+
+    ## Assign the original columns to unique sources
+    pos1 = np.zeros((len(Table_Merged), 2))
+    pos1[:, 0], pos1[:, 1] = Table_Merged['RA'], Table_Merged['DEC']
+    for icat in range(ncat):
+        table_icat = Table.read(catalogs[icat], 2)
+        pos2 = np.zeros((len(table_icat), 2))
+        try:
+            pos2[:, 0], pos2[:, 1] = table_icat['ALPHA_J2000'],table_icat['DELTA_J2000']
+        except:
+            pos2[:, 0], pos2[:, 1] = table_icat['sky_centroid_icrs.ra'],table_icat['sky_centroid_icrs.dec']
+
+        ## cross-match with unique_dist, we will use pos1 as the left table and pos2 as the right table this time
+        ## i.e. we will check  for every targets in pos1 to see whether it has a counterparts in pos2
+        dist, ind = crossmatch.crossmatch_angular(pos1, pos2, max_distance=unique_dist / 3600.)
+        matched = np.invert(np.isinf(dist)) # indices of pos1 that having counterparts in pos2
+        for ikey in table_icat.keys():
+            if len(table_icat[ikey].shape)==1:
+                Table_Merged['{:}_{:}'.format(ikey,cat_ids[icat])] = np.zeros(len(Table_Merged),dtype=table_icat[ikey].dtype)
+            elif len(table_icat[ikey].shape)==2:
+                Table_Merged['{:}_{:}'.format(ikey,cat_ids[icat])] = np.zeros((len(Table_Merged),table_icat[ikey].shape[1]),dtype=table_icat[ikey].dtype)
+            else:
+                msgs.error('Column {:} format is not supported yet.'.format(ikey))
+            Table_Merged['{:}_{:}'.format(ikey,cat_ids[icat])][matched] = table_icat[ikey][ind[matched]]
+
+        Table_Merged['dist_merge_{:}'.format(cat_ids[icat])] = np.zeros(len(Table_Merged), dtype=dist.dtype)
+        Table_Merged['dist_merge_{:}'.format(cat_ids[icat])][matched] = dist[matched]
+
+    if outfile is not None:
+        Table_Merged.write(outfile, format='fits', overwrite=True)
+
+    return Table_Merged
+
+def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], image_ids=None,
+                   effective_gains=None, zero_points=None, outfile=None):
+
+
+    # If images is a string name, make it to a list
+    if isinstance(images, str):
+        images = [images]
+    if isinstance(rmsmaps, str):
+        rmsmaps = [rmsmaps]
+    if isinstance(flagmaps, str):
+        flagmaps = [flagmaps]
+
+    if image_ids is None:
+        image_ids = []
+        image_ids_float = np.arange(len(images))+1
+        for ii in range(len(images)):
+            image_ids.append('{:02d}'.format(ii))
+
+    if zero_points is not None:
+        if np.size(zero_points) != len(images):
+            msgs.error('The number of zero_points should be macthed with the number of input images.')
+
+    ## Get the position
+    try:
+        ra, dec = input_table['RA'], input_table['DEC']
+    except:
+        ra, dec = input_table['ALPHA_J2000'], input_table['DELTA_J2000']
+
+    ## setup the output table
+    Table_Forced = input_table.copy()
+    #Table_Forced = Table()
+    #Table_Forced['RA'] = ra
+    #Table_Forced['DEC'] = dec
+    ## Let's perform the forced aperture photometry on each image
+    positions = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg))
+
+    ## Perform aperture photometry for your targets
+    ## Loops over each images
+    for ii, this_image in enumerate(images):
+        msgs.info('Performing forced aperture photometry on {:}'.format(this_image))
+        header, data, _ = io.load_fits(this_image)
+        wcs_info = wcs.WCS(header)
+
+        ## zero point
+        if zero_points is not None:
+            zpt = zero_points[ii]
+        else:
+            try:
+                zpt = header['ZP']
+            except:
+                msgs.warn('Zero point was not given, set zpt=0')
+                zpt = 0.
+
+        ## effective gain which will be used for calculating total error
+        if effective_gains is not None:
+            gain = effective_gains[ii]
+        else:
+            try:
+                gain = header['GAIN']
+            except:
+                msgs.warn('Effective gain was not given, set gain=1')
+                gain = 1.0
+
+        ## set up the mask
+        if flagmaps is not None:
+            ## good pixels with flag==0
+            _, flag, _ = io.load_fits(flagmaps[ii])
+            mask = flag > 0.
+        else:
+            mask = None
+
+        ## set up error
+        if rmsmaps is not None:
+            _, error, _ = io.load_fits(rmsmaps[ii])
+        else:
+            ## ToDo: Make it a more careful error
+            msgs.info('RMS map was not given, generating a rough error map from science image')
+            _, error = BKG2D(data, 100, mask=mask, filter_size=(3,3), sigclip=5, back_maxiters=10,
+                             back_type='median', back_rms_type='std')
+
+        ## Get the total error, i.e. including both background noise and photon noise
+        total_error = calc_total_error(data, error, gain)
+
+        ## Set up apertures
+        apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
+
+        ## Get the Aperture flux with exact method
+        tbl_aper = aperture_photometry(data, apertures, error=total_error, mask=mask, method='exact', wcs=wcs_info)
+        flux_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)))
+        fluxerr_aper = np.zeros_like(flux_aper)
+        mag_aper = np.zeros_like(flux_aper)
+        magerr_aper = np.zeros_like(flux_aper)
+        for jj in range(np.size(phot_apertures)):
+            flux_aper[:,jj] = tbl_aper['aperture_sum_{:d}'.format(jj)]
+            fluxerr_aper[:,jj] = tbl_aper['aperture_sum_err_{:d}'.format(jj)]
+            mag_aper[:,jj] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(jj)])
+            magerr_aper[:,jj] = 2.5/np.log(10)*tbl_aper['aperture_sum_err_{:d}'.format(jj)]/tbl_aper['aperture_sum_{:d}'.format(jj)]
+
+        Table_Forced['FORCED_XCENTER_{:}'.format(image_ids[ii])] = tbl_aper['xcenter']
+        Table_Forced['FORCED_YCENTER_{:}'.format(image_ids[ii])] = tbl_aper['ycenter']
+        Table_Forced['FORCED_MAG_APER_{:}'.format(image_ids[ii])] = mag_aper + zpt
+        Table_Forced['FORCED_MAGERR_APER_{:}'.format(image_ids[ii])] = magerr_aper
+        Table_Forced['FORCED_FLUX_APER_{:}'.format(image_ids[ii])] = flux_aper
+        Table_Forced['FORCED_FLUXERR_APER_{:}'.format(image_ids[ii])] = fluxerr_aper
+
+        ## Change bad MAG to 999.
+        badmag = np.isinf(mag_aper) | np.isnan(mag_aper)
+        Table_Forced['FORCED_MAG_APER_{:}'.format(image_ids[ii])][badmag] = 999.
+        Table_Forced['FORCED_MAGERR_APER_{:}'.format(image_ids[ii])][badmag] = 999.
+
+        ## Set a mask bit for zero fluxes and change mag to zero as well
+        zero_obj = (flux_aper == 0.)
+        Table_Forced['FORCED_ZERO_APER_{:}'.format(image_ids[ii])] = zero_obj
+        Table_Forced['FORCED_MAG_APER_{:}'.format(image_ids[ii])][zero_obj] = 0.
+        Table_Forced['FORCED_MAGERR_APER_{:}'.format(image_ids[ii])][zero_obj] = 0.
+
+        ## Get the FLAG 'FLUX' with center method
+        if flagmaps is not None:
+            bpm_zeros = (data==0.)
+            if error is not None:
+                bpm_zeros = bpm_zeros | (error==0.)
+            flag += bpm_zeros*np.int(2**3) ## flag additional zero pixels. Not that this is consistent with the flag bit in procimg
+            ## Get the FLAG 'flux'
+            flag_tbl_aper = aperture_photometry(flag, apertures, error=None, mask=None, method='center', wcs=wcs_info)
+            flag_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)), dtype='int32')
+            for jj in range(np.size(phot_apertures)):
+                flag_aper[:, jj] = flag_tbl_aper['aperture_sum_{:d}'.format(jj)]
+
+            ## Get the Number of bad pixels within each aperture
+            nflag_tbl_aper = aperture_photometry((flag>0).astype('float'), apertures, error=None, mask=None, method='center', wcs=wcs_info)
+            nflag_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)), dtype='int32')
+            for jj in range(np.size(phot_apertures)):
+                nflag_aper[:, jj] = nflag_tbl_aper['aperture_sum_{:d}'.format(jj)]
+
+            ## Assign it to to the final table
+            Table_Forced['FORCED_FLAG_APER_{:}'.format(image_ids[ii])] = flag_aper
+            Table_Forced['FORCED_NFLAG_APER_{:}'.format(image_ids[ii])] = nflag_aper
+
+    ## Save the final table
+    if outfile is not None:
+        Table_Forced.write(outfile,format='fits', overwrite=True)
+
+    return Table_Forced
+
+def ForcedAperPhot_OLD(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):
 
     ncat = np.size(catalogs)
     if cat_ids is None:

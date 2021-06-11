@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.interpolate import UnivariateSpline
 
 from astropy import stats
 from astropy.table import Table
@@ -91,14 +92,49 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     psf1DX = psf1DX*utils.inverse(np.nanmax(psf1DX))
     psf1DY = psf1DY*utils.inverse(np.nanmax(psf1DY))
 
+    ## Derive the FWHM from the average curve
+    xx_fine = np.linspace(x1D[0], x1D[-1], 1000)
+    try:
+        xx_blue = xx_fine[xx_fine<0.]
+        xx_red = xx_fine[xx_fine>0.]
+        spl1 = UnivariateSpline(x1D, psf1DX, s=0)
+        spl2 = UnivariateSpline(y1D, psf1DY, s=0)
+        yy_fine1 = spl1(xx_fine)
+        yy_fine2 = spl2(xx_fine)
+
+        yy_fine = (yy_fine1+yy_fine2) / 2.0
+        yy_blue = yy_fine[xx_fine<0.]
+        yy_red =  yy_fine[xx_fine>0.]
+        left = xx_blue[np.argmin(abs(yy_blue - 0.5))]
+        right = xx_red[np.argmin(abs(yy_red - 0.5))]
+        fwhm = right - left
+
+        #yy_blue1 = yy_fine1[xx_fine<0.]
+        #yy_red1 =  yy_fine1[xx_fine>0.]
+        #left1 = xx_blue[np.argmin(abs(yy_blue1 - 0.5))]
+        #right1 = xx_red[np.argmin(abs(yy_red1 - 0.5))]
+        #fwhm1 = right1 - left1
+
+        #yy_blue2 = yy_fine2[xx_fine<0.]
+        #yy_red2 =  yy_fine2[xx_fine>0.]
+        #left2 = xx_blue[np.argmin(abs(yy_blue2 - 0.5))]
+        #right2 = xx_red[np.argmin(abs(yy_red2 - 0.5))]
+        #fwhm2 = right2 - left2
+
+        #fwhm = np.mean([fwhm1,fwhm2])
+    except:
+        yy_fine = np.zeros_like(xx_fine)
+        fwhm = 0.
+        msgs.warn('Emperical FWHM measurement failed')
+
     ## ToDo: this is a hack need to debug the robust_curve_fit. It fails to some cases.
+    ## Derive the FWHM from the Gaussian fitting
     try:
         popt, pcov = utils.robust_curve_fit(utils.gauss1D, np.hstack([x1D,y1D]), np.hstack([psf1DX,psf1DY]),
                                             sigma=np.hstack([sig1DX,sig1DY]), niters=3, sigclip=sigclip, maxiters_sigclip=maxiters)
-        fwhm = popt[-2] * 2 * np.sqrt(2 * np.log(2))
-        msgs.info('FWHM = {:0.2f} pixels'.format(fwhm))
+        fwhm_fit = popt[-2] * 2 * np.sqrt(2 * np.log(2))
     except:
-        fwhm= 0.
+        fwhm_fit = 0.
         popt = None
         msgs.warn('PSF fitting failed')
 
@@ -112,6 +148,7 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     #ydata = psf2D.ravel()
     #popt, pcov = utils.robust_curve_fit(utils.gauss2D, xdata, ydata, p0=initial_guess)
     #psfmodel2D = utils.gauss2D((xx, yy),*popt).reshape(nx,ny)
+    psfmodel2D = None
 
     if outroot is not None:
         plt.figure()
@@ -129,10 +166,10 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
         plt.text(-np.max([nx,ny])/2.1, 0.8, 'FWHM={:0.2f} pixels'.format(fwhm),fontsize=12)
         if pixscale is not None:
             plt.text(-np.max([nx, ny]) / 2.1, 0.7, 'FWHM={:0.2f} arcsec'.format(fwhm*pixscale), fontsize=12)
-
-        #plt.plot([-0.5*fwhm,0.5*fwhm],[0.5,0.5],'k:')
         if popt is not None:
-            plt.plot([-0.5*fwhm,0.5*fwhm],[popt[-1]+popt[0]/2,popt[-1]+popt[0]/2],'k:')
+            plt.plot([-0.5*fwhm_fit,0.5*fwhm_fit],[popt[-1]+popt[0]/2,popt[-1]+popt[0]/2],'r:')
+        plt.plot(xx_fine, yy_fine, 'k-')
+        plt.plot([-0.5*fwhm,0.5*fwhm],[0.5,0.5],'k--')
         plt.xlabel('X [Pixels]',fontsize=14)
         plt.ylabel('Normalized PSF',fontsize=14)
         plt.savefig('{:}_PSF_1D.pdf'.format(outroot))
@@ -158,7 +195,9 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
 
     if pixscale is not None:
         fwhm *= pixscale
+        fwhm_fit *= pixscale
         msgs.info('FWHM = {:0.2f} arcsec'.format(fwhm))
+        msgs.info('FWHM = {:0.2f} arcsec from gaussian fit'.format(fwhm_fit))
 
     '''
     # build PSF model with EPSBuilder
@@ -173,7 +212,7 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     plt.imshow(epsf.data, norm=norm, origin='lower', cmap='viridis')
     plt.show()
     '''
-    return fwhm, psf2D
+    return fwhm, fwhm_fit, psf2D, psfmodel2D
 
 '''
 #image = '/Volumes/Work/Imaging/J0100_LBC_WIRCAM/J0100_D3_Y_coadd_ID001_sci.fits'
