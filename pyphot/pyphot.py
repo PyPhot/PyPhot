@@ -504,6 +504,7 @@ class PyPhot(object):
                                         crossid_radius=self.par['postproc']['astrometry']['crossid_radius'],
                                         astref_catalog=self.par['postproc']['astrometry']['astref_catalog'],
                                         astref_band=self.par['postproc']['astrometry']['astref_band'],
+                                        astrefmag_limits=self.par['postproc']['astrometry']['astrefmag_limits'],
                                         position_maxerr=self.par['postproc']['astrometry']['position_maxerr'],
                                         pixscale_maxerr=self.par['postproc']['astrometry']['pixscale_maxerr'],
                                         posangle_maxerr=self.par['postproc']['astrometry']['posangle_maxerr'],

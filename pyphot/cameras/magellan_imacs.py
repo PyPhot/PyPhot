@@ -339,12 +339,11 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 21]
         par['postproc']['astrometry']['detect_thresh'] = 10
         par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 7
-        par['postproc']['astrometry']['crossid_radius'] = 5
-        par['postproc']['astrometry']['delete'] = True
-        par['postproc']['astrometry']['log'] = False
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 2
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['superskyframe']['exprng'] = [10, None]

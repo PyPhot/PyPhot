@@ -95,7 +95,7 @@ def crossmatch_angular(X1, X2, max_distance=2):
 
     return dist*3600., ind
 
-def crossmatch_astropy(ra1, dec1, ra2, dec2, max_distance=2):
+def crossmatch_astropy(ra1, dec1, ra2, dec2, max_distance=2, nthneighbor=1):
     """Cross-match between (ra1, dec1) and (ra2, dec2)
 
     Parameters
@@ -126,4 +126,4 @@ def crossmatch_astropy(ra1, dec1, ra2, dec2, max_distance=2):
 
     idx, d2d, d3d = c1.match_to_catalog_sky(c2)
 
-    return idx[d2d.arcsec<=max_distance], idx[d2d.arcsec>max_distance]
+    return idx[d2d.arcsec<=max_distance*u.degree], idx[d2d.arcsec>max_distance*u.degree]

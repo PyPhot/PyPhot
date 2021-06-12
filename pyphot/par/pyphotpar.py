@@ -390,7 +390,7 @@ class ProcessImagesPar(ParSet):
         descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
         defaults['back_size'] = 200
-        dtypes['back_size'] = [tuple, list]
+        dtypes['back_size'] = [tuple, list, int, float]
         descr['back_size'] = 'Box size for background estimation'
 
         defaults['back_filtersize'] = (3,3)
@@ -570,7 +570,7 @@ class AstrometricPar(ParSet):
     """
     def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
-                 astref_catalog=None, astref_band=None, weight_type=None, solve_photom_scamp=None,
+                 astref_catalog=None, astref_band=None, astrefmag_limits=None, weight_type=None, solve_photom_scamp=None,
                  posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None,
                  delete=None, log=None):
 
@@ -657,6 +657,10 @@ class AstrometricPar(ParSet):
         dtypes['astref_band'] = str
         descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
 
+        defaults['astrefmag_limits'] = [-99.0,99.0]
+        dtypes['astrefmag_limits'] = [tuple, list]
+        descr['astrefmag_limits'] = 'Default background value in MANUAL'
+
         defaults['solve_photom_scamp'] = False
         dtypes['solve_photom_scamp'] = bool
         descr['solve_photom_scamp'] = 'SOLVE_PHOTOM with SCAMP? I would set it to False since PyPhot will calibrate individual chip'
@@ -681,7 +685,7 @@ class AstrometricPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
-                   'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
+                   'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band', 'astrefmag_limits',
                    'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'delete', 'log']
 
@@ -799,7 +803,7 @@ class CoaddPar(ParSet):
         descr['back_default'] = 'Default background value in MANUAL'
 
         defaults['back_size'] = 200
-        dtypes['back_size'] = [int, float]
+        dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL'
 
         defaults['back_filtersize'] = 3
@@ -944,7 +948,7 @@ class DetectionPar(ParSet):
         descr['back_default'] = 'Default background value in MANUAL'
 
         defaults['back_size'] = 200
-        dtypes['back_size'] = [int, float, tuple]
+        dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL, int for SExtractor and tuple for Others'
 
         defaults['back_filtersize'] = 3

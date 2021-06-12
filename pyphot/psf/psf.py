@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib import gridspec
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 
@@ -12,6 +13,7 @@ from photutils.psf import EPSFBuilder
 
 from pyphot import io, msgs
 from pyphot import utils
+from pyphot.photometry import ForcedAperPhot
 
 def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, shape=None, smoothing_kernel='quartic',
              recentering_maxiters=20, norm_radius=2.5, shift_val=0.5, recentering_boxsize=(5, 5), center_accuracy=0.001,
@@ -213,6 +215,97 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     plt.show()
     '''
     return fwhm, fwhm_fit, psf2D, psfmodel2D
+
+
+def growth_curve(table, image, min_max=[0.,8.0], dr=0.2, rmsimage=None, flagimage=None,
+                 effective_gain=None, sigclip=5, maxiters=10, outroot=None):
+
+    if isinstance(table, str):
+        ## ToDo: distinguish SExtractor catalog from photutils catalog
+        startable = Table.read(table)
+    else:
+        startable = table
+
+    if min_max[0]==0:
+        min_max[0] +=dr
+    phot_apertures = np.arange(min_max[0],min_max[1]+dr,dr)
+    phot_tbl = ForcedAperPhot(startable, image, rmsmaps=rmsimage, flagmaps=flagimage, phot_apertures=phot_apertures,
+                              effective_gains=effective_gain)
+
+    flux = phot_tbl['FORCED_FLUX_APER_00']
+    flux_err = phot_tbl['FORCED_FLUXERR_APER_00']
+    snr = flux * utils.inverse(flux_err)
+    norm_factor_flux = np.ones_like(flux)
+    norm_factor_snr = np.ones_like(snr)
+    for ii in range(len(phot_apertures)):
+        norm_factor_flux[:,ii] = np.nanmax(flux,axis=1)
+        norm_factor_snr[:,ii] = np.nanmax(snr,axis=1)
+
+    mean_flux, median_flux, stddev_flux = stats.sigma_clipped_stats(flux/norm_factor_flux, mask=np.isnan(flux),
+                                                sigma=sigclip, maxiters=maxiters, cenfunc='median', stdfunc='std', axis=0)
+
+    mean_snr, median_snr, stddev_snr = stats.sigma_clipped_stats(snr/norm_factor_snr, mask=np.isnan(snr),
+                                                sigma=sigclip, maxiters=maxiters, cenfunc='median', stdfunc='std', axis=0)
+
+    norm_flux = median_flux * utils.inverse(np.max(median_flux))
+    norm_flux_err = stddev_flux * utils.inverse(np.max(median_flux))
+    norm_snr = median_snr * utils.inverse(np.max(median_snr))
+    norm_snr_err = stddev_snr * utils.inverse(np.max(median_snr))
+
+    xx = np.linspace(np.fmax(min_max[0]-dr,0),min_max[1]+dr,1000)
+    spl_flux = UnivariateSpline(phot_apertures, norm_flux, s=0)
+    spl_snr = UnivariateSpline(phot_apertures, norm_snr, s=0)
+
+    yy_flux = spl_flux(xx)
+    yy_snr = spl_snr(xx)
+    yy_flux[xx==0.] = 0.
+    yy_snr[xx==0.] = 0.
+
+    det_aper = phot_apertures[np.argmin(abs(norm_snr-1.0))]
+    phot_aper = phot_apertures[phot_apertures>det_aper][np.argmin(abs(norm_flux[phot_apertures>det_aper]-norm_snr[phot_apertures>det_aper]))]
+
+    ## Save the data
+    curve_table = Table()
+    curve_table['APERTURE'] = phot_apertures
+    curve_table['FLUX'] = norm_flux
+    curve_table['FLUX_ERR'] = norm_flux_err
+    curve_table['SNR'] = norm_snr
+    curve_table['SNR_ERR'] = norm_snr_err
+    if outroot is not None:
+        curve_table.write('{:}_curve.fits'.format(outroot), overwrite=True)
+
+    ## Make a plot
+    utils.pyplot_rcparams()
+    f = plt.figure()
+    f.subplots_adjust(left=0.12, right=0.95, bottom=0.12, top=0.95, wspace=0, hspace=0)
+    gs = gridspec.GridSpec(1, 1, hspace=0, wspace=0.3)
+    ax1 = plt.subplot(gs[0])
+    #ax2 = ax1.twinx()
+
+    ax1.errorbar(phot_apertures, norm_flux, yerr=norm_flux_err, linestyle='None', marker='o', color='dodgerblue',
+                 ecolor='dodgerblue', mfc='None', capsize=3, zorder=100, label='Aperture flux')
+    ax1.plot(xx, yy_flux, '-', color='dodgerblue')
+
+    ax1.errorbar(phot_apertures, norm_snr, yerr=norm_snr_err, linestyle='None', marker='s', color='darkorange',
+                 ecolor='darkorange', mfc='None', capsize=3, zorder=100, label='Aperture S/N')
+    ax1.plot(xx, yy_snr, '-', color='darkorange')
+
+    ax1.plot([det_aper,det_aper],[0.,1.1],'k--', label='Detection aperture')
+    ax1.plot([phot_aper,phot_aper],[0.,1.1],'k:', label='Photometry aperture')
+
+    ax1.set_xlim([0.,min_max[1]+2*dr])
+    ax1.set_xlabel('Aperture diameter (arcsec)')
+    ax1.set_ylim([0.,1.1])
+    ax1.set_ylabel('Relative units')
+    #ax2.set_ylim([0.,1.1])
+    #ax2.set_ylabel('Normalized S/N')
+    plt.legend()
+    if outroot is not None:
+        plt.savefig('{:}_curve.pdf'.format(outroot))
+    plt.close()
+    utils.pyplot_rcparams_default()
+
+    return det_aper, phot_aper, curve_table
 
 '''
 #image = '/Volumes/Work/Imaging/J0100_LBC_WIRCAM/J0100_D3_Y_coadd_ID001_sci.fits'

@@ -49,10 +49,10 @@ def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
                 task='sex',detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0, distort_degrees=3,
-                pixscale_maxerr=1.1, posangle_maxerr=10.0, stability_type='INSTRUMENT', mosaic_type='LOOSE',
-                weight_type='MAP_WEIGHT', skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
-                delete=False, log=True):
+                astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
+                position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
+                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
+                skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,delete=False, log=True):
 
     # configuration for the swarp run
     # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
@@ -123,14 +123,28 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
 
+    #for ii in range(len(cat_fits_list_resample)):
+    #    this_cat = cat_fits_list_resample[ii]
+    #    par = fits.open(this_cat)
+    #    this_clean = (par[2].data['NIMAFLAGS_ISO']<1) & (par[2].data['IMAFLAGS_ISO']<1) & (par[2].data['FLAGS']<1)
+    #    par[2].data = par[2].data[this_clean]
+    #    par.writeto(this_cat,overwrite=True)
+
     # configuration for the scamp run
     if solve_photom_scamp:
         SOLVE_PHOTOM='Y'
     else:
         SOLVE_PHOTOM='N'
+
+    if astrefmag_limits is not None:
+        ASTREFMAG_LIMITS = '{:},{:}'.format(astrefmag_limits[0],astrefmag_limits[1])
+    else:
+        ASTREFMAG_LIMITS = '-99.0,99.0'
+
     scampconfig = {"CROSSID_RADIUS": crossid_radius,
                     "ASTREF_CATALOG": astref_catalog,
                     "ASTREF_BAND": astref_band,
+                    "ASTREFMAG_LIMITS":ASTREFMAG_LIMITS,
                     "POSITION_MAXERR": position_maxerr,
                     "PIXSCALE_MAXERR": pixscale_maxerr,
                     "POSANGLE_MAXERR": posangle_maxerr,

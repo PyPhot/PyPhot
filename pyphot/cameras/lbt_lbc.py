@@ -316,13 +316,14 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18,21]
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
-        par['postproc']['astrometry']['position_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
-        par['postproc']['astrometry']['detect_thresh'] = 40 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 40
+        par['postproc']['astrometry']['detect_thresh'] = 10 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 5
-        par['postproc']['astrometry']['crossid_radius'] = 1
+        par['postproc']['astrometry']['crossid_radius'] = 2
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 
@@ -568,14 +569,15 @@ class LBTLBCRCamera(LBTLBCCamera):
         # astrometry
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2' # change to PANSTARRS-1 could be benefited if your image is deep
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2' # change to PANSTARRS-1 could be benefited in some deep imaging cases
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 21] # change the bright end limit if your image is shallow
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
-        par['postproc']['astrometry']['position_maxerr'] = 5.0
-        par['postproc']['astrometry']['pixscale_maxerr'] = 1.2
-        par['postproc']['astrometry']['detect_thresh'] = 40 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 40
+        par['postproc']['astrometry']['position_maxerr'] = 1.0
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
+        par['postproc']['astrometry']['detect_thresh'] = 10 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 5
-        par['postproc']['astrometry']['crossid_radius'] = 1
+        par['postproc']['astrometry']['crossid_radius'] = 2
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 

@@ -2,6 +2,8 @@ import itertools
 
 import numpy as np
 from scipy.optimize import curve_fit
+
+import matplotlib
 import matplotlib.pyplot as plt
 
 from collections import deque
@@ -16,6 +18,40 @@ from astropy.visualization import ImageNormalize
 
 
 from pyphot import msgs, io
+
+def pyplot_rcparams():
+    """
+    params for pretty matplotlib plots
+
+    Returns:
+
+    """
+    # set some plotting parameters
+    plt.rcParams["xtick.top"] = True
+    plt.rcParams["ytick.right"] = True
+    plt.rcParams["xtick.minor.visible"] = True
+    plt.rcParams["ytick.minor.visible"] = True
+    plt.rcParams["ytick.direction"] = 'in'
+    plt.rcParams["xtick.direction"] = 'in'
+    plt.rcParams["legend.frameon"] = False
+    plt.rcParams["legend.handletextpad"] = 1
+    plt.rcParams["legend.handlelength"] = 1.1
+    plt.rcParams["axes.labelsize"] = 16
+    plt.rcParams["xtick.labelsize"] = 14
+    plt.rcParams["ytick.labelsize"] = 14
+    plt.rcParams["legend.fontsize"] = 12
+    plt.rcParams["font.family"] = "Times New Roman"
+    plt.rcParams["mathtext.default"] = "regular"
+
+def pyplot_rcparams_default():
+    """
+    restore default rcparams
+
+    Returns:
+
+    """
+    matplotlib.rcParams.update(matplotlib.rcParamsDefault)
+
 
 def inverse(array):
     """
