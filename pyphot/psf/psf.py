@@ -306,30 +306,3 @@ def growth_curve(table, image, min_max=[0.,8.0], dr=0.2, rmsimage=None, flagimag
     utils.pyplot_rcparams_default()
 
     return det_aper, phot_aper, curve_table
-
-'''
-#image = '/Volumes/Work/Imaging/J0100_LBC_WIRCAM/J0100_D3_Y_coadd_ID001_sci.fits'
-#fitstable = '/Volumes/Work/Imaging/J0100_LBC_WIRCAM/J0100_D3_Y_coadd_ID001_sci_cat.fits'
-#image = '/Volumes/Work/Imaging/J0100_LBC_WIRCAM/z6_QSO_i-SLOAN_coadd_ID002_sci.fits'
-#fitstable = '/Volumes/Work/Imaging/J0100_LBC_WIRCAM/z6_QSO_i-SLOAN_coadd_ID002_sci_cat.fits'
-image = '/Volumes/Work/Imaging/LBC/redux/2015/lbt_lbcr_B/Science/lbcr.20151122.034736_det01_sci.resamp.fits'
-fitstable = '/Volumes/Work/Imaging/LBC/redux/2015/lbt_lbcr_B/Science/lbcr.20151122.034736_det01_sci.resamp_cat.fits'
-tbl = Table.read(fitstable,2)
-point = (tbl['CLASS_STAR']>0.3) & (tbl['FLAGS']<1) & (tbl['IMAFLAGS_ISO']<1) & (tbl['FLUX_AUTO']/tbl['FLUXERR_AUTO']>5) &\
-        (tbl['FLUX_AUTO']/tbl['FLUXERR_AUTO']<100)
-startable = Table()
-startable['x'] = tbl['XWIN_IMAGE'][point]
-startable['y'] = tbl['YWIN_IMAGE'][point]
-buildPSF(startable, image, size=31, outroot='test')
-
-image='/Volumes/Work/Imaging/LBC/redux/2015/pylbc_redux/J0100+2802.z.fits'
-fitstable = '/Volumes/Work/Imaging/LBC/redux/2015/pylbc_redux/J0100+2802.merge.cat.corr.fits'
-tbl = Table.read(fitstable,2)
-point = (tbl['CLASS_STAR_z']>0.98) & (tbl['FLAGS_z']<1) & (1.0857/tbl['MAGERR_AUTO_z']>50) &\
-        (1.0857/tbl['MAGERR_AUTO_z']<100)
-startable = Table()
-startable['x'] = tbl['X_IMAGE'][point]
-startable['y'] = tbl['Y_IMAGE'][point]
-
-buildPSF(startable, image, size=31, outroot='test2')
-'''

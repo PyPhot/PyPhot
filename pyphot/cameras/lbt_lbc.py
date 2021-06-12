@@ -303,10 +303,6 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = True
 
-        # Vignetting
-        #par['scienceframe']['process']['mask_vig'] = False
-        #par['scienceframe']['process']['minimum_vig'] = 0.7
-
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
@@ -324,8 +320,6 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 5
         par['postproc']['astrometry']['crossid_radius'] = 2
-        par['postproc']['astrometry']['delete'] = True
-        par['postproc']['astrometry']['log'] = False
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['standardframe']['exprng'] = [None, 10]
@@ -557,10 +551,6 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_fringe'] = True
         par['scienceframe']['process']['apply_gain'] = True
 
-        # Vignetting
-        #par['scienceframe']['process']['mask_vig'] = False
-        #par['scienceframe']['process']['minimum_vig'] = 0.7
-
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
@@ -578,8 +568,6 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 5
         par['postproc']['astrometry']['crossid_radius'] = 2
-        par['postproc']['astrometry']['delete'] = True
-        par['postproc']['astrometry']['log'] = False
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['standardframe']['exprng'] = [None, 10]
