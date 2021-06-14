@@ -557,9 +557,9 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
+        par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for LBC images
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2' # change to PANSTARRS-1 could be benefited in some deep imaging cases
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
         par['postproc']['astrometry']['astrefmag_limits'] = [18, 21] # change the bright end limit if your image is shallow
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0
