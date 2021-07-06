@@ -25,7 +25,7 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
     sci_fits_list = []
     flag_fits_list = []
     for ifile in scifiles:
-
+        #ToDo: parallel this
         rootname = ifile.split('/')[-1]
         if science_path is not None:
             rootname = os.path.join(science_path,rootname)
@@ -141,6 +141,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
     wht_fits_list = []
     flag_fits_list = []
     for ii, ifile in enumerate(scifiles):
+        #ToDo: parallel this
         # prepare output file names
         sci_fits = ifile.replace('_proc.fits','_sci.fits')
         sci_fits_list.append(sci_fits)

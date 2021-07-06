@@ -19,6 +19,7 @@ def defringing(sci_fits_list, masterfringeimg):
 
     ## ToDo: matching the amplitude of friging rather than scale with exposure time.
     for i in range(len(sci_fits_list)):
+        #ToDo: parallel this
         header, data, _ = io.load_fits(sci_fits_list[i])
         mask_zero = data == 0.
         if 'DEFRING' in header.keys():
@@ -34,6 +35,7 @@ def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters
                  brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     for i in range(len(sci_fits_list)):
+        #ToDo: parallel this
         msgs.info('Masking negative stars for {:}'.format(sci_fits_list[i]))
         header, data, _ = io.load_fits(sci_fits_list[i])
         header_wht, weight, _ = io.load_fits(wht_fits_list[i])
@@ -53,7 +55,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                 position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
                 stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
                 skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,delete=False, log=True):
-
+    # ToDo: parallel this. Maybe parallel sexall, scampall, and swarpall
     # configuration for the swarp run
     # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
     # resample science image

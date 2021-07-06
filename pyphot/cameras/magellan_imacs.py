@@ -95,14 +95,14 @@ class MagellanIMACSCamera(camera.Camera):
         ## a specific column indicates whether its flat or not
         flats = np.zeros(len(fitstbl),dtype='bool')
         for i in range(len(fitstbl)):
-            if 'flat' in fitstbl[i]['target'].lower():
+            if 'flat' in fitstbl[i]['idname'].lower():
                 flats[i] = True
 
         good_exp = framematch.check_frame_exptime(fitstbl['exptime'], exprng)
         if ftype == 'bias':
             return good_exp & (fitstbl['idname'] == 'Bias')
         if ftype in ['pixelflat', 'illumflat']:
-            return good_exp & (fitstbl['idname'] == 'Object') & flats
+            return good_exp  & flats #& (fitstbl['idname'] == 'Object')
         #if ftype == 'standard':
         #    return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
         if ftype in ['science','supersky','fringe']:
