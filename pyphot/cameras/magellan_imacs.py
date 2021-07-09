@@ -455,7 +455,6 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             0.
         """
         # Call the base-class method to generate the empty bpm
-        # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
         msgs.info("Using hard-coded BPM for det={:} on IMACS".format(det))

@@ -322,7 +322,7 @@ class Camera:
         else:
             detector_par, _,  _, _, rawdatasec_img, _ = self.get_rawimage(filename, det)
             # Trim + reorient
-            trim = procimg.trim_frame(rawdatasec_img, rawdatasec_img < 1)
+            trim = procimg.trim_frame(rawdatasec_img, rawdatasec_img < 0.1)
             _shape = trim.shape
 
         # Shape must be defined at this point.

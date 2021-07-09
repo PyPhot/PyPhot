@@ -657,7 +657,7 @@ class AstrometricPar(ParSet):
         dtypes['astref_band'] = str
         descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
 
-        defaults['astrefmag_limits'] = [-99.0,99.0]
+        defaults['astrefmag_limits'] = [15.0,23.0]
         dtypes['astrefmag_limits'] = [tuple, list]
         descr['astrefmag_limits'] = 'Default background value in MANUAL'
 
