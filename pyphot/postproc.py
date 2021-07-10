@@ -458,7 +458,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
 
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.],
            oversize=1.0, external_flag=True, FLXSCALE=1.0, FLASCALE=1.0, # This two paramers are exactly same with that used in SCAMP
-           out_refcat=None, outqaroot=None):
+           nstar_min=10, out_refcat=None, outqaroot=None):
 
     try:
         msgs.info('Reading SExtractor catalog')
@@ -546,7 +546,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
     if nstar==0:
         msgs.warn('No matched standard stars were found')
         return 0., 0., nstar, None
-    elif nstar < 10:
+    elif nstar < nstar_min:
             msgs.warn('Only {:} standard stars were found'.format(nstar))
             _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
                                                       sigma=3, maxiters=20, cenfunc='median', stdfunc='std')

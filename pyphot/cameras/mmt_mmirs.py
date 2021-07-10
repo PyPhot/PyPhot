@@ -158,6 +158,7 @@ class MMTMMIRSCamera(camera.Camera):
         # Photometry
         par['postproc']['photometry']['cal_chip_zpt'] = True
         par['postproc']['photometry']['external_flag'] = False
+        par['postproc']['photometry']['nstar_min'] = 5
 
         return par
 

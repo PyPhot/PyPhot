@@ -669,6 +669,7 @@ class PyPhot(object):
                                                         coefficients=self.par['postproc']['photometry']['coefficients'],
                                                         FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
                                                         external_flag=self.par['postproc']['photometry']['external_flag'],
+                                                        nstar_min=self.par['postproc']['photometry']['nstar_min'],
                                                         outqaroot=os.path.join(self.qa_path, coaddroot))
 
                     if matched_table is not None:
