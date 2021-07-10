@@ -1,6 +1,7 @@
 import gc, os
 import numpy as np
 import numpy.ma as ma
+import random, string
 
 from astropy import wcs
 from astropy import stats
@@ -62,7 +63,9 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
 
     if bkg_estimator == 'sextractor':
         msgs.info('Estimating BACKGROUND with SExtractor.')
-        tmp_root = 'sex_bkg_tmp_{:04d}'.format(np.random.randint(1,9999))
+        letters = string.ascii_letters
+        random_letter = ''.join(random.choice(letters) for i in range(15))
+        tmp_root = 'sex_bkg_tmp_{:}_{:04d}'.format(random_letter, np.random.randint(1,9999))
 
         # perform rejections
         tmp_data = ma.masked_array(data, mask=mask, fill_value=np.nan)
@@ -242,7 +245,9 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
         gc.collect()
     else:
         msgs.info('Masking bright stars with SExtractor.')
-        tmp_root = 'mask_bright_star_tmp_{:04d}'.format(np.random.randint(1,9999))
+        letters = string.ascii_letters
+        random_letter = ''.join(random.choice(letters) for i in range(15))
+        tmp_root = 'mask_bright_star_tmp_{:}_{:04d}'.format(random_letter, np.random.randint(1,9999))
         par = fits.PrimaryHDU(data_copy)
         par.writeto('{:}.fits'.format(tmp_root),overwrite=True)
         # configuration for the first SExtractor run
