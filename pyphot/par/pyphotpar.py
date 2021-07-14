@@ -173,9 +173,8 @@ class ProcessImagesPar(ParSet):
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
-                 use_pixelflat=None, use_illumflat=None, use_supersky=None,
-                 use_fringe=None,
-                 background=None, back_size=None, back_filtersize=None):
+                 use_pixelflat=None, use_illumflat=None, use_supersky=None, use_fringe=None,
+                 back_type=None, back_rms_type=None, back_size=None, back_filtersize=None, back_maxiters=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -379,19 +378,29 @@ class ProcessImagesPar(ParSet):
                            'Options are: {0}'.format(', '.join(options['replace']))
 
         ## Background methods
-        defaults['background'] = 'median'
-        options['background'] = ProcessImagesPar.valid_background_methods()
-        dtypes['background'] = str
-        descr['background'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
-                                       ', '.join(options['background']))
+        defaults['back_type'] = 'median'
+        options['back_type'] = ProcessImagesPar.valid_back_type()
+        dtypes['back_type'] = str
+        descr['back_type'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
+                                       ', '.join(options['back_type']))
 
-        defaults['back_size'] = (200,200)
-        dtypes['back_size'] = [tuple, list]
+        defaults['back_rms_type'] = 'STD'
+        options['back_rms_type'] = ProcessImagesPar.valid_backrms_type()
+        dtypes['back_rms_type'] = str
+        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
+
+        defaults['back_size'] = 200
+        dtypes['back_size'] = [tuple, list, int, float]
         descr['back_size'] = 'Box size for background estimation'
 
         defaults['back_filtersize'] = (3,3)
         dtypes['back_filtersize'] = [tuple, list]
         descr['back_filtersize'] = 'Filter size for background estimation'
+
+        defaults['back_maxiters'] = 5
+        dtypes['back_maxiters'] = int
+        descr['back_maxiters'] = 'Maximum number of iterations for background estimation.'
+
 
         # Instantiate the parameter set
         super(ProcessImagesPar, self).__init__(list(pars.keys()),
@@ -414,7 +423,7 @@ class ProcessImagesPar(ParSet):
                    'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
                    'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
-                   'background','back_size','back_filtersize']
+                   'back_type', 'back_rms_type','back_size','back_filtersize','back_maxiters']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -454,11 +463,19 @@ class ProcessImagesPar(ParSet):
         return ['photoutils', 'sextractor' ]
 
     @staticmethod
-    def valid_background_methods():
+    def valid_back_type():
         """
-        Return the valid methods for combining frames.
+        Return the valid methods for background estimator method.
         """
-        return ['median', 'mean', 'sextractor' ]
+        return ['MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE',
+                'median','mean','sextractor', 'mmm', 'biweight', 'mode']
+
+    @staticmethod
+    def valid_backrms_type():
+        """
+        Return the valid methods for background rms estimator method.
+        """
+        return ['STD', 'MAD', 'BIWEIGHT', 'std', 'mad', 'biweight']
 
     @staticmethod
     def valid_saturation_handling():
@@ -553,7 +570,7 @@ class AstrometricPar(ParSet):
     """
     def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
-                 astref_catalog=None, astref_band=None, weight_type=None, solve_photom_scamp=None,
+                 astref_catalog=None, astref_band=None, astrefmag_limits=None, weight_type=None, solve_photom_scamp=None,
                  posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None,
                  delete=None, log=None):
 
@@ -640,6 +657,10 @@ class AstrometricPar(ParSet):
         dtypes['astref_band'] = str
         descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
 
+        defaults['astrefmag_limits'] = [15.0,23.0]
+        dtypes['astrefmag_limits'] = [tuple, list]
+        descr['astrefmag_limits'] = 'Default background value in MANUAL'
+
         defaults['solve_photom_scamp'] = False
         dtypes['solve_photom_scamp'] = bool
         descr['solve_photom_scamp'] = 'SOLVE_PHOTOM with SCAMP? I would set it to False since PyPhot will calibrate individual chip'
@@ -664,7 +685,7 @@ class AstrometricPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
-                   'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band',
+                   'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band', 'astrefmag_limits',
                    'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'delete', 'log']
 
@@ -724,7 +745,7 @@ class CoaddPar(ParSet):
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None,
                  clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
                  back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None, resampling_type=None,
-                 delete=None, log=None):
+                 pixscale=None, delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -782,7 +803,7 @@ class CoaddPar(ParSet):
         descr['back_default'] = 'Default background value in MANUAL'
 
         defaults['back_size'] = 200
-        dtypes['back_size'] = [int, float]
+        dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL'
 
         defaults['back_filtersize'] = 3
@@ -797,6 +818,10 @@ class CoaddPar(ParSet):
         options['resampling_type'] = CoaddPar.valid_resampling_type()
         dtypes['resampling_type'] = str
         descr['resampling_type'] = 'Swarp resampling type options are: {0}'.format(', '.join(options['resampling_type']))
+
+        defaults['pixscale'] = None
+        dtypes['pixscale'] = [int, float]
+        descr['pixscale'] = 'pixel scale for the final coadd image'
 
         defaults['delete'] = False
         dtypes['delete'] = bool
@@ -819,7 +844,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh','resampling_type', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'pixscale', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -874,7 +899,7 @@ class DetectionPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None,
+    def __init__(self, skip=None, detection_method=None, phot_apertures=None, detect_thresh=None, back_type=None, analysis_thresh=None,
                  back_default=None, back_size=None, back_filtersize=None, detect_minarea=None,check_type=None,
                  weight_type=None, backphoto_type=None, backphoto_thick=None, conv=None, nnw=None, delete=None, log=None,
                  back_rms_type=None, back_nsigma=None,back_maxiters=None,fwhm=None,nlevels=None,contrast=None,morp_filter=None):
@@ -909,6 +934,10 @@ class DetectionPar(ParSet):
         dtypes['detect_thresh'] = [int, float]
         descr['detect_thresh'] = ' <sigmas> or <threshold> for detection'
 
+        defaults['analysis_thresh'] = 1.5
+        dtypes['analysis_thresh'] = [int, float]
+        descr['analysis_thresh'] = ' <sigmas> or <threshold>,<ZP> in mag.arcsec-2 for analysis'
+
         defaults['back_type'] = 'AUTO'
         options['back_type'] = DetectionPar.valid_back_type()
         dtypes['back_type'] = str
@@ -919,7 +948,7 @@ class DetectionPar(ParSet):
         descr['back_default'] = 'Default background value in MANUAL'
 
         defaults['back_size'] = 200
-        dtypes['back_size'] = [int, float, tuple]
+        dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL, int for SExtractor and tuple for Others'
 
         defaults['back_filtersize'] = 3
@@ -983,7 +1012,7 @@ class DetectionPar(ParSet):
         defaults['back_rms_type'] = 'STD'
         options['back_rms_type'] = DetectionPar.valid_backrms_type()
         dtypes['back_rms_type'] = str
-        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_type']))
+        descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
         defaults['back_nsigma'] = 3
         dtypes['back_nsigma'] = [int, float]
@@ -1010,7 +1039,7 @@ class DetectionPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip','detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default',
+        parkeys = ['skip','detection_method', 'phot_apertures', 'detect_thresh', 'back_type', 'back_default', 'analysis_thresh',
                    'back_size', 'back_filtersize', 'detect_minarea', 'check_type','weight_type','backphoto_type',
                    'backphoto_thick','conv','nnw', 'delete', 'log','back_rms_type','back_nsigma','back_maxiters',
                    'fwhm','nlevels','contrast','morp_filter']
@@ -1029,7 +1058,7 @@ class DetectionPar(ParSet):
         """
         Return the valid methods for mosaic method.
         """
-        return ['Photutils', 'SExtractor', 'DAOStar', 'IRAFStar']
+        return ['Photutils', 'SExtractor', 'photutils', 'sextractor', 'DAOStar', 'IRAFStar']
 
     @staticmethod
     def valid_check_type():
@@ -1113,7 +1142,7 @@ class PhotometryPar(ParSet):
         dtypes['external_flag'] = bool
         descr['external_flag'] = 'Apply external flag cut when calibrating zeropoint? '
 
-        defaults['photref_catalog'] = 'PS1'
+        defaults['photref_catalog'] = 'Panstarrs'
         options['photref_catalog'] = PhotometryPar.valid_catalog_methods()
         dtypes['photref_catalog'] = str
         descr['photref_catalog'] = 'Background Options are: {0}'.format(', '.join(options['photref_catalog']))
@@ -1172,6 +1201,90 @@ class PhotometryPar(ParSet):
         Return the valid methods for reference catalog.
         """
         return ['Twomass', 'SDSS', 'Gaia', 'Panstarrs', 'LEGACY', 'ALLWISE']
+
+    def validate(self):
+        """
+        Check the parameters are valid for the provided method.
+        """
+        pass
+
+class QAPar(ParSet):
+    """
+    A parameter set holding the arguments for how to perform the flux
+    calibration.
+
+    For a table with the current keywords, defaults, and descriptions,
+    see :ref:`pyphotpar`.
+    """
+    def __init__(self, skip=None, vmin = None, vmax = None, interval_method=None, stretch_method=None, cmap=None,
+                 plot_wcs=None, show=None):
+
+        # Grab the parameter names and values from the function
+        # arguments
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        pars = OrderedDict([(k,values[k]) for k in args[1:]])
+
+        # Initialize the other used specifications for this parameter
+        # set
+        defaults = OrderedDict.fromkeys(pars.keys())
+        options = OrderedDict.fromkeys(pars.keys())
+        dtypes = OrderedDict.fromkeys(pars.keys())
+        descr = OrderedDict.fromkeys(pars.keys())
+
+        defaults['skip'] = False
+        dtypes['skip'] = bool
+        descr['skip'] = 'Skip producing QA plots?'
+
+
+
+        defaults['plot_wcs'] = True
+        dtypes['plot_wcs'] = bool
+        descr['plot_wcs'] = 'Using WCS information?'
+
+        defaults['vmin'] = None
+        dtypes['vmin'] = [int, float]
+        descr['vmin'] = 'vmin used for the plot'
+
+        defaults['vmax'] = None
+        dtypes['vmax'] = [int, float]
+        descr['vmax'] = 'vmax used for the plot'
+
+        defaults['show'] = False
+        dtypes['show'] = bool
+        descr['show'] = 'Show the QA plot?'
+
+        defaults['interval_method'] = 'zscale'
+        dtypes['interval_method'] = str
+        descr['interval_method'] = 'interval method when showing image'
+
+        defaults['stretch_method'] = 'linear'
+        dtypes['stretch_method'] = str
+        descr['stretch_method'] = 'stretching method when showing image'
+
+        defaults['cmap'] = 'gist_yarg_r'
+        dtypes['cmap'] = str
+        descr['cmap'] = 'color map used for showing image'
+
+        # Instantiate the parameter set
+        super(QAPar, self).__init__(list(pars.keys()),
+                                                 values=list(pars.values()),
+                                                 defaults=list(defaults.values()),
+                                                 dtypes=list(dtypes.values()),
+                                                 descr=list(descr.values()))
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, cfg):
+        k = numpy.array([*cfg.keys()])
+        parkeys = ['skip','vmin', 'vmax', 'interval_method', 'stretch_method', 'cmap', 'plot_wcs', 'show']
+        badkeys = numpy.array([pk not in parkeys for pk in k])
+        if numpy.any(badkeys):
+            raise ValueError('{0} not recognized key(s) for DetectionPar.'.format(k[badkeys]))
+
+        kwargs = {}
+        for pk in parkeys:
+            kwargs[pk] = cfg[pk] if pk in k else None
+        return cls(**kwargs)
 
     def validate(self):
         """
@@ -1314,7 +1427,7 @@ class PostProcPar(ParSet):
     see :ref:`pyphotpar`.
     """
 
-    def __init__(self, astrometry=None, coadd=None, detection=None, photometry=None):
+    def __init__(self, astrometry=None, coadd=None, detection=None, photometry=None, qa=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1344,6 +1457,10 @@ class PostProcPar(ParSet):
         dtypes['photometry'] = [ParSet, dict]
         descr['photometry'] = 'Parameters for solving photometry.'
 
+        defaults['qa'] = QAPar()
+        dtypes['qa'] = [ParSet, dict]
+        descr['qa'] = 'Parameters for solving photometry.'
+
         # Instantiate the parameter set
         super(PostProcPar, self).__init__(list(pars.keys()),
                                              values=list(pars.values()),
@@ -1357,7 +1474,7 @@ class PostProcPar(ParSet):
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
 
-        allkeys = ['astrometry', 'coadd', 'detection', 'photometry']
+        allkeys = ['astrometry', 'coadd', 'detection', 'photometry', 'qa']
         badkeys = numpy.array([pk not in allkeys for pk in k])
         if numpy.any(badkeys):
             raise ValueError('{0} not recognized key(s) for ReducePar.'.format(k[badkeys]))
@@ -1371,6 +1488,8 @@ class PostProcPar(ParSet):
         kwargs[pk] = DetectionPar.from_dict(cfg[pk]) if pk in k else None
         pk = 'photometry'
         kwargs[pk] = PhotometryPar.from_dict(cfg[pk]) if pk in k else None
+        pk = 'qa'
+        kwargs[pk] = QAPar.from_dict(cfg[pk]) if pk in k else None
 
         return cls(**kwargs)
 

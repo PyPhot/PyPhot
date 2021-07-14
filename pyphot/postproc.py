@@ -3,33 +3,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from astropy import wcs
-from astropy import units as u
 from astropy.io import fits
-from astropy.table import Table, vstack
+from astropy.table import Table
 from astropy import stats
-from astropy.stats import SigmaClip
-from astropy.convolution import Gaussian2DKernel
-from astropy.stats import gaussian_fwhm_to_sigma
-from astropy.coordinates import SkyCoord
-
-from photutils import detect_sources
-from photutils import deblend_sources
-from photutils import source_properties
-from photutils import SkyCircularAperture
-from photutils import aperture_photometry
-from photutils.utils import calc_total_error
-from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgroundRMS
-from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
-from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
 
 from pyphot import msgs, io, utils, caloffset
 from pyphot import sex, scamp, swarp
-from pyphot import query, crossmatch
+from pyphot import crossmatch
+from pyphot.query import query
+from pyphot.photometry import mask_bright_star, photutils_detect
+from pyphot.psf import  psf
+
 
 def defringing(sci_fits_list, masterfringeimg):
 
     ## ToDo: matching the amplitude of friging rather than scale with exposure time.
     for i in range(len(sci_fits_list)):
+        #ToDo: parallel this
         header, data, _ = io.load_fits(sci_fits_list[i])
         mask_zero = data == 0.
         if 'DEFRING' in header.keys():
@@ -45,6 +35,7 @@ def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters
                  brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     for i in range(len(sci_fits_list)):
+        #ToDo: parallel this
         msgs.info('Masking negative stars for {:}'.format(sci_fits_list[i]))
         header, data, _ = io.load_fits(sci_fits_list[i])
         header_wht, weight, _ = io.load_fits(wht_fits_list[i])
@@ -59,12 +50,12 @@ def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters
 
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
-                task='sex',detect_thresh=3.0, analysis_thresh=3.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', position_maxerr=1.0, distort_degrees=3,
-                pixscale_maxerr=1.1, posangle_maxerr=10.0, stability_type='INSTRUMENT', mosaic_type='LOOSE',
-                weight_type='MAP_WEIGHT', skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
-                delete=False, log=True):
-
+                task='sex',detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
+                astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
+                position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
+                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
+                skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,delete=False, log=True):
+    # ToDo: parallel this. Maybe parallel sexall, scampall, and swarpall
     # configuration for the swarp run
     # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
     # resample science image
@@ -81,7 +72,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
     swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
 
     if skip_swarp_align:
-        msgs.warn('Skipping alignment with Swarp')
+        msgs.info('Skipping the first alignment step with Swarp')
         for i in range(len(sci_fits_list)):
             os.system('cp {:} {:}'.format(sci_fits_list[i],
                                           sci_fits_list[i].replace('.fits', '.resamp.fits')))
@@ -121,8 +112,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
             os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
 
     # configuration for the first SExtractor run
-    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                  "CATALOG_TYPE": "FITS_LDAC",
+    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
                   "DETECT_THRESH": detect_thresh,
                   "ANALYSIS_THRESH": analysis_thresh,
                   "DETECT_MINAREA": detect_minarea}
@@ -132,17 +122,31 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
                   'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
     msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
     sex.sexall(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-               defaultconfig='pyphot', conv='sex995', nnw=None, dual=False, delete=delete, log=log,
+               defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=delete, log=log,
                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
+
+    #for ii in range(len(cat_fits_list_resample)):
+    #    this_cat = cat_fits_list_resample[ii]
+    #    par = fits.open(this_cat)
+    #    this_clean = (par[2].data['NIMAFLAGS_ISO']<1) & (par[2].data['IMAFLAGS_ISO']<1) & (par[2].data['FLAGS']<1)
+    #    par[2].data = par[2].data[this_clean]
+    #    par.writeto(this_cat,overwrite=True)
 
     # configuration for the scamp run
     if solve_photom_scamp:
         SOLVE_PHOTOM='Y'
     else:
         SOLVE_PHOTOM='N'
+
+    if astrefmag_limits is not None:
+        ASTREFMAG_LIMITS = '{:},{:}'.format(astrefmag_limits[0],astrefmag_limits[1])
+    else:
+        ASTREFMAG_LIMITS = '-99.0,99.0'
+
     scampconfig = {"CROSSID_RADIUS": crossid_radius,
                     "ASTREF_CATALOG": astref_catalog,
                     "ASTREF_BAND": astref_band,
+                    "ASTREFMAG_LIMITS":ASTREFMAG_LIMITS,
                     "POSITION_MAXERR": position_maxerr,
                     "PIXSCALE_MAXERR": pixscale_maxerr,
                     "POSANGLE_MAXERR": posangle_maxerr,
@@ -244,7 +248,8 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
 def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=200, back_filtersize=3,
-          back_filtthresh=0.0, resampling_type='LANCZOS3', delete=True, log=True):
+          back_filtthresh=0.0, resampling_type='LANCZOS3', detect_thresh=5, analysis_thresh=5,
+          detect_minarea=5, sextractor_task='sex',delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
     msgs.info('Coadding image for {:}'.format(os.path.join(coadddir,coaddroot)))
@@ -288,201 +293,172 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     coadd_flag_file = os.path.join(coadddir, coaddroot + '_flag.fits')
     coadd_wht_file = os.path.join(coadddir, coaddroot + '_sci.weight.fits')
 
+    # ToDO: Subtract background for the final coadded image
+
     # change flag image type to int32
     par = fits.open(coadd_flag_file, memmap=False)
     par[0].data = np.round(par[0].data).astype('int32')
     par[0].writeto(coadd_flag_file, overwrite=True)
 
+    # Extract a catalog for zero point calibration in the next step.
+    # configuration for the SExtractor run
+    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
+                  "DETECT_THRESH": detect_thresh,
+                  "ANALYSIS_THRESH": analysis_thresh,
+                  "DETECT_MINAREA": detect_minarea}
+    sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
+                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
+                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
+                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
+    msgs.info('Running SExtractor for the coadded image. The catalog will be used for zero-point calibration.')
+    sex.sexone(coadd_file, catname=coadd_file.replace('.fits','_zptcat.fits'),
+               flag_image=coadd_flag_file, weight_image=coadd_wht_file,
+               task=sextractor_task, config=sexconfig, workdir=coadddir, params=sexparams,
+               defaultconfig='pyphot', dual=False, conv='sex', nnw=None, delete=True, log=False)
+
     return coadd_file, coadd_wht_file, coadd_flag_file
 
+def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_image=None, rms_image=None,
+           workdir='./', detection_method='sextractor', zpt=0.,
+           effective_gain=None, pixscale=1.0, detect_thresh=2., analysis_thresh=2., detect_minarea=5, fwhm=5, nlevels=32, contrast=0.001,
+           back_type='median', back_rms_type='std', back_size=(200, 200), back_filter_size=(3, 3), back_default=0.,
+           backphoto_type='GLOBAL', backphoto_thick=100, weight_type='MAP_WEIGHT', check_type='BACKGROUND_RMS',
+           back_nsigma=3, back_maxiters=10, morp_filter=False,
+           defaultconfig='pyphot', dual=False, conv=None, nnw=None, delete=True, log=False,
+           sextractor_task='sex', phot_apertures=[1.0,2.0,3.0,4.0,5.0]):
 
-def detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None, effective_gain=None, nsigma=2., npixels=5, fwhm=5,
-           nlevels=32, contrast=0.001, back_nsigma=3, back_maxiters=10, back_type='median', back_rms_type='std',
-           back_size=(200, 200), back_filter_size=(3, 3), morp_filter=False,
-           phot_apertures=[1.0,2.0,3.0,4.0,5.0], return_seg_only=False):
-    '''
-        Identify cosmic rays using the L.A.Cosmic algorithm
-    U{http://www.astro.yale.edu/dokkum/lacosmic/}
-    (article : U{http://arxiv.org/abs/astro-ph/0108003})
-    This routine is mostly courtesy of Malte Tewes
+    if outroot is None:
+        if dual:
+            outroot = sci_image[0].replace('.fits','')
+        else:
+            outroot = sci_image.replace('.fits','')
 
-    Args:
-        data:
-        wcs_info:
-        rmsmap:
-        bkgmap:
-        mask:
-        effective_gain (float or 2D array): should be a 2D map of exposure time
-        nsigma (int or float): how many sigma of your detection
-        npixels:  Let’s find sources that have 5 connected pixels that are each greater than the
-                  corresponding pixel-wise threshold level defined above  (i.e., 2 sigma per pixel above the background noise)
-        fwhm (int or float): seeing in units of pixel
-        nlevels:
-        contrast:
-        back_nsigma:
-        back_maxiters:
-        back_type:
-        back_rms_type:
-        back_box_size:
-        back_filter_size:
-        morp_filter (bool): whether you want to use the kernel filter when measuring morphology and centroid
-                            If set true, it should be similar with SExtractor. False gives a better morphology
-    Returns:
-        astropy Table
-    '''
+    catname = outroot+'_cat.fits'
 
-    if mask is None:
-        mask = np.isinf(data)
+    if detection_method.lower() == 'photutils':
+        # detection with photoutils
+        msgs.info('Detecting sources with Photutils.')
+        header, data, _ = io.load_fits(os.path.join(workdir,sci_image))
+        wcs_info = wcs.WCS(header)
+        if effective_gain is None:
+            try:
+                effective_gain = header['EXPTIME']
+            except:
+                effective_gain = 1.0
 
-    if effective_gain is None:
-        effective_gain = 1.0
+        # prepare mask
+        if flag_image is not None:
+            _, flag, _ = io.load_fits(os.path.join(workdir,flag_image))
+            mask = flag > 0.
+        else:
+            mask = np.isinf(data) | np.isnan(data) | (data == 0.)
 
-    sigma_clip = SigmaClip(sigma=back_nsigma, maxiters=back_maxiters)
+        if rms_image is not None:
+            _, rmsmap, _ = io.load_fits(os.path.join(workdir,rms_image))
+        else:
+            rmsmap = None
 
-    if back_type.lower() == 'median':
-        bkg_estimator = MedianBackground()
-    elif back_type.lower() == 'mean':
-        bkg_estimator = MeanBackground()
-    elif back_type.lower() == 'sextractor':
-        bkg_estimator = SExtractorBackground()
-    elif back_type.lower() == 'mmm':
-        bkg_estimator = MMMBackground()
-    elif back_type.lower() == 'biweight':
-        bkg_estimator = BiweightLocationBackground()
-    elif back_type.lower() == 'mode':
-        bkg_estimator = ModeEstimatorBackground()
+        if bkg_image is not None:
+            _, bkgmap, _ = io.load_fits(os.path.join(workdir,bkg_image))
+        else:
+            bkgmap = None
+
+        # do the detection with photutils
+        phot_table, phot_rmsmap, phot_bkgmap = photutils_detect(data, wcs_info, mask=mask, rmsmap=rmsmap, bkgmap=bkgmap, zpt=zpt,
+                                                      effective_gain=effective_gain, nsigma=detect_thresh, npixels=detect_minarea,
+                                                      fwhm=fwhm, nlevels=nlevels, contrast=contrast, back_nsigma=back_nsigma,
+                                                      back_maxiters=back_maxiters, back_type=back_type, back_rms_type=back_rms_type,
+                                                      back_size=back_size, back_filter_size=back_filter_size,
+                                                      morp_filter=morp_filter, phot_apertures=phot_apertures)
+        ## save the table and maps
+        phot_table.write(os.path.join(workdir, catname), overwrite=True)
+        if rms_image is None:
+            io.save_fits(os.path.join(workdir, '{:}_rms.fits'.format(outroot)), phot_rmsmap, header, 'RMSMAP', overwrite=True)
+        if bkg_image is None:
+            io.save_fits(os.path.join(workdir, '{:}_bkg.fits'.format(outroot)), phot_rmsmap, header, 'BKGMAP', overwrite=True)
+
+    elif detection_method.lower() == 'sextractor':
+        # detection with SExtractor
+        msgs.info('Detecting sources with SExtractor.')
+        if check_type is not None:
+            check_list = check_type.split(',')
+            check_name_tmp = []
+            for icheck in check_list:
+                if icheck == 'BACKGROUND_RMS':
+                    check_name_tmp.append('{:}_rms.fits'.format(outroot))
+                elif icheck=='BACKGROUND':
+                    check_name_tmp.append('{:}_bkg.fits'.format(outroot))
+                else:
+                    check_name_tmp.append('{:}_{:}.fits'.format(outroot, icheck.lower()))
+
+            check_name = ','.join([str(elem) for elem in check_name_tmp])
+        else:
+            check_type='NONE'
+            check_name='NONE'
+        # configuration for the SExtractor run
+        det_params = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
+                      'ERRBWIN_IMAGE', 'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE',
+                      'ISOAREA_IMAGE', 'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO',
+                      'FLUXERR_AUTO', 'MAG_APER({:})'.format(len(phot_apertures)),
+                      'MAGERR_APER({:})'.format(len(phot_apertures)),
+                      'FLUX_APER({:})'.format(len(phot_apertures)),
+                      'FLUXERR_APER({:})'.format(len(phot_apertures)),
+                      'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
+        det_config = {"CATALOG_TYPE": "FITS_LDAC",
+                      "MAG_ZEROPOINT": zpt,
+                      "BACK_TYPE": back_type, "BACK_VALUE": back_default, "BACK_SIZE": back_size,
+                      "BACK_FILTERSIZE": back_filter_size, "BACKPHOTO_TYPE": backphoto_type,
+                      "BACKPHOTO_THICK": backphoto_thick, "WEIGHT_TYPE": weight_type,
+                      "DETECT_THRESH": detect_thresh, "ANALYSIS_THRESH": analysis_thresh,
+                      "DETECT_MINAREA": detect_minarea, "DEBLEND_NTHRESH": nlevels,
+                      "DEBLEND_MINCONT": contrast, "CHECKIMAGE_TYPE": check_type,
+                      "CHECKIMAGE_NAME": check_name,
+                      "PHOT_APERTURES": np.array(phot_apertures) / pixscale}
+        if weight_image is None and weight_type!= 'NONE':
+            msgs.error('Please either provide weight_image or set weight_type to be NONE.')
+        if flag_image is None:
+            msgs.warn('flag_image is not given, generate a mock zero flag image')
+            flag_image = os.path.join(workdir, 'flag_tmp_{:03d}.fits'.format(np.random.randint(1, 999)))
+            tmp_flag = flag_image
+            header, data, _ = io.load_fits(os.path.join(workdir, sci_image))
+            io.save_fits(flag_image, np.zeros_like(data,dtype='int32'), header, 'FLAGMAP', overwrite=True)
+        else:
+            tmp_flag=None
+
+        # do the source extraction
+        sex.sexone(sci_image, catname=catname, flag_image=flag_image, weight_image=weight_image,
+                   task=sextractor_task, config=det_config, workdir=workdir, params=det_params,
+                   defaultconfig=defaultconfig, dual=dual, conv=conv, nnw=nnw, delete=delete, log=log)
+
+        # delete temperary file
+        if tmp_flag is not None:
+            os.system('rm {:}'.format(tmp_flag))
+
+        if 'BACKGROUND_RMS' in check_list:
+            phot_rmsmap = fits.getdata(os.path.join(workdir, '{:}_rms.fits'.format(outroot)))
+        elif rms_image is not None:
+            _, phot_rmsmap, _ = io.load_fits(os.path.join(workdir,rms_image))
+        else:
+            phot_rmsmap = None
+
+        if 'BACKGROUND' in check_list:
+            phot_bkgmap = fits.getdata(os.path.join(workdir, '{:}_bkg.fits'.format(outroot)))
+        elif bkg_image is not None:
+            _, phot_bkgmap, _ = io.load_fits(os.path.join(workdir,bkg_image))
+        else:
+            phot_bkgmap = None
+
+        phot_table = Table.read(os.path.join(workdir, catname), 2)
+
     else:
-        msgs.warn('{:}Background is not found, using MedianBackground Instead.'.format(back_type))
-        bkg_estimator = MedianBackground()
+        msgs.warn('{:} is not supported yet.'.format(detection_method))
+        phot_table, phot_rmsmap, phot_bkgmap =  None, None, None
 
-    if back_rms_type.lower() == 'std':
-        bkgrms_estimator = StdBackgroundRMS()
-    elif back_rms_type.lower() == 'mad':
-        bkgrms_estimator = MADStdBackgroundRMS()
-    elif back_rms_type.lower() == 'biweight':
-        bkgrms_estimator = BiweightScaleBackgroundRMS()
-
-    if (rmsmap is None) or (bkgmap is None):
-        bkg = Background2D(data.copy(), back_size, mask=mask, filter_size=back_filter_size, sigma_clip=sigma_clip,
-                           bkg_estimator=bkg_estimator, bkgrms_estimator=bkgrms_estimator)
-        if rmsmap is None:
-            rmsmap = bkg.background_rms
-        if bkgmap is None:
-            bkgmap = bkg.background
-
-    threshold = bkgmap + nsigma * rmsmap
-    error = calc_total_error(data,rmsmap, effective_gain)
-
-    ## Build a Gaussian kernel
-    sigma = fwhm * gaussian_fwhm_to_sigma
-    kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
-    kernel.normalize()
-
-    ## Do the detection using the Image Segmentation technique
-    ## The return is a SegmentationImage
-    segm = detect_sources(data, threshold, npixels=npixels, filter_kernel=kernel)
-
-    if return_seg_only:
-        return segm
-
-    # Source Deblending
-    segm_deblend = deblend_sources(data, segm, npixels=npixels, filter_kernel=kernel,
-                                   nlevels=nlevels, contrast=contrast)
-
-    # Check the Seg image
-    '''
-    import matplotlib.pyplot as plt
-    from astropy.visualization import SqrtStretch
-    from astropy.visualization.mpl_normalize import ImageNormalize
-    image_norm = ImageNormalize(stretch=SqrtStretch())
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12.5))
-    ax1.imshow(data, origin='lower', cmap='Greys_r', norm=image_norm)
-    ax1.set_title('Data')
-    cmap = segm.make_cmap(random_state=123)
-    ax2.imshow(segm, origin='lower', cmap=cmap, interpolation='nearest')
-    ax2.set_title('Segmentation Image')
-    '''
-
-    ## measure the source properties
-    if morp_filter:
-        cat = source_properties(data, segm_deblend, mask=mask, background=bkgmap, error=error,
-                                filter_kernel=kernel, wcs=wcs_info)
-    else:
-        cat = source_properties(data, segm_deblend, mask=mask, background=bkgmap, error=error, wcs=wcs_info)
-    tbl = cat.to_table()
-    tbl = tbl[np.invert(np.isnan(tbl['xcentroid']))] # remove sources with nan positions
-    tbl['MAG_AUTO'] = -2.5*np.log10(tbl['source_sum'])
-    tbl['MAGERR_AUTO'] = 2.5/np.log(10)*tbl['source_sum_err']/tbl['source_sum']
-    tbl['FLUX_AUTO'] = tbl['source_sum']
-    tbl['FLUXERR_AUTO'] = tbl['source_sum_err']
-
-    ## Perform Aperture photometry
-    msgs.info('Performing Aperture photometry')
-    positions = tbl['sky_centroid']
-    apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
-    tbl_aper = aperture_photometry(data, apertures, error=error, mask=mask, method='exact', wcs=wcs_info)
-    flux_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)))
-    fluxerr_aper = np.zeros_like(flux_aper)
-    mag_aper = np.zeros_like(flux_aper)
-    magerr_aper = np.zeros_like(flux_aper)
-    for ii in range(np.size(phot_apertures)):
-        flux_aper[:,ii] = tbl_aper['aperture_sum_{:d}'.format(ii)]
-        fluxerr_aper[:,ii] = tbl_aper['aperture_sum_err_{:d}'.format(ii)]
-        mag_aper[:,ii] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(ii)])
-        magerr_aper[:,ii] = 2.5/np.log(10)*tbl_aper['aperture_sum_err_{:d}'.format(ii)]/tbl_aper['aperture_sum_{:d}'.format(ii)]
-    tbl['MAG_APER'] = mag_aper
-    tbl['MAGERR_APER'] = magerr_aper
-    tbl['FLUX_APER'] = flux_aper
-    tbl['FLUXERR_APER'] = fluxerr_aper
-
-    ## ToDo: Add PSF photometry
-
-    return tbl, rmsmap, bkgmap
-
-def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_maxiters=10, npixels=3, fwhm=5,
-                     method='sextractor', task='sex'):
-
-    if mask is not None:
-        data[mask] = 0. # zero out bad pixels
-
-    if method.lower()=='photoutils':
-        msgs.info('Masking bright stars with Photoutils')
-        back_box_size = (data.shape[0] // 10, data.shape[1] // 10)
-        seg = detect(data, nsigma=brightstar_nsigma, npixels=npixels, fwhm=fwhm,
-                     back_type='median', back_rms_type='mad', back_nsigma=back_nsigma, back_maxiters=back_maxiters,
-                     back_size=back_box_size, back_filter_size=(3, 3), return_seg_only=True)
-        mask = seg.data>0
-    else:
-        msgs.info('Masking bright stars with SExtractor.')
-        tmp_root = 'mask_bright_star_tmp_{:03d}'.format(np.random.randint(1,999))
-        par = fits.PrimaryHDU(data)
-        par.writeto('{:}.fits'.format(tmp_root),overwrite=True)
-        # configuration for the first SExtractor run
-        sexconfig0 = {"CHECKIMAGE_TYPE": "OBJECTS", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                      "CATALOG_TYPE": "FITS_LDAC",
-                      "CHECKIMAGE_NAME":"{:}_check.fits".format(tmp_root),
-                      "DETECT_THRESH": brightstar_nsigma,
-                      "ANALYSIS_THRESH": brightstar_nsigma,
-                      "DETECT_MINAREA": 5}
-        sexparams0 = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
-                      'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE',
-                      'ELLIPTICITY',
-                      'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER']
-        sex.sexone('{:}.fits'.format(tmp_root), task=task, config=sexconfig0, workdir='./', params=sexparams0,
-                   defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=True, log=False)
-        data_check = fits.getdata("{:}_check.fits".format(tmp_root))
-        mask = data_check>0
-        msgs.info('Removing temporary files generated by SExtractor')
-        os.system('rm {:}.fits'.format(tmp_root))
-        os.system('rm {:}_check.fits'.format(tmp_root))
-        os.system('rm {:}_cat.fits'.format(tmp_root))
-
-    return mask
+    return phot_table, phot_rmsmap, phot_bkgmap
 
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.],
-           FLXSCALE=1.0, FLASCALE=1.0, external_flag=True, # This two paramers are exactly same with that used in SCAMP
-           out_refcat=None, outqaroot=None):
+           oversize=1.0, external_flag=True, FLXSCALE=1.0, FLASCALE=1.0, # This two paramers are exactly same with that used in SCAMP
+           nstar_min=10, out_refcat=None, outqaroot=None):
 
     try:
         msgs.info('Reading SExtractor catalog')
@@ -513,7 +489,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     ra_cen, dec_cen = np.median(ra), np.median(dec)
     distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
-    radius = np.nanmax(distance)*2.0 # query a bigger radius for safe given that you might have a big dither when re-use this catalog
+    radius = np.nanmax(distance)*oversize
 
     # Read/Query a reference catalog
     if (out_refcat is not None) and os.path.exists(out_refcat):
@@ -531,47 +507,50 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         msgs.info('Saving the reference catalog to {:}'.format(out_refcat))
         ref_data.write(out_refcat, format='fits')
 
-    # Select high S/N stars
-    good_ref = (1.0857/ref_data['{:}_MAG_ERR'.format(primary)]>10)
-    if coefficients[1]*coefficients[2] !=0:
-        good_ref &= (1.0857/ref_data['{:}_MAG_ERR'.format(secondary)]>10)
-    try:
-        ref_data = ref_data[good_ref.data]
-    except:
-        ref_data = ref_data[good_ref]
+    if ref_data is not None:
+        # Select high S/N stars
+        good_ref = (1.0857/ref_data['{:}_MAG_ERR'.format(primary)]>10)
+        if coefficients[1]*coefficients[2] !=0:
+            good_ref &= (1.0857/ref_data['{:}_MAG_ERR'.format(secondary)]>10)
+        try:
+            ref_data = ref_data[good_ref.data]
+        except:
+            ref_data = ref_data[good_ref]
 
-    #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-    #try:
-    #    good_ref &= (ref_data['class']==6).data
-    #except:
-    #    msgs.warn('No point-source selection was applied to the reference catalog')
+        #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+        #try:
+        #    good_ref &= (ref_data['class']==6).data
+        #except:
+        #    msgs.warn('No point-source selection was applied to the reference catalog')
 
-    ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
-    ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
-              coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
-              coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
+        ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
+        ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
+                  coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
+                  coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
 
-    ref_pos = np.zeros((len(ref_ra), 2))
-    ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
+        ref_pos = np.zeros((len(ref_ra), 2))
+        ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
 
-    ## cross-match with 1 arcsec
-    dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
-    matched = np.invert(np.isinf(dist))
+        ## cross-match with 1 arcsec
+        dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
+        matched = np.invert(np.isinf(dist))
 
-    matched_cat_mag = catalog['MAG_AUTO'][matched] - 2.5*np.log10(FLXSCALE*FLASCALE)
-    matched_ref_mag = ref_mag[ind[matched]]
-    #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
+        matched_cat_mag = catalog['MAG_AUTO'][matched] - 2.5*np.log10(FLXSCALE*FLASCALE)
+        matched_ref_mag = ref_mag[ind[matched]]
+        #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
 
-    nstar = np.sum(matched)
+        nstar = np.sum(matched)
+    else:
+        nstar=0
 
     if nstar==0:
         msgs.warn('No matched standard stars were found')
-        return 0., 0., nstar
-    elif nstar < 10:
+        return 0., 0., nstar, None
+    elif nstar < nstar_min:
             msgs.warn('Only {:} standard stars were found'.format(nstar))
             _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
                                                       sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
-            return zp, zp_std, nstar
+            return zp, zp_std, nstar, catalog[matched]
     else:
         _, zp, zp_std = stats.sigma_clipped_stats(matched_ref_mag - matched_cat_mag,
                                                   sigma=3, maxiters=20, cenfunc='median', stdfunc='std')
@@ -644,14 +623,15 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
             plt.savefig(outqaroot+'_pos_scatter.pdf')
             plt.close()
 
-    return zp, zp_std, nstar
+    return zp, zp_std, nstar, catalog[matched]
 
 def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0, external_flag=True,
-              refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10):
+              refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10, pixscale=None):
 
 
     zp_all, zp_std_all = np.zeros(len(cat_fits_list)), np.zeros(len(cat_fits_list))
     nstar_all = np.zeros(len(cat_fits_list))
+    fwhm_all = np.zeros(len(cat_fits_list))
     for ii, this_cat in enumerate(cat_fits_list):
         if sci_fits_list is None:
             this_sci_fits = this_cat.replace('.cat','.fits')
@@ -687,13 +667,14 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             msgs.warn('FLASCALE was not found in the FITS Image Header.')
             FLASCALE = 1.0
 
-
-        zp_this, zp_this_std, nstar = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
+        # query a bigger (by a factor of 2 as specified by oversize) radius for safe given that you might have a big dither when re-use this catalog
+        zp_this, zp_this_std, nstar, cat_matched = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
                                    coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE, external_flag=external_flag,
-                                   out_refcat=this_ref_name, outqaroot=this_qa_root)
+                                   oversize=2.0, out_refcat=this_ref_name, outqaroot=this_qa_root)
         if nstar>nstar_min:
             msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
             mag_ext = ZP-zp_this
+            FLXSCALE *= 10**(0.4*(mag_ext))
             if mag_ext>0.5:
                 msgs.warn('{:} has an extinction of {:0.3f} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
             elif mag_ext>0.1:
@@ -701,136 +682,31 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             else:
                 msgs.info('{:} has an extinction of {:0.3f} magnitude, Excellent conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
 
+            # measure the PSF
+            star_table=Table()
+            try:
+                star_table['x'] = cat_matched['XWIN_IMAGE']
+                star_table['y'] = cat_matched['YWIN_IMAGE']
+            except:
+                star_table['x'] = cat_matched['xcentroid']
+                star_table['y'] = cat_matched['ycentroid']
+            fwhm, _, _,_ = psf.buildPSF(star_table, this_sci_fits, size=51, sigclip=5, maxiters=10, norm_radius=2.5,
+                                   pixscale=pixscale, cenfunc='median', outroot=this_qa_root)
 
-            FLXSCALE *= 10**(0.4*(mag_ext))
+            # Save the important parameters
             par[0].header['FLXSCALE'] = FLXSCALE
             par[0].header['FLASCALE'] = FLASCALE
-            par[0].header['ZP'] = zp_this
-            par[0].header['ZP_STD'] = zp_this_std
-            par[0].header['ZP_NSTAR'] = nstar
+            par[0].header['ZP'] = (zp_this, 'Zero point measured from stars')
+            par[0].header['ZP_STD'] = (zp_this_std, 'The standard deviration of ZP')
+            par[0].header['ZP_NSTAR'] = (nstar, 'The number of stars used for ZP and FWHM')
+            par[0].header['FWHM'] = (fwhm, 'FWHM in units of arcsec measured from stars')
             par.writeto(this_sci_fits, overwrite=True)
         else:
             msgs.warn('The number of stars found for calibration is smaller than nstar_min. skipping the ZPT calibrations.')
-
+            fwhm = 0
         zp_all[ii] = zp_this
         zp_std_all[ii] = zp_this_std
         nstar_all[ii] = nstar
+        fwhm_all[ii] = fwhm
 
-    return zp_all, zp_std_all, nstar_all
-
-
-def ForcedAperPhot(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):
-
-    ncat = np.size(catalogs)
-    if cat_ids is None:
-        cat_ids = (np.arange(ncat)+1).astype('U').tolist()
-    assert ncat == np.size(images), 'The numbers of images and catalogs should be the same'
-    assert ncat == np.size(cat_ids), 'The numbers of cat_ids and catalogs should be the same'
-
-    if rmsmaps is not None:
-        assert ncat == np.size(rmsmaps), 'The numbers of images and rmsmaps should be the same'
-    if flagmaps is not None:
-        assert ncat == np.size(flagmaps), 'The numbers of images and flagmaps should be the same'
-
-    ## Merge catalogs
-    Table_Merged= Table.read(catalogs[0], 2)
-    Table_Merged['CAT_ID'] = cat_ids[0]
-    for icat in range(1,ncat):
-        table_icat = Table.read(catalogs[icat], 2)
-        table_icat['CAT_ID'] = cat_ids[icat]
-
-        pos1 = np.zeros((len(Table_Merged), 2))
-        try:
-            pos1[:, 0], pos1[:, 1] = Table_Merged['ALPHA_J2000'],Table_Merged['DELTA_J2000']
-        except:
-            pos1[:, 0], pos1[:, 1] = Table_Merged['sky_centroid_icrs.ra'],Table_Merged['sky_centroid_icrs.dec']
-
-        pos2 = np.zeros((len(table_icat), 2))
-        try:
-            pos2[:, 0], pos2[:, 1] = table_icat['ALPHA_J2000'],table_icat['DELTA_J2000']
-        except:
-            pos2[:, 0], pos2[:, 1] = table_icat['sky_centroid_icrs.ra'],table_icat['sky_centroid_icrs.dec']
-
-        ## cross-match with 1 arcsec
-        dist, ind = crossmatch.crossmatch_angular(pos2, pos1, max_distance=unique_dist / 3600.)
-        no_match = np.isinf(dist)
-        Table_Merged =vstack([Table_Merged, table_icat[no_match]])
-
-    ## Prepare the output forced photometry catalog
-    ## ToDo: Currently only used the posotions and flags of the merged catalog is included.
-    ##       Next step is to keep all the origin columns of the input catalog
-    Table_Forced = Table()
-    Table_Forced['CAT_ID'] = Table_Merged['CAT_ID']
-    Table_Forced['FORCED_ID'] = (np.arange(len(Table_Forced))+1).astype('int32')
-    try:
-        Table_Forced['RA'], Table_Forced['DEC']= Table_Merged['ALPHA_J2000'],Table_Merged['DELTA_J2000']
-    except:
-        Table_Forced['RA'], Table_Forced['DEC'] = Table_Merged['sky_centroid_icrs.ra'], Table_Merged['sky_centroid_icrs.dec']
-
-    if 'CLASS_STAR' in Table_Merged.keys():
-        Table_Forced['CLASS_STAR'] = Table_Merged['CLASS_STAR']
-    if 'FLAGS' in Table_Merged.keys():
-        Table_Forced['FLAGS'] = Table_Merged['FLAGS']
-    if 'IMAFLAGS_ISO' in Table_Merged.keys():
-        Table_Forced['IMAFLAGS_ISO'] = Table_Merged['IMAFLAGS_ISO']
-    if 'NIMAFLAGS_ISO' in Table_Merged.keys():
-        Table_Forced['NIMAFLAGS_ISO'] = Table_Merged['NIMAFLAGS_ISO']
-
-    ## Let's perform the forced aperture photometry on each image
-    positions = SkyCoord(ra=Table_Forced['RA'], dec=Table_Forced['DEC'], unit=(u.deg, u.deg))
-
-    ## Perform aperture photometry for all merged sources
-    for ii, this_image in enumerate(images):
-        msgs.info('Performing forced aperture photometry on {:}'.format(this_image))
-        data = fits.getdata(this_image)
-        header = fits.getheader(this_image)
-        wcs_info = wcs.WCS(header)
-
-        try:
-            zpt = header['ZP']
-        except:
-            zpt = 0.
-
-        if flagmaps is not None:
-            ## good pixels with flag==0
-            flag = fits.getdata(flagmaps[ii])
-            mask = flag > 0.
-        else:
-            mask = None
-
-        if rmsmaps is not None:
-            error = fits.getdata(rmsmaps[ii])
-        else:
-            error = None
-
-        apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
-        tbl_aper = aperture_photometry(data, apertures, error=error, mask=mask, method='exact', wcs=wcs_info)
-        flux_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)))
-        fluxerr_aper = np.zeros_like(flux_aper)
-        mag_aper = np.zeros_like(flux_aper)
-        magerr_aper = np.zeros_like(flux_aper)
-        for jj in range(np.size(phot_apertures)):
-            flux_aper[:,jj] = tbl_aper['aperture_sum_{:d}'.format(jj)]
-            fluxerr_aper[:,jj] = tbl_aper['aperture_sum_err_{:d}'.format(jj)]
-            mag_aper[:,jj] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(jj)])
-            magerr_aper[:,jj] = 2.5/np.log(10)*tbl_aper['aperture_sum_err_{:d}'.format(jj)]/tbl_aper['aperture_sum_{:d}'.format(jj)]
-
-        Table_Forced['FORCED_XCENTER_{:}'.format(cat_ids[ii])] = tbl_aper['xcenter']
-        Table_Forced['FORCED_YCENTER_{:}'.format(cat_ids[ii])] = tbl_aper['ycenter']
-        #Table_Forced['FORCED_SKY_CENTER_{:}'.format(cat_ids[ii])] = tbl_aper['sky_center']
-        Table_Forced['FORCED_MAG_APER_{:}'.format(cat_ids[ii])] = mag_aper + zpt
-        Table_Forced['FORCED_MAGERR_APER_{:}'.format(cat_ids[ii])] = magerr_aper
-        Table_Forced['FORCED_FLUX_APER_{:}'.format(cat_ids[ii])] = flux_aper
-        Table_Forced['FORCED_FLUXERR_APER_{:}'.format(cat_ids[ii])] = fluxerr_aper
-
-        badmag = np.isinf(mag_aper) | np.isnan(mag_aper)
-        Table_Forced['FORCED_MAG_APER_{:}'.format(cat_ids[ii])][badmag] = 99.
-        Table_Forced['FORCED_MAGERR_APER_{:}'.format(cat_ids[ii])][badmag] = 99.
-
-        badphot = (flux_aper == 0.)
-        Table_Forced['FORCED_FLAG_APER_{:}'.format(cat_ids[ii])] = np.sum(badphot,axis=1)
-
-    if outfile is not None:
-        Table_Forced.write(outfile,format='fits', overwrite=True)
-
-    return Table_Forced
+    return zp_all, zp_std_all, nstar_all, fwhm_all

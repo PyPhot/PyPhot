@@ -3,12 +3,55 @@ import itertools
 import numpy as np
 from scipy.optimize import curve_fit
 
+import matplotlib
+import matplotlib.pyplot as plt
+
 from collections import deque
 from bisect import insort, bisect_left
 
+from astropy.wcs import WCS
 from astropy.stats import sigma_clip
+from astropy.visualization import MinMaxInterval, ManualInterval, ZScaleInterval
+from astropy.visualization import AsinhStretch, HistEqStretch, LinearStretch, LogStretch
+from astropy.visualization import PowerDistStretch, PowerStretch, SinhStretch, SqrtStretch
+from astropy.visualization import ImageNormalize
 
-from pyphot import msgs
+
+from pyphot import msgs, io
+
+def pyplot_rcparams():
+    """
+    params for pretty matplotlib plots
+
+    Returns:
+
+    """
+    # set some plotting parameters
+    plt.rcParams["xtick.top"] = True
+    plt.rcParams["ytick.right"] = True
+    plt.rcParams["xtick.minor.visible"] = True
+    plt.rcParams["ytick.minor.visible"] = True
+    plt.rcParams["ytick.direction"] = 'in'
+    plt.rcParams["xtick.direction"] = 'in'
+    plt.rcParams["legend.frameon"] = False
+    plt.rcParams["legend.handletextpad"] = 1
+    plt.rcParams["legend.handlelength"] = 1.1
+    plt.rcParams["axes.labelsize"] = 16
+    plt.rcParams["xtick.labelsize"] = 14
+    plt.rcParams["ytick.labelsize"] = 14
+    plt.rcParams["legend.fontsize"] = 12
+    plt.rcParams["font.family"] = "Times New Roman"
+    plt.rcParams["mathtext.default"] = "regular"
+
+def pyplot_rcparams_default():
+    """
+    restore default rcparams
+
+    Returns:
+
+    """
+    matplotlib.rcParams.update(matplotlib.rcParamsDefault)
+
 
 def inverse(array):
     """
@@ -214,6 +257,27 @@ def rebin_evlist(frame, newshape):
     return eval(''.join(evList))
 
 
+def gauss1D(x, amplitude, mean, stddev, offset):
+    return amplitude * np.exp(-((x - mean)**2 / (2*stddev**2))) + offset
+
+
+def gauss2D(xy_tuple, amplitude, xo, yo, sigma, theta, offset):
+
+    (x, y)= xy_tuple
+    if np.size(sigma) > 1:
+        sigma_x, sigma_y = sigma[0], sigma[1]
+    else:
+        sigma_x, sigma_y = sigma, sigma
+    xo = float(xo)
+    yo = float(yo)
+    a = (np.cos(theta) ** 2) / (2 * sigma_x ** 2) + (np.sin(theta) ** 2) / (2 * sigma_y ** 2)
+    b = -(np.sin(2 * theta)) / (4 * sigma_x ** 2) + (np.sin(2 * theta)) / (4 * sigma_y ** 2)
+    c = (np.sin(theta) ** 2) / (2 * sigma_x ** 2) + (np.cos(theta) ** 2) / (2 * sigma_y ** 2)
+    g = offset + amplitude * np.exp(- (a * ((x - xo) ** 2) + 2 * b * (x - xo) * (y - yo)
+                                       + c * ((y - yo) ** 2)))
+    return g.ravel()
+
+
 def robust_curve_fit(func, xx, yy, niters=5, sigclip=3, maxiters_sigclip=5, cenfunc='median', stdfunc='std',
                      p0=None, sigma=None, absolute_sigma=None, bounds=None, method=None, jac=None, **kwargs):
 
@@ -221,15 +285,105 @@ def robust_curve_fit(func, xx, yy, niters=5, sigclip=3, maxiters_sigclip=5, cenf
         bounds = (-np.inf, np.inf)
     ii=0
     xx_mask, yy_mask = xx.copy(), yy.copy()
+    if sigma is None:
+        sigma_mask = None
+    else:
+        sigma_mask = sigma.copy()
+
     while ii < niters:
-        popt, pcov = curve_fit(func, xx_mask, yy_mask, p0=p0, sigma=sigma, absolute_sigma=absolute_sigma,
+        popt, pcov = curve_fit(func, xx_mask, yy_mask, p0=p0, sigma=sigma_mask, absolute_sigma=absolute_sigma,
                                bounds=bounds, method=method, jac=jac, **kwargs)
-        diff = abs(func(xx_mask,popt[0],popt[1]) - yy_mask)
+        diff = abs(func(xx_mask,*popt) - yy_mask)
 
         masked_data = sigma_clip(diff, sigma=sigclip, maxiters=maxiters_sigclip, masked=True,
                                  cenfunc=cenfunc, stdfunc=stdfunc, copy=True)
 
-        xx_mask, yy_mask = xx_mask[np.invert(masked_data.mask)], yy_mask[np.invert(masked_data.mask)]
+        if len(xx.shape) == len(yy.shape):
+            xx_mask, yy_mask = xx_mask[np.invert(masked_data.mask)], yy_mask[np.invert(masked_data.mask)]
+        elif len(xx.shape) == 2*len(yy.shape):
+            xx_mask, yy_mask = xx_mask[:,np.invert(masked_data.mask)], yy_mask[np.invert(masked_data.mask)]
+        else:
+            msgs.error('Only 1D and 2D models are acceptted.')
+
+        if sigma_mask is not None:
+            sigma_mask = sigma_mask[np.invert(masked_data.mask)]
+
         ii +=1
 
     return popt, pcov
+
+def showimages(fitsimages, outroots=None, interval_method='zscale', vmin=None, vmax=None,
+               stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False):
+
+    plt.rcParams["ytick.direction"] = 'in'
+    plt.rcParams["xtick.direction"] = 'in'
+    plt.rcParams["font.family"] = "Times New Roman"
+
+    # if only one image, set it to list
+    if isinstance(fitsimages, str):
+        fitsimages = [fitsimages]
+    if isinstance(outroots, str):
+        outroots = [outroots]
+
+    # iterating
+    for ii, this_image in enumerate(fitsimages):
+        msgs.info('Showing image {:}'.format(this_image))
+        header, data, flag = io.load_fits(this_image)
+        ny, nx = data.shape
+
+        # Create interval object
+        if interval_method.lower() == 'zscale':
+            interval = ZScaleInterval()
+        elif interval_method.lower() == 'minmax':
+            interval = MinMaxInterval()
+        else:
+            interval = ManualInterval(vmin=vmin, vmax=vmax)
+
+        vmin, vmax = interval.get_limits(data)
+        msgs.info('Using vmin={:} and vmax={:} for the plot'.format(vmin, vmax))
+
+        if stretch_method.lower()=='asinh':
+            stretch = AsinhStretch()
+        elif stretch_method.lower()=='histeq':
+            stretch = HistEqStretch()
+        elif stretch_method.lower()=='linear':
+            stretch = LinearStretch()
+        elif stretch_method.lower()=='log':
+            stretch = LogStretch()
+        elif stretch_method.lower()=='powerdist':
+            stretch = PowerDistStretch()
+        elif stretch_method.lower()=='power':
+            stretch = PowerStretch()
+        elif stretch_method.lower()=='sinh':
+            stretch = SinhStretch()
+        elif stretch_method.lower()=='sqrt':
+            stretch = SqrtStretch()
+        else:
+            msgs.error('Please use one of the following stretch: asinh, histeq, linear, log, powerdist, power, sinh, sqrt.')
+        msgs.info('Using {:} stretch for the plot'.format(stretch_method))
+
+        # making the plot
+        f = plt.figure(figsize=(4, 3.5*ny/nx))
+        f.subplots_adjust(left=0.15, right=0.98, bottom=0.1, top=0.98, wspace=0, hspace=0)
+        if plot_wcs:
+            this_wcs = WCS(header)
+            plt.subplot(projection=this_wcs)
+            plt.xlabel('RA', fontsize=14)
+            plt.ylabel('DEC', fontsize=14)
+        else:
+            plt.xlabel('X', fontsize=14)
+            plt.ylabel('Y', fontsize=14)
+
+        # Create an ImageNormalize object using a SqrtStretch object
+        norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch)
+
+        plt.imshow(data, origin='lower', norm=norm, cmap=cmap)
+
+        if outroots is not None:
+            if len(outroots) != len(fitsimages):
+                msgs.error('The length of the outroots should be the same with fitsimages.')
+            msgs.info('Saving the QA to {:}.pdf'.format(outroots[ii]))
+            plt.savefig('{:}.pdf'.format(outroots[ii]))
+        if show:
+            plt.show()
+        plt.close()

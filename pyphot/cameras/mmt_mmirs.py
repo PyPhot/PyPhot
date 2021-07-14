@@ -105,7 +105,7 @@ class MMTMMIRSCamera(camera.Camera):
             nonlinear=1.0,
             mincounts=-1e10,
             numamplifiers=1,
-            gain=np.atleast_1d(0.95),
+            gain=np.atleast_1d(2.68),
             ronoise=np.atleast_1d(3.14),
             datasec=np.atleast_1d('[:,:]'),
             oscansec=np.atleast_1d('[:,:]')
@@ -128,9 +128,10 @@ class MMTMMIRSCamera(camera.Camera):
         turn_off = dict(use_illumflat=False, use_biasimage=False, use_overscan=False,
                         use_darkimage=False)
         par.reset_all_processimages_par(**turn_off)
-        par['scienceframe']['process']['use_darkimage'] = True
+        par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
+        par['scienceframe']['process']['use_supersky'] = False
 
 
         # Set the default exposure time ranges for the frame typing
@@ -142,6 +143,22 @@ class MMTMMIRSCamera(camera.Camera):
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
         par['scienceframe']['process']['grow'] = 0.5
+
+        # astrometry
+        par['postproc']['astrometry']['position_maxerr'] = 0.5
+        par['postproc']['astrometry']['posangle_maxerr'] = 10.0
+        par['postproc']['astrometry']['detect_thresh'] = 7
+        par['postproc']['astrometry']['analysis_thresh'] = 7
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 1
+        par['postproc']['astrometry']['astrefmag_limits'] = [17, 21]
+        par['postproc']['astrometry']['delete'] = False
+        par['postproc']['astrometry']['log'] = True
+
+        # Photometry
+        par['postproc']['photometry']['cal_chip_zpt'] = True
+        par['postproc']['photometry']['external_flag'] = False
+        par['postproc']['photometry']['nstar_min'] = 5
 
         return par
 
@@ -169,7 +186,7 @@ class MMTMMIRSCamera(camera.Camera):
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'
             par['postproc']['photometry']['primary'] = 'J'
             par['postproc']['photometry']['secondary'] = 'H'
-            par['postproc']['photometry']['zpt'] = 21.0
+            par['postproc']['photometry']['zpt'] = 26.85
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
         elif self.get_meta_value(scifile, 'filter') == 'H':
@@ -252,16 +269,16 @@ class MMTMMIRSCamera(camera.Camera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on MMIRS")
+        msgs.info("Using hard-coded BPM for det={:} on MMIRS".format(det))
 
         # Get the binning
-        hdu = fits.open(filename)
-        binning = hdu[1].header['CCDSUM']
-        hdu.close()
+        #hdu = fits.open(filename)
+        #binning = hdu[1].header['CCDSUM']
+        #hdu.close()
 
         # Apply the mask
-        xbin, ybin = int(binning.split(' ')[0]), int(binning.split(' ')[1])
-        bpm_img[:, 187 // ybin] = 1
+        #xbin, ybin = int(binning.split(' ')[0]), int(binning.split(' ')[1])
+        #bpm_img[:, 187 // ybin] = 1
 
         return bpm_img
 
@@ -338,6 +355,9 @@ class MMTMMIRSCamera(camera.Camera):
             exptime = hdu[0].header[self.meta['exptime']['card']]
 
         # Return, transposing array back to orient the overscan properly
+
+        #ToDo: need to return ramp_image which will be used for procimg
+
         return detector_par, array, head1, exptime, gainimage, rnimage
 
 def mmirs_read_amp(img, namps=32):

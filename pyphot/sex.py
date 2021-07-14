@@ -157,7 +157,7 @@ def get_params(params=None, workdir='./'):
     return comd
 
 
-def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
+def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
            conv=None, nnw=None, dual=False, flag_image=None, weight_image=None,
            delete=True, log=False, verbose=True):
 
@@ -182,7 +182,14 @@ def sexone(imgname, task='sex', config=None, workdir='./', params=None, defaultc
     if config is None:
         config = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
                   "CATALOG_TYPE": "FITS_LDAC", "BACK_TYPE ": "MANUAL", "BACK_VALUE": 0.0}
-    config['CATALOG_NAME'] = imgname.replace('.fits','_cat.fits')
+    if catname is None:
+        if dual:
+            config['CATALOG_NAME'] =imgname[0].replace('.fits','_cat.fits')
+        else:
+            config['CATALOG_NAME'] =imgname.replace('.fits','_cat.fits')
+    else:
+        config['CATALOG_NAME'] = catname
+
     if flag_image is not None:
         config['FLAG_IMAGE'] = flag_image
     if weight_image is not None:

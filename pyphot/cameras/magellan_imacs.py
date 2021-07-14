@@ -95,14 +95,14 @@ class MagellanIMACSCamera(camera.Camera):
         ## a specific column indicates whether its flat or not
         flats = np.zeros(len(fitstbl),dtype='bool')
         for i in range(len(fitstbl)):
-            if 'flat' in fitstbl[i]['target'].lower():
+            if 'flat' in fitstbl[i]['idname'].lower():
                 flats[i] = True
 
         good_exp = framematch.check_frame_exptime(fitstbl['exptime'], exprng)
         if ftype == 'bias':
             return good_exp & (fitstbl['idname'] == 'Bias')
         if ftype in ['pixelflat', 'illumflat']:
-            return good_exp & (fitstbl['idname'] == 'Object') & flats
+            return good_exp  & flats #& (fitstbl['idname'] == 'Object')
         #if ftype == 'standard':
         #    return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
         if ftype in ['science','supersky','fringe']:
@@ -339,12 +339,11 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 21]
         par['postproc']['astrometry']['detect_thresh'] = 10
         par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 7
-        par['postproc']['astrometry']['crossid_radius'] = 5
-        par['postproc']['astrometry']['delete'] = True
-        par['postproc']['astrometry']['log'] = False
+        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['crossid_radius'] = 2
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['superskyframe']['exprng'] = [10, None]
@@ -456,10 +455,9 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             0.
         """
         # Call the base-class method to generate the empty bpm
-        # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det=1 on IMACS")
+        msgs.info("Using hard-coded BPM for det={:} on IMACS".format(det))
 
         # Get the binning
         #hdu = fits.open(filename)

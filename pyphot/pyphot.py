@@ -8,20 +8,19 @@ Main driver class for PyPhot run
 import time
 import os
 import numpy as np
-from astropy import wcs
 from astropy.io import fits
 from astropy.table import Table
 
 from configobj import ConfigObj
 
-from pyphot import msgs, io
+from pyphot import msgs, io, utils
 from pyphot import procimg, postproc
-from pyphot import sex
 from pyphot.par.util import parse_pyphot_file
 from pyphot.par import PyPhotPar
 from pyphot.metadata import PyPhotMetaData
 from pyphot.cameras.util import load_camera
 from pyphot import masterframe
+from pyphot.psf import  psf
 
 
 class PyPhot(object):
@@ -406,7 +405,8 @@ class PyPhot(object):
                         sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, ccdmask_fits_list,
                                         mastersuperskyimg=mastersuperskyimg, airmass=sci_airmass,
                                         coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
-                                        background=self.par['scienceframe']['process']['background'],
+                                        back_type=self.par['scienceframe']['process']['back_type'],
+                                        back_rms_type=self.par['scienceframe']['process']['back_rms_type'],
                                         back_size=self.par['scienceframe']['process']['back_size'],
                                         back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
                                         maskbrightstar=self.par['scienceframe']['process']['mask_brightstar'],
@@ -414,7 +414,7 @@ class PyPhot(object):
                                         maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
                                         sextractor_task=self.par['rdx']['sextractor'],
                                         mask_cr=self.par['scienceframe']['process']['mask_cr'],
-                                        maxiter=self.par['scienceframe']['process']['lamaxiter'],
+                                        lamaxiter=self.par['scienceframe']['process']['lamaxiter'],
                                         sigclip=self.par['scienceframe']['process']['sigclip'],
                                         cr_threshold=self.par['scienceframe']['process']['cr_threshold'],
                                         neighbor_threshold=self.par['scienceframe']['process']['neighbor_threshold'],
@@ -504,6 +504,7 @@ class PyPhot(object):
                                         crossid_radius=self.par['postproc']['astrometry']['crossid_radius'],
                                         astref_catalog=self.par['postproc']['astrometry']['astref_catalog'],
                                         astref_band=self.par['postproc']['astrometry']['astref_band'],
+                                        astrefmag_limits=self.par['postproc']['astrometry']['astrefmag_limits'],
                                         position_maxerr=self.par['postproc']['astrometry']['position_maxerr'],
                                         pixscale_maxerr=self.par['postproc']['astrometry']['pixscale_maxerr'],
                                         posangle_maxerr=self.par['postproc']['astrometry']['posangle_maxerr'],
@@ -531,7 +532,7 @@ class PyPhot(object):
                                 outqa_list.append(os.path.join(self.qa_path, this_qa))
 
                             # Do the calibrations
-                            zp_all, zp_std_all, nstar_all = postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
+                            zp_all, zp_std_all, nstar_all, fwhm_all = postproc.cal_chips(cat_resample_list, sci_fits_list=sci_resample_list,
                                                             ref_fits_list=master_ref_cats, outqa_root_list = outqa_list,
                                                             refcatalog=self.par['postproc']['photometry']['photref_catalog'],
                                                             primary=self.par['postproc']['photometry']['primary'],
@@ -539,7 +540,8 @@ class PyPhot(object):
                                                             coefficients=self.par['postproc']['photometry']['coefficients'],
                                                             ZP=self.par['postproc']['photometry']['zpt'],
                                                             nstar_min=self.par['postproc']['photometry']['nstar_min'],
-                                                            external_flag=self.par['postproc']['photometry']['external_flag'])
+                                                            external_flag=self.par['postproc']['photometry']['external_flag'],
+                                                            pixscale=pixscale)
 
                             # The FITS table that stores individual zero-points
                             master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],
@@ -551,9 +553,26 @@ class PyPhot(object):
                             master_zpt_tbl['airmass'] = self.fitstbl['airmass'][grp_science].astype('double')
                             master_zpt_tbl['ZPT'] = zp_all
                             master_zpt_tbl['ZPT_Std'] = zp_std_all
+                            master_zpt_tbl['FWHM'] = fwhm_all
                             master_zpt_tbl['NStar'] = nstar_all.astype('int32')
                             master_zpt_tbl['Detector'] = (np.ones_like(nstar_all)*self.det).astype('int32')
                             master_zpt_tbl.write(master_zpt_name, overwrite=True)
+
+                        ## Making QA image for calibrated individual chips
+                        if self.par['postproc']['qa']['skip']:
+                            msgs.warn('Skipping QA for individual chips.')
+                        else:
+                            outroots = []
+                            for this_image in sci_resample_list:
+                                outroots.append(os.path.join(self.qa_path, os.path.basename(this_image).replace('.fits','_img')))
+                            utils.showimages(sci_resample_list, outroots=outroots,
+                                             interval_method=self.par['postproc']['qa']['interval_method'],
+                                             vmin=self.par['postproc']['qa']['vmin'],
+                                             vmax=self.par['postproc']['qa']['vmax'],
+                                             stretch_method=self.par['postproc']['qa']['stretch_method'],
+                                             cmap=self.par['postproc']['qa']['cmap'],
+                                             plot_wcs=self.par['postproc']['qa']['plot_wcs'],
+                                             show=self.par['postproc']['qa']['show'])
 
                     ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here? Probably not?
                     ##       using swarp to combine different detectors, if only one detector then skip this step.
@@ -578,6 +597,13 @@ class PyPhot(object):
                 # The name of reference catalog that will be saved to Master folder
                 out_refcat = 'MasterRefCat_{:}_ID{:03d}.fits'.format(self.par['postproc']['photometry']['photref_catalog'],objid)
                 out_refcat_fullpath = os.path.join(self.par['calibrations']['master_dir'], out_refcat)
+                # pixscale
+                if self.par['postproc']['coadd']['pixscale'] is None:
+                    # get pixel scale for resampling with SCAMP
+                    detector_par = self.camera.get_detector_par(fits.open(self.fitstbl.frame_paths(grp_iobj)[0]), 1)
+                    pixscale = detector_par['platescale']
+                else:
+                    pixscale = self.par['postproc']['coadd']['pixscale']
 
                 # compile the file list
                 nscifits = np.size(iobjfiles)
@@ -626,104 +652,79 @@ class PyPhot(object):
                                                 back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
                                                 back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
                                                 resampling_type=self.par['postproc']['coadd']['resampling_type'],
+                                                sextractor_task=self.par['rdx']['sextractor'],
+                                                detect_thresh=self.par['postproc']['detection']['detect_thresh'],
+                                                analysis_thresh=self.par['postproc']['detection']['analysis_thresh'],
+                                                detect_minarea=self.par['postproc']['detection']['detect_minarea'],
                                                 delete=self.par['postproc']['coadd']['delete'],
                                                 log=self.par['postproc']['coadd']['log'])
 
-                ## Detection
-                if self.par['postproc']['detection']['skip']:
-                    msgs.warn('Skipping detecting process. Make sure you have extracted source catalog !!!')
-                else:
-                    if self.par['postproc']['detection']['detection_method'] == 'Photutils':
-                        # detection with photoutils
-                        data = fits.getdata(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
-                        flag = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_flag.fits'))
-                        mask = flag>0.
-                        header = fits.getheader(os.path.join(self.coadd_path, coaddroot+'_sci.fits'))
-                        wcs_info = wcs.WCS(header)
-                        effective_gain = header['EXPTIME']
-
-                        ## Run the detection
-                        phot_table, rmsmap, bkgmap = postproc.detect(data, wcs_info, mask=mask, rmsmap=None, bkgmap=None,
-                                                     effective_gain=effective_gain,
-                                                     nsigma=self.par['postproc']['detection']['detect_thresh'],
-                                                     npixels=self.par['postproc']['detection']['detect_minarea'],
-                                                     fwhm=self.par['postproc']['detection']['fwhm'],
-                                                     nlevels=self.par['postproc']['detection']['nlevels'],
-                                                     contrast=self.par['postproc']['detection']['contrast'],
-                                                     back_nsigma=self.par['postproc']['detection']['back_nsigma'],
-                                                     back_maxiters=self.par['postproc']['detection']['back_maxiters'],
-                                                     back_type=self.par['postproc']['detection']['back_type'],
-                                                     back_rms_type=self.par['postproc']['detection']['back_rms_type'],
-                                                     back_size=self.par['postproc']['detection']['back_size'],
-                                                     back_filter_size=self.par['postproc']['detection']['back_filtersize'],
-                                                     morp_filter=self.par['postproc']['detection']['morp_filter'],
-                                                     phot_apertures=self.par['postproc']['detection']['phot_apertures'])
-                        ## save the table and maps
-                        phot_table.write(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'), overwrite=True)
-                        par = fits.PrimaryHDU(rmsmap, header)
-                        par.writeto(os.path.join(self.coadd_path, coaddroot + '_rms.fits'), overwrite=True)
-                        #par = fits.PrimaryHDU(bkgmap, header)
-                        #par.writeto(os.path.join(self.coadd_path, coaddroot + '_bkg.fits'), overwrite=True)
-
-                    elif self.par['postproc']['detection']['detection_method'] == 'SExtractor':
-                        ## detection with SExtractor
-                        phot_apertures = self.par['postproc']['detection']['phot_apertures']
-
-                        ## configuration for the sextractor run
-                        # configuration for the first SExtractor run
-                        det_params = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
-                                      'ERRBWIN_IMAGE', 'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE',
-                                      'ISOAREA_IMAGE', 'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO',
-                                      'FLUXERR_AUTO', 'MAG_APER({:})'.format(len(phot_apertures)),
-                                      'MAGERR_APER({:})'.format(len(phot_apertures)),
-                                      'FLUX_APER({:})'.format(len(phot_apertures)),
-                                      'FLUXERR_APER({:})'.format(len(phot_apertures)),
-                                      'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS']
-                        det_config = {"CATALOG_TYPE": "FITS_LDAC",
-                                     "BACK_TYPE": self.par['postproc']['detection']['back_type'],
-                                     "BACK_VALUE": self.par['postproc']['detection']['back_default'],
-                                     "BACK_SIZE": self.par['postproc']['detection']['back_size'],
-                                     "BACK_FILTERSIZE": self.par['postproc']['detection']['back_filtersize'],
-                                     "BACKPHOTO_TYPE": self.par['postproc']['detection']['backphoto_type'],
-                                     "BACKPHOTO_THICK": self.par['postproc']['detection']['backphoto_thick'],
-                                     "WEIGHT_TYPE": self.par['postproc']['detection']['weight_type'],
-                                     "DETECT_THRESH": self.par['postproc']['detection']['detect_thresh'],
-                                     "ANALYSIS_THRESH": self.par['postproc']['detection']['analysis_thresh'],
-                                     "DETECT_MINAREA": self.par['postproc']['detection']['detect_minarea'],
-                                     "DEBLEND_NTHRESH": self.par['postproc']['detection']['nlevels'],
-                                     "DEBLEND_MINCONT": self.par['postproc']['detection']['contrast'],
-                                     "CHECKIMAGE_TYPE": self.par['postproc']['detection']['check_type'],
-                                     "CHECKIMAGE_NAME": os.path.join(self.coadd_path, coaddroot + '_rms.fits'),
-                                     "PHOT_APERTURES": np.array(phot_apertures) / pixscale}
-                        sex.sexone(os.path.join(self.coadd_path,coaddroot+'_sci.fits'),
-                                   flag_image=os.path.join(self.coadd_path,coaddroot+'_flag.fits'),
-                                   weight_image=os.path.join(self.coadd_path,coaddroot+'_sci.weight.fits'),
-                                   task=self.par['rdx']['sextractor'],
-                                   config=det_config, workdir=self.coadd_path, params=det_params,
-                                   defaultconfig='pyphot', dual=False,
-                                   conv=self.par['postproc']['detection']['conv'],
-                                   nnw=self.par['postproc']['detection']['nnw'],
-                                   delete=False,
-                                   log=self.par['postproc']['detection']['log'])
-                        if 'RMS' in self.par['postproc']['detection']['check_type']:
-                            rmsmap = fits.getdata(os.path.join(self.coadd_path, coaddroot + '_rms.fits'))
-                        phot_table = Table.read(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),2)
-
+                ## calibrate the zeropoint for the final stacked image
                 if self.par['postproc']['photometry']['cal_zpt']:
-                    msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits')))
-                    zp, zp_std, nstar = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_cat.fits'),
+                    msgs.info('Calcuating the zeropoint for {:}'.format(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits')))
+                    zpt, zpt_std, nstar, matched_table = postproc.calzpt(os.path.join(self.coadd_path, coaddroot + '_sci_zptcat.fits'),
                                                         refcatalog=self.par['postproc']['photometry']['photref_catalog'],
                                                         primary=self.par['postproc']['photometry']['primary'],
                                                         secondary=self.par['postproc']['photometry']['secondary'],
                                                         coefficients=self.par['postproc']['photometry']['coefficients'],
                                                         FLXSCALE=1.0, FLASCALE=1.0,out_refcat=out_refcat_fullpath,
                                                         external_flag=self.par['postproc']['photometry']['external_flag'],
+                                                        nstar_min=self.par['postproc']['photometry']['nstar_min'],
                                                         outqaroot=os.path.join(self.qa_path, coaddroot))
+
+                    if matched_table is not None:
+                        star_table = Table()
+                        star_table['x'] = matched_table['XWIN_IMAGE']
+                        star_table['y'] = matched_table['YWIN_IMAGE']
+                        fwhm, _, _, _ = psf.buildPSF(star_table, os.path.join(self.coadd_path, coaddroot + '_sci.fits'), pixscale=pixscale,
+                                               outroot=os.path.join(self.qa_path, coaddroot))
+                    else:
+                        fwhm = 0.
                     par = fits.open(os.path.join(self.coadd_path, coaddroot + '_sci.fits'))
-                    par[0].header['ZP'] = zp
-                    par[0].header['ZP_STD'] = zp_std
-                    par[0].header['ZP_NSTAR'] = nstar
+                    par[0].header['ZP'] = (zpt, 'Zero point measured from stars')
+                    par[0].header['ZP_STD'] = (zpt_std, 'The standard deviration of ZP')
+                    par[0].header['ZP_NSTAR'] = (nstar, 'The number of stars used for ZP and FWHM')
+                    par[0].header['FWHM'] = (fwhm, 'FWHM in units of arcsec measured from stars')
                     par.writeto(os.path.join(self.coadd_path, coaddroot + '_sci.fits'),overwrite=True)
+                else:
+                    zpt = self.par['postproc']['photometry']['zpt']
+
+                ## Detection
+                if self.par['postproc']['detection']['skip']:
+                    msgs.warn('Skipping detecting process. Make sure you have extracted source catalog !!!')
+                else:
+                    phot_table, rmsmap, bkgmap = postproc.detect('{:}_sci.fits'.format(coaddroot), outroot=coaddroot,
+                                                 flag_image='{:}_flag.fits'.format(coaddroot),
+                                                 weight_image='{:}_sci.weight.fits'.format(coaddroot),
+                                                 bkg_image=None, rms_image=None, workdir=self.coadd_path,
+                                                 detection_method=self.par['postproc']['detection']['detection_method'],
+                                                 zpt=zpt, effective_gain=None, pixscale=pixscale,
+                                                 detect_thresh=self.par['postproc']['detection']['detect_thresh'],
+                                                 analysis_thresh=self.par['postproc']['detection']['analysis_thresh'],
+                                                 detect_minarea=self.par['postproc']['detection']['detect_minarea'],
+                                                 fwhm=self.par['postproc']['detection']['fwhm'],
+                                                 nlevels=self.par['postproc']['detection']['nlevels'],
+                                                 contrast=self.par['postproc']['detection']['contrast'],
+                                                 back_type=self.par['postproc']['detection']['back_type'],
+                                                 back_rms_type=self.par['postproc']['detection']['back_rms_type'],
+                                                 back_size=self.par['postproc']['detection']['back_size'],
+                                                 back_filter_size=self.par['postproc']['detection']['back_filtersize'],
+                                                 back_default=self.par['postproc']['detection']['back_default'],
+                                                 backphoto_type=self.par['postproc']['detection']['backphoto_type'],
+                                                 backphoto_thick=self.par['postproc']['detection']['backphoto_thick'],
+                                                 weight_type=self.par['postproc']['detection']['weight_type'],
+                                                 check_type=self.par['postproc']['detection']['check_type'],
+                                                 back_nsigma=self.par['postproc']['detection']['back_nsigma'],
+                                                 back_maxiters=self.par['postproc']['detection']['back_maxiters'],
+                                                 morp_filter=self.par['postproc']['detection']['morp_filter'],
+                                                 defaultconfig='pyphot', dual=False,
+                                                 conv=self.par['postproc']['detection']['conv'],
+                                                 nnw=self.par['postproc']['detection']['nnw'],
+                                                 delete=self.par['postproc']['detection']['delete'],
+                                                 log=self.par['postproc']['detection']['log'],
+                                                 sextractor_task=self.par['rdx']['sextractor'],
+                                                 phot_apertures=self.par['postproc']['detection']['phot_apertures'])
+
 
                     '''
                     ## Estimate Map rms
