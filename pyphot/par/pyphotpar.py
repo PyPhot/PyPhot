@@ -768,7 +768,7 @@ class CoaddPar(ParSet):
         dtypes['weight_type'] = str
         descr['weight_type'] = 'Background Options are: {0}'.format(', '.join(options['weight_type']))
 
-        defaults['rescale_weights'] = False
+        defaults['rescale_weights'] = True
         dtypes['rescale_weights'] = bool
         descr['rescale_weights'] = 'Rescale input weights/variances?'
 
@@ -873,6 +873,12 @@ class CoaddPar(ParSet):
     def valid_combine_type():
         """
         Return the valid methods for reference catalog.
+          WEIGHTED: yields the best S/N
+          AVERAGE: better S/N than MEDIAN but sensitive to outliers
+          MEDIAN: worse S/N than AVERAGE but stable against outliers
+          MIN: use the smallest pixel value in the stack
+          MAX: use the highest pixel value in the stack
+          CHI2: uses chi-square for the stack (all pixel values will be non-negative)
         """
         return ['MEDIAN', 'AVERAGE', 'MIN','MAX','WEIGHTED','CLIPPED','CHI-OLD','CHI-MODE','CHI-MEAN','SUM',
                 'WEIGHTED_WEIGHT','MEDIAN_WEIGHT', 'AND', 'NAND','OR','NOR']

@@ -5,6 +5,7 @@
 # Users
 numpy>=1.14.3
 scipy>=1.1
-matplotlib>=2.0
+matplotlib>=3.0
 astropy>=4.0
-photutils>=0.
+photutils>=1.0
+configobj>=5.0

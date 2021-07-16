@@ -269,7 +269,7 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     ## parameters for coadding science images
     swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "RESAMPLE_SUFFIX": ".tmp.fits",
                    "PIXELSCALE_TYPE": "MANUAL", "PIXEL_SCALE": pixscale,
-                   "WEIGHT_TYPE": weight_type,"RECALE_WEIGHTS": rescale,"BLANK_BADPIXELS":blank,
+                   "WEIGHT_TYPE": weight_type,"RESCALE_WEIGHTS": rescale,"BLANK_BADPIXELS":blank,
                    "COMBINE_TYPE": combine_type.upper(),"CLIP_AMPFRAC":clip_ampfrac,"CLIP_SIGMA":clip_sigma,
                    "SUBTRACT_BACK": subtract,"BACK_TYPE":back_type,"BACK_DEFAULT":back_default,"BACK_SIZE":back_size,
                    "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
