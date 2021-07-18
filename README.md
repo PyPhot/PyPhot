@@ -11,14 +11,21 @@ The Python Imaging and Photometry Reduction Pipeline.
 
 
 # Software Requirements
+#### We strongly encourage you to install the following with conda
 * python
 * SExtractor
 * SWarp
 * Scamp
 
+# Astromatic software installation
+* conda install -c conda-forge astromatic-source-extractor
+* conda install -c conda-forge astromatic-scamp
+* conda install -c conda-forge astromatic-swarp
+
 # Python package requirements
 (see `pyphot/requirements.txt`)
 * astropy
+* astroquery
 * configobj
 * matplotlib
 * numpy
