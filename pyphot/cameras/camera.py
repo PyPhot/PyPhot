@@ -281,9 +281,6 @@ class Camera:
         # Return
         return subheader
 
-    # TODO: JFH Are these bad pixel masks in the raw frame, or the
-    # flipped/transposed pypeit frame?? KBW: Does the new description of
-    # "shape" answer this? (JXP please check I edited this correctly).
     def empty_bpm(self, filename, det, shape=None):
         """
         Generate a generic (empty) bad-pixel mask.
