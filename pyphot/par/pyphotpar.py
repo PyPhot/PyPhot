@@ -308,7 +308,7 @@ class ProcessImagesPar(ParSet):
         descr['brightstar_method'] = 'If all pixels are rejected, replace them using this method.  ' \
                            'Options are: {0}'.format(', '.join(options['brightstar_method']))
 
-        defaults['brightstar_nsigma'] = 5
+        defaults['brightstar_nsigma'] = 3
         dtypes['brightstar_nsigma'] = [int, float]
         descr['brightstar_nsigma'] = 'Sigma level to mask bright stars.'
 
@@ -353,8 +353,7 @@ class ProcessImagesPar(ParSet):
 
         defaults['grow'] = 1.5
         dtypes['grow'] = [int, float]
-        descr['grow'] = 'Factor by which to expand regions with cosmic rays detected by the ' \
-                        'LA cosmics routine.'
+        descr['grow'] = 'Factor by which to expand the masked cosmic ray, negative star, and vignetting pixels'
 
         defaults['rmcompact'] = True
         dtypes['rmcompact'] = bool
@@ -432,7 +431,7 @@ class ProcessImagesPar(ParSet):
         dtypes['back_rms_type'] = str
         descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
-        defaults['back_size'] = (200,200)
+        defaults['back_size'] = (100,100)
         dtypes['back_size'] = [tuple, list, int, float]
         descr['back_size'] = 'Box size for background estimation'
 
@@ -847,7 +846,7 @@ class CoaddPar(ParSet):
         dtypes['back_default'] = [int, float]
         descr['back_default'] = 'Default background value in MANUAL'
 
-        defaults['back_size'] = 200
+        defaults['back_size'] = 100
         dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL'
 
@@ -998,7 +997,7 @@ class DetectionPar(ParSet):
         dtypes['back_default'] = [int, float]
         descr['back_default'] = 'Default background value in MANUAL'
 
-        defaults['back_size'] = 200
+        defaults['back_size'] = 100
         dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL, int for SExtractor and tuple for Others'
 

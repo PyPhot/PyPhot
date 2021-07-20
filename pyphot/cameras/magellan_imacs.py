@@ -330,11 +330,12 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['mask_vig'] = True
         par['scienceframe']['process']['minimum_vig'] = 0.3
         #par['scienceframe']['process']['replace'] = 'zero'
+        # sometimes the guider introduce vignetting regions that cannot be fully masked with mask_vig
+        par['scienceframe']['process']['mask_negative_star'] = True
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
-        par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'

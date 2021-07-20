@@ -358,7 +358,9 @@ class PyPhot(object):
                                         apply_gain=self.par['scienceframe']['process']['apply_gain'],
                                         mask_vig=self.par['scienceframe']['process']['mask_vig'],
                                         minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
-                                        replace=self.par['scienceframe']['process']['replace'])
+                                        replace=self.par['scienceframe']['process']['replace'],
+                                        grow=self.par['scienceframe']['process']['grow'],
+                                        sextractor_task=self.par['rdx']['sextractor'])
 
                         # SuperSky Flat
                         if self.par['scienceframe']['process']['use_supersky']:
@@ -419,7 +421,7 @@ class PyPhot(object):
                                         cr_threshold=self.par['scienceframe']['process']['cr_threshold'],
                                         neighbor_threshold=self.par['scienceframe']['process']['neighbor_threshold'],
                                         contrast=self.par['scienceframe']['process']['contrast'],
-                                        #grow=self.par['scienceframe']['process']['grow'],
+                                        grow=self.par['scienceframe']['process']['grow'],
                                         #sigfrac=self.par['scienceframe']['process']['sigfrac'],
                                         #objlim=self.par['scienceframe']['process']['objlim'],
                                         mask_sat=self.par['scienceframe']['process']['mask_sat'],
@@ -432,7 +434,8 @@ class PyPhot(object):
                                         line_len=self.par['scienceframe']['process']['line_len'],
                                         line_gap=self.par['scienceframe']['process']['line_gap'],
                                         percentile=self.par['scienceframe']['process']['percentile'],
-                                        replace=self.par['scienceframe']['process']['replace'])
+                                        replace=self.par['scienceframe']['process']['replace'],
+                                        mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'])
 
                         ## Master Fringing.
                         if self.par['scienceframe']['process']['use_fringe']:
@@ -472,13 +475,13 @@ class PyPhot(object):
                             _, masterfringeimg, maskfringeimg = io.load_fits(masterfringe_name)
                             postproc.defringing(sci_fits_list, masterfringeimg)
 
-                        if self.par['scienceframe']['process']['mask_negative_star']:
-                            postproc.negativestar(sci_fits_list, wht_fits_list, flag_fits_list,
-                                                  sigma=self.par['scienceframe']['process']['comb_sigrej'],
-                                                  maxiters=self.par['scienceframe']['process']['comb_maxiter'],
-                                                  brightstar_nsigma=self.par['scienceframe']['process']['brightstar_nsigma'],
-                                                  maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
-                                                  sextractor_task=self.par['rdx']['sextractor'])
+                        #if self.par['scienceframe']['process']['mask_negative_star']:
+                        #    postproc.negativestar(sci_fits_list, wht_fits_list, flag_fits_list,
+                        #                          sigma=self.par['scienceframe']['process']['comb_sigrej'],
+                        #                          maxiters=self.par['scienceframe']['process']['comb_maxiter'],
+                        #                          brightstar_nsigma=self.par['scienceframe']['process']['brightstar_nsigma'],
+                        #                          maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
+                        #                          sextractor_task=self.par['rdx']['sextractor'])
 
                         ## Astrometric calibration and photometric calibration of individual chips
                         # get pixel scale for resampling with SCAMP

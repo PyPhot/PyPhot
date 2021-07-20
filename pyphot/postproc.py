@@ -31,6 +31,7 @@ def defringing(sci_fits_list, masterfringeimg):
             io.save_fits(sci_fits_list[i], data, header, 'ScienceImage', overwrite=True)
             msgs.info('De-fringed science image {:} saved'.format(sci_fits_list[i]))
 
+'''
 def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters=3,
                  brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
@@ -43,10 +44,12 @@ def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters
         bpm = flag>0
         starmask = mask_bright_star(0-data, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
                                     back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+        
         weight[starmask] = 0.
-        flag[starmask] = 2**7
+        flag[starmask] = 2**8
         io.save_fits(wht_fits_list[i], weight, header_wht, 'ScienceImage', overwrite=True)
         io.save_fits(flag_fits_list[i], flag, header_flag, 'ScienceImage', overwrite=True)
+'''
 
 
 def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
@@ -247,7 +250,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_
 
 def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
-          subtract_back= False, back_type='AUTO', back_default=0.0, back_size=200, back_filtersize=3,
+          subtract_back= False, back_type='AUTO', back_default=0.0, back_size=100, back_filtersize=3,
           back_filtthresh=0.0, resampling_type='LANCZOS3', detect_thresh=5, analysis_thresh=5,
           detect_minarea=5, sextractor_task='sex',delete=True, log=True):
 
@@ -321,7 +324,7 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
 def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_image=None, rms_image=None,
            workdir='./', detection_method='sextractor', zpt=0.,
            effective_gain=None, pixscale=1.0, detect_thresh=2., analysis_thresh=2., detect_minarea=5, fwhm=5, nlevels=32, contrast=0.001,
-           back_type='median', back_rms_type='std', back_size=(200, 200), back_filter_size=(3, 3), back_default=0.,
+           back_type='median', back_rms_type='std', back_size=(100, 100), back_filter_size=(3, 3), back_default=0.,
            backphoto_type='GLOBAL', backphoto_thick=100, weight_type='MAP_WEIGHT', check_type='BACKGROUND_RMS',
            back_nsigma=3, back_maxiters=10, morp_filter=False,
            defaultconfig='pyphot', dual=False, conv=None, nnw=None, delete=True, log=False,
