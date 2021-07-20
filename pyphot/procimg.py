@@ -12,11 +12,12 @@ from pyphot import msgs
 from pyphot import utils
 from pyphot import io
 from pyphot.lacosmic import lacosmic
+from pyphot.satdet import satdet
 from pyphot.photometry import BKG2D, mask_bright_star
 
 def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
             masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False,
-            replace=None):
+            replace=None, sextractor_task='sex'):
 
     sci_fits_list = []
     flag_fits_list = []
@@ -79,7 +80,22 @@ def ccdproc(scifiles, camera, det, science_path=None, masterbiasimg=None, master
             if mask_vig:
                 msgs.info('Masking significantly vignetting (>{:}%) pixels'.format(minimum_vig*100))
                 bpm_vig = flat_for_vig < 1-minimum_vig
-                sci_image[bpm_vig] = 0.
+
+                # ToDo: Not sure whether the following is safe or not.
+                #  Basically, we are using the sky background for vignetting.
+                #  IMACS need this since the guider moves around the detector.
+                bpm_for_vig = bpm | bpm_zero | bpm_vig | bpm_proc
+                starmask = mask_bright_star(sci_image, mask=bpm_for_vig, brightstar_nsigma=5., back_nsigma=3.,
+                                            back_maxiters=5, method='sextractor', task=sextractor_task)
+                bkg_for_vig, _ = BKG2D(sci_image, (50,50), mask=bpm_for_vig | starmask, filter_size=(3,3),
+                                       sigclip=5., back_type='sextractor')
+                bpm_vig_2 = sci_image < (1-minimum_vig) * np.median(bkg_for_vig[np.invert(bpm_for_vig)])
+                bpm_vig_3 = bkg_for_vig < (1-minimum_vig) * np.median(bkg_for_vig[np.invert(bpm_for_vig)])
+                bpm_vig |=bpm_vig_2 | bpm_vig_3
+
+                ## Set viginetting pixel to be zero after background subtraction
+                #  So I commented it out here.
+                #sci_image[bpm_vig] = 0.
             else:
                 bpm_vig = np.zeros_like(sci_image, dtype=bool)
 
@@ -131,7 +147,8 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
             back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5,
             maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', sextractor_task='sex',
             mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
-            replace=None):
+            mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
+            small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0), replace=None):
 
     sci_fits_list = []
     wht_fits_list = []
@@ -152,6 +169,7 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
             header, data, _ = io.load_fits(ifile)
             _, flag_image, _ = io.load_fits(flagfiles[ii])
             mask = flag_image>0
+            mask_vig = (flag_image & np.int(2**4))>0.
             mask_zero = data == 0.
 
             ## super flattening your images
@@ -174,7 +192,8 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 starmask = np.zeros_like(data, dtype=bool)
 
             # estimate the 2D background with all masks
-            mask_bkg = mask | starmask
+            # do not mask viginetting pixels when estimating the background to reduce edge effect
+            mask_bkg = (mask | starmask) & np.invert(mask_vig)
             background_array, background_rms = BKG2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
                                                      sigclip=sigclip, back_type=back_type, back_rms_type=back_rms_type,
                                                      back_maxiters=back_maxiters,sextractor_task=sextractor_task)
@@ -217,23 +236,34 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
                 msgs.warn('Skipped cosmic ray rejection process!')
                 bpm_cr = np.zeros_like(sci_image,dtype=bool)
 
-            flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**6)
+            if mask_sat:
+                msgs.info('Identifying satellite trails using the Canny algorithm following ACSTOOLS.')
+                bpm_sat = satdet(sci_image, bpm=mask|bpm_cr, sigma=sat_sig, buf=sat_buf, order=sat_order,
+                                 low_thresh=low_thresh, h_thresh=h_thresh, small_edge=small_edge,
+                                 line_len=line_len, line_gap=line_gap, percentile=percentile)
+            else:
+                bpm_sat = np.zeros_like(sci_image,dtype=bool)
+
+            # add the cosmic ray and satellite trail flag
+            flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**6) + bpm_sat.astype('int32')*np.int(2**7)
 
             # make a mask used for statistics.
             # should not include starmask since they are not bad pixels if you want to use this mask for other purpose
-            mask_all = mask | bpm_cr | starmask
+            mask_all = mask | bpm_cr | bpm_sat | starmask
 
-            ## replace cosmic ray affected pixels? ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
+            ## replace cosmic ray and satellite affected pixels?
+            # ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
+            bpm_replace = bpm_cr | bpm_sat
             if replace == 'zero':
-                sci_image[bpm_cr] = 0
+                sci_image[bpm_replace] = 0
             elif replace == 'median':
-                _,sci_image[bpm_cr],_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigclip, maxiters=5)
+                _,sci_image[bpm_replace],_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigclip, maxiters=5)
             elif replace == 'mean':
-                sci_image[bpm_cr],_,_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigclip, maxiters=5)
+                sci_image[bpm_replace],_,_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigclip, maxiters=5)
             elif replace == 'min':
-                sci_image[bpm_cr] = np.min(sci_image[np.invert(mask_all)])
+                sci_image[bpm_replace] = np.min(sci_image[np.invert(mask_all)])
             elif replace == 'max':
-                sci_image[bpm_cr] = np.max(sci_image[np.invert(mask_all)])
+                sci_image[bpm_replace] = np.max(sci_image[np.invert(mask_all)])
             else:
                 msgs.info('Not replacing bad pixel values')
 
@@ -241,10 +271,12 @@ def sciproc(scifiles, flagfiles, mastersuperskyimg=None, airmass=None, coeff_air
             wht_image = utils.inverse(background_array)
 
             # Always set original zero values to be zero, this can avoid significant negative values after sky subtraction
+            # Also set viginetting pixels to be zero
             # Set bad pixel's weight to be zero
             sci_image[mask_zero] = 0
             wht_image[mask_zero] = 0
-            wht_image[mask | bpm_cr] = 0
+            sci_image[mask_vig] = 0
+            wht_image[mask | bpm_replace] = 0
 
             # save images
             io.save_fits(sci_fits, sci_image, header, 'ScienceImage', overwrite=True)

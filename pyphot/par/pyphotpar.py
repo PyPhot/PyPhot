@@ -172,6 +172,8 @@ class ProcessImagesPar(ParSet):
                  cr_threshold=None, neighbor_threshold=None,
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
+                 mask_sat=None, sat_sig=None, sat_buf=None, sat_order=None, low_thresh=None, h_thresh=None,
+                 small_edge=None, line_len=None, line_gap=None, percentile=None,
                  use_biasimage=None, use_overscan=None, use_darkimage=None,
                  use_pixelflat=None, use_illumflat=None, use_supersky=None, use_fringe=None,
                  back_type=None, back_rms_type=None, back_size=None, back_filtersize=None, back_maxiters=None):
@@ -370,15 +372,56 @@ class ProcessImagesPar(ParSet):
         dtypes['objlim'] = [int, float]
         descr['objlim'] = 'Object detection limit in LA cosmics routine'
 
+        ## satellite trail parameters
+        defaults['mask_sat'] = True
+        dtypes['mask_sat'] = bool
+        descr['mask_sat'] = 'Mask satellite trails?'
+
+        defaults['sat_sig'] = 3.0
+        dtypes['sat_sig'] = [int, float]
+        descr['sat_sig'] = 'Satellite trail detection threshold'
+
+        defaults['sat_buf'] = 20
+        dtypes['sat_buf'] = int
+        descr['sat_buf'] = 'Satellite trail detection buffer size. Extend to the edge if each trail close to the buffer.'
+
+        defaults['sat_order'] = 3
+        dtypes['sat_order'] = int
+        descr['sat_order'] = 'Satellite trail detection interpolation order when rotating image.'
+
+        defaults['low_thresh'] = 0.1
+        dtypes['low_thresh'] = [int, float]
+        descr['low_thresh'] = 'Edge detection level in the normalized image for satellite identification'
+
+        defaults['h_thresh'] = 0.5
+        dtypes['h_thresh'] = [int, float]
+        descr['h_thresh'] = 'Edge detection level in the normalized image for satellite identification'
+
+        defaults['small_edge'] = 60
+        dtypes['small_edge'] = int
+        descr['small_edge'] = 'min_size for edge detection, used by morph.remove_small_objects '
+
+        defaults['line_len'] = 200
+        dtypes['line_len'] = int
+        descr['line_len'] = 'line_length used when performing Probabilistic Hough Transformation.'
+
+        defaults['line_gap'] = 75
+        dtypes['line_gap'] = int
+        descr['line_gap'] = 'line_gap used when performing Probabilistic Hough Transformation.'
+
+        defaults['percentile'] = (4.5,93.0)
+        dtypes['percentile'] = [tuple, list]
+        descr['percentile'] = 'percentile range used for scaling image used byexposure.rescale_intensity.'
+
         ## bad pixel replacement methods
-        defaults['replace'] = 'None'
+        defaults['replace'] = 'zero'
         options['replace'] = ProcessImagesPar.valid_rejection_replacements()
         dtypes['replace'] = str
-        descr['replace'] = 'If all pixels are rejected, replace them using this method.  ' \
+        descr['replace'] = 'Replace method for cosmic ray and satellite trail hitted pixels.  ' \
                            'Options are: {0}'.format(', '.join(options['replace']))
 
         ## Background methods
-        defaults['back_type'] = 'median'
+        defaults['back_type'] = 'sextractor'
         options['back_type'] = ProcessImagesPar.valid_back_type()
         dtypes['back_type'] = str
         descr['back_type'] = 'Method used to estimate backgrounds.  Options are: {0}'.format(
@@ -389,7 +432,7 @@ class ProcessImagesPar(ParSet):
         dtypes['back_rms_type'] = str
         descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
-        defaults['back_size'] = 200
+        defaults['back_size'] = (200,200)
         dtypes['back_size'] = [tuple, list, int, float]
         descr['back_size'] = 'Box size for background estimation'
 
@@ -423,6 +466,8 @@ class ProcessImagesPar(ParSet):
                    'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
                    'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
+                   'mask_sat', 'sat_sig', 'sat_buf', 'sat_order', 'low_thresh', 'h_thresh',
+                   'small_edge', 'line_len', 'line_gap', 'percentile',
                    'back_type', 'back_rms_type','back_size','back_filtersize','back_maxiters']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])

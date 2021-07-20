@@ -76,6 +76,8 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
         par.writeto('{:}.fits'.format(tmp_root),overwrite=True)
 
         # configuration for the first SExtractor run
+        if np.size(back_size)==1:
+            back_size = [back_size, back_size]
         sexconfig = {"CHECKIMAGE_TYPE": "BACKGROUND, BACKGROUND_RMS", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
                       "CHECKIMAGE_NAME":"{:}_bkg.fits, {:}_rms.fits".format(tmp_root,tmp_root),
                       "DETECT_THRESH": 5, "ANALYSIS_THRESH": 5, "DETECT_MINAREA": 5,
@@ -102,6 +104,7 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
         bkg = Background2D(tmp, back_size, mask=mask, filter_size=filter_size, sigma_clip=Sigma_Clip,
                            bkg_estimator=bkg_estimator, bkgrms_estimator=bkgrms_estimator)
         bkg_map, rms_map = bkg.background, bkg.background_rms
+        bkg_map[tmp==0.] = 0.
         del tmp, bkg
         gc.collect()
 

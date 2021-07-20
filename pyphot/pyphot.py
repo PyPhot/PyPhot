@@ -422,7 +422,18 @@ class PyPhot(object):
                                         #grow=self.par['scienceframe']['process']['grow'],
                                         #sigfrac=self.par['scienceframe']['process']['sigfrac'],
                                         #objlim=self.par['scienceframe']['process']['objlim'],
+                                        mask_sat=self.par['scienceframe']['process']['mask_sat'],
+                                        sat_sig=self.par['scienceframe']['process']['sat_sig'],
+                                        sat_buf=self.par['scienceframe']['process']['sat_buf'],
+                                        sat_order=self.par['scienceframe']['process']['sat_order'],
+                                        low_thresh=self.par['scienceframe']['process']['low_thresh'],
+                                        h_thresh=self.par['scienceframe']['process']['h_thresh'],
+                                        small_edge=self.par['scienceframe']['process']['small_edge'],
+                                        line_len=self.par['scienceframe']['process']['line_len'],
+                                        line_gap=self.par['scienceframe']['process']['line_gap'],
+                                        percentile=self.par['scienceframe']['process']['percentile'],
                                         replace=self.par['scienceframe']['process']['replace'])
+
                         ## Master Fringing.
                         if self.par['scienceframe']['process']['use_fringe']:
                             masterfringe_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterFringe_{:}'.format(master_key))
