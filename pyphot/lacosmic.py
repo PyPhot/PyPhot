@@ -12,7 +12,7 @@ from pyphot import msgs
 
 def lacosmic(data, contrast, cr_threshold, neighbor_threshold,
              error=None, mask=None, background=None, effective_gain=None,
-             readnoise=None, maxiter=4, border_mode='mirror'):
+             readnoise=None, maxiter=4, border_mode='mirror', verbose=True):
     """
     Remove cosmic rays from an astronomical image using the L.A.Cosmic
     algorithm.
@@ -171,8 +171,9 @@ def lacosmic(data, contrast, cr_threshold, neighbor_threshold,
 
         final_crmask = np.logical_or(final_crmask, cr_mask)
         ncosmics_tot += ncosmics
-        msgs.info('Iteration {0}: Found {1} cosmic-ray pixels, '
-                 'Total: {2}'.format(iteration + 1, ncosmics, ncosmics_tot))
+        if verbose:
+            msgs.info('Iteration {0}: Found {1} cosmic-ray pixels, '
+                     'Total: {2}'.format(iteration + 1, ncosmics, ncosmics_tot))
 
     del clean_data
     gc.collect()
@@ -180,7 +181,7 @@ def lacosmic(data, contrast, cr_threshold, neighbor_threshold,
     return  final_crmask
 
 
-def _clean_masked_pixels(data, mask, size=5, exclude_mask=None):
+def _clean_masked_pixels(data, mask, size=5, exclude_mask=None, verbose=True):
     """
     Clean masked pixels in an image.  Each masked pixel is replaced by
     the median of unmasked pixels in a 2D window of ``size`` centered on
@@ -215,7 +216,7 @@ def _clean_masked_pixels(data, mask, size=5, exclude_mask=None):
         data[y, x] = median_val
         if expanded:
             nexpanded += 1
-    if nexpanded > 0:
+    if nexpanded > 0 and verbose:
         msgs.info('    Found {0} {1}x{1} masked regions while '
                  'cleaning.'.format(nexpanded, size))
     del data_nanmask

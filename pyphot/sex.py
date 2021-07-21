@@ -24,7 +24,7 @@ def get_version(task='sex'):
     return version
 
 
-def get_default_config(task='sex', defaultconfig='pyphot', workdir='./', verbose=True):
+def get_default_config(task='sex', defaultconfig='pyphot', workdir='./', outroot='pyphot', verbose=True):
     """
     To get the default SExtractor configuration file
     """
@@ -32,22 +32,22 @@ def get_default_config(task='sex', defaultconfig='pyphot', workdir='./', verbose
     if defaultconfig == "sex":
         p = subprocess.Popen([task, "-d"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = p.communicate()
-        f = open(workdir + "config.sex", "w")
+        f = open(workdir + outroot+"_config.sex", "w")
         f.write(out)
         f.close()
         if verbose:
             msgs.info("config.sex generated from SExtractor default configuration")
 
     elif defaultconfig == "pyphot":
-        os.system("cp " + os.path.join(config_dir,"sex.config") + ' ' + os.path.join(workdir,"config.sex"))
+        os.system("cp " + os.path.join(config_dir,"sex.config") + ' ' + os.path.join(workdir,outroot+"_config.sex"))
         if verbose:
             msgs.info("config.sex generated from PyPhot default configuration")
     else:
-        os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,"config.sex"))
+        os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,outroot+"_config.sex"))
         if verbose:
             msgs.info("Using user provided configuration for SExtractor")
 
-    comd = ["-c", os.path.join(workdir,"config.sex")]
+    comd = ["-c", os.path.join(workdir,outroot+"_config.sex")]
     return comd
 
 
@@ -96,64 +96,65 @@ def get_config(config=None, workdir="./", dual=False):
     return configapp
 
 
-def get_nnw(nnw=None, workdir='./', verbose=True):
+def get_nnw(nnw=None, workdir='./', outroot='pyphot', verbose=True):
     """
     To get the default SExtractor configuration file
     """
     if (nnw == None) or (nnw=='sex'):
-        os.system("cp " + os.path.join(config_dir,"sex.nnw") + ' ' + os.path.join(workdir,"nnw.sex"))
+        os.system("cp " + os.path.join(config_dir,"sex.nnw") + ' ' + os.path.join(workdir,outroot+"_nnw.sex"))
         if verbose:
             msgs.info("nnw.sex generated from PyPhot default NNW")
     else:
-        os.system("cp " + nnw + ' ' + os.path.join(workdir,"nnw.sex"))
+        os.system("cp " + nnw + ' ' + os.path.join(workdir,outroot+"_nnw.sex"))
         if verbose:
             msgs.info("Using user provided NNW")
 
-    comd = ["-STARNNW_NAME", os.path.join(workdir,"nnw.sex")]
+    comd = ["-STARNNW_NAME", os.path.join(workdir,outroot+"_nnw.sex")]
     return comd
 
 
-def get_conv(conv=None, workdir='./', verbose=True):
+def get_conv(conv=None, workdir='./', outroot='pyphot', verbose=True):
     """
     Get the default convolution matrix, if needed.
     """
     if (conv == None) or (conv == "sex"):
-        os.system("cp " + os.path.join(config_dir,"sex.conv") + ' ' + os.path.join(workdir,"conv.sex"))
+        os.system("cp " + os.path.join(config_dir,"sex.conv") + ' ' + os.path.join(workdir,outroot+"_conv.sex"))
         if verbose:
             msgs.info("conv.sex using 3x3 ``all-ground'' convolution mask with FWHM = 2 pixels")
     elif conv == "sex995":
-        os.system("cp " + os.path.join(config_dir, "sex995.conv") + ' ' + os.path.join(workdir, "conv.sex"))
+        os.system("cp " + os.path.join(config_dir, "sex995.conv") + ' ' + os.path.join(workdir, outroot+"_conv.sex"))
         if verbose:
             msgs.info("conv.sex using 9x9 convolution mask of a gaussian PSF with FWHM = 5.0 pixels")
     else:
-        os.system("cp " + conv + ' ' + os.path.join(workdir,"conv.sex"))
+        os.system("cp " + conv + ' ' + os.path.join(workdir,outroot+"_conv.sex"))
         if verbose:
             msgs.info("Using user provided conv")
 
-    comd = ["-FILTER_NAME", os.path.join(workdir,"conv.sex")]
+    comd = ["-FILTER_NAME", os.path.join(workdir,outroot+"_conv.sex")]
     return comd
 
-def get_params(params=None, workdir='./'):
+def get_params(params=None, workdir='./', outroot='pyphot', verbose=True):
     """
     To write the SExtractor paramaters into a file
     """
 
     if params == None:
-        f = open(os.path.join(workdir,"params.sex"),"w")
+        f = open(os.path.join(workdir,outroot+"_params.sex"),"w")
         f.write("\n".join(defaultparams))
         f.write("\n")
         f.close()
     else:
         try:
-            os.system("cp " + params +' ' + os.path.join(workdir,"params.sex"))
-            msgs.info("Using user provided params file")
+            os.system("cp " + params +' ' + os.path.join(workdir,outroot+"_params.sex"))
+            if verbose:
+                msgs.info("Using user provided params file")
         except:
-            f = open(os.path.join(workdir,"params.sex"),"w")
+            f = open(os.path.join(workdir,outroot+"_params.sex"),"w")
             f.write("\n".join(params))
             f.write("\n")
             f.close()
 
-    comd = ["-PARAMETERS_NAME", os.path.join(workdir,"params.sex")]
+    comd = ["-PARAMETERS_NAME", os.path.join(workdir,outroot+"_params.sex")]
     return comd
 
 
@@ -166,17 +167,22 @@ def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=
         sexversion = get_version(task=task)
         msgs.info("SExtractor version is {:}".format(sexversion))
 
+    if dual:
+        imgroot = imgname[0].replace('.fits','')
+    else:
+        imgroot = imgname.replace('.fits','')
+
     ## Generate the configuration file
-    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, verbose=verbose)
+    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, outroot=imgroot, verbose=verbose)
 
     ## Generate the convolution matrix
-    convcomd = get_conv(conv=conv, workdir=workdir, verbose=verbose)
+    convcomd = get_conv(conv=conv, workdir=workdir, outroot=imgroot, verbose=verbose)
 
     ## Generate the NNW file
-    nnwcomd = get_nnw(nnw=nnw, workdir=workdir, verbose=verbose)
+    nnwcomd = get_nnw(nnw=nnw, workdir=workdir, outroot=imgroot, verbose=verbose)
 
     ## Generate the parameters file
-    paramscomd = get_params(params=params, workdir=workdir)
+    paramscomd = get_params(params=params, outroot=imgroot, workdir=workdir)
 
     ## append your configuration
     if config is None:
@@ -209,9 +215,9 @@ def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=
 
     if log:
         if dual:
-            logfile = open(os.path.join(workdir, imgname[1][:-5]+".sex.log"), "w")
+            logfile = open(os.path.join(workdir, imgroot+".sex.log"), "w")
         else:
-            logfile = open(os.path.join(workdir, imgname[:-5]+".sex.log"), "w")
+            logfile = open(os.path.join(workdir, imgroot+".sex.log"), "w")
         logfile.write("SExtractor was called with :\n")
         logfile.write(" ".join(comd))
         logfile.write("\n\n####### stdout #######\n")
@@ -221,9 +227,9 @@ def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=
         logfile.write("\n")
         logfile.close()
         if verbose:
-            msgs.info("Processing log generated: " + os.path.join(workdir, imgname[:-5] + ".sex.log"))
+            msgs.info("Processing log generated: " + os.path.join(workdir, imgroot+".sex.log"))
     if delete:
-        os.system("rm {:}".format(os.path.join(workdir,"*.sex")))
+        os.system("rm {:}".format(os.path.join(workdir,imgroot+"*.sex")))
 
 def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
            conv=None, nnw=None, dual=False, flag_image_list=None, weight_image_list=None,

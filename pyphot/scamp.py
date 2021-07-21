@@ -16,7 +16,7 @@ def get_version():
     return version
 
 
-def get_default_config(defaultconfig='pyphot', workdir='./', verbose=True):
+def get_default_config(defaultconfig='pyphot', workdir='./', outroot='pyphot', verbose=True):
     """
     To get the default SCAMP configuration file
     """
@@ -24,21 +24,21 @@ def get_default_config(defaultconfig='pyphot', workdir='./', verbose=True):
     if defaultconfig == "scamp":
         p = subprocess.Popen(["scamp", "-d"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = p.communicate()
-        f = open(os.path.join(workdir, "config.scamp"), "w")
+        f = open(os.path.join(workdir, outroot+"_config.scamp"), "w")
         f.write(out)
         f.close()
         if verbose:
             msgs.info("config.scamp generated from Scamp default configuration")
     elif defaultconfig == "pyphot":
-        os.system("cp " + os.path.join(config_dir,"scamp.config") + ' ' + os.path.join(workdir,"config.scamp"))
+        os.system("cp " + os.path.join(config_dir,"scamp.config") + ' ' + os.path.join(workdir, outroot+"_config.scamp"))
         if verbose:
             msgs.info("config.scamp generated from PyPhot default configuration")
     else:
-        os.system("cp " + defaultconfig + ' ' + os.path.join(workdir,"config.scamp"))
+        os.system("cp " + defaultconfig + ' ' + os.path.join(workdir, outroot+"_config.scamp"))
         if verbose:
             msgs.info("Using user provided configuration for Scamp")
 
-    comd = ["-c", os.path.join(workdir,"config.scamp")]
+    comd = ["-c", os.path.join(workdir, outroot+"_config.scamp")]
     return comd
 
 def get_config(config=None, workdir="./"):
@@ -71,8 +71,10 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         scampversion = get_version()
         msgs.info("Scamp version is {:}".format(scampversion))
 
+    catroot = catname.replace('.fits', '')
+
     ## Generate the configuration file
-    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, verbose=verbose)
+    configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, outroot=catroot, verbose=verbose)
 
     ## append your configuration
     if 'CHECKPLOT_NAME' in config:
@@ -106,7 +108,7 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
         if verbose:
             msgs.info("Processing log generated: " + os.path.join(workdir, catname[:-5]+".scamp.log"))
     if delete:
-        os.system("rm " + os.path.join(workdir,"*.scamp"))
+        os.system("rm " + os.path.join(workdir, catroot+"*.scamp"))
 
 def scampall(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', delete=False, log=True):
 

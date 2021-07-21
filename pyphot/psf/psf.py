@@ -17,7 +17,7 @@ from pyphot.photometry import ForcedAperPhot
 
 def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, shape=None, smoothing_kernel='quartic',
              recentering_maxiters=20, norm_radius=2.5, shift_val=0.5, recentering_boxsize=(5, 5), center_accuracy=0.001,
-             pixscale=None, cenfunc='median',outroot=None):
+             pixscale=None, cenfunc='median',outroot=None, verbose=True):
     '''
     Build an effective PSF model from a given fits image and a fits table
 
@@ -53,7 +53,8 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     else:
         startable = table
 
-    msgs.info('Extracting cutouts for {:} stars.'.format(len(startable)))
+    if verbose:
+        msgs.info('Extracting cutouts for {:} stars.'.format(len(startable)))
     stars = extract_stars(nddata, startable, size=size)
 
     # build PSF model with simple median procedure
@@ -127,7 +128,8 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     except:
         yy_fine = np.zeros_like(xx_fine)
         fwhm = 0.
-        msgs.warn('Emperical FWHM measurement failed')
+        if verbose:
+            msgs.warn('Emperical FWHM measurement failed')
 
     ## ToDo: this is a hack need to debug the robust_curve_fit. It fails to some cases.
     ## Derive the FWHM from the Gaussian fitting
@@ -138,7 +140,8 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     except:
         fwhm_fit = 0.
         popt = None
-        msgs.warn('PSF fitting failed')
+        if verbose:
+            msgs.warn('PSF fitting failed')
 
     # Fit 2D gaussian to the PSF image to derive the FWHM of the PSF
     # ToDO: Fails to some cases. need a better fitting.
@@ -198,8 +201,9 @@ def buildPSF(table, image, size=51, oversampling=4.0, sigclip=5, maxiters=10, sh
     if pixscale is not None:
         fwhm *= pixscale
         fwhm_fit *= pixscale
-        msgs.info('FWHM = {:0.2f} arcsec'.format(fwhm))
-        msgs.info('FWHM = {:0.2f} arcsec from gaussian fit'.format(fwhm_fit))
+        if verbose:
+            msgs.info('FWHM = {:0.2f} arcsec'.format(fwhm))
+            msgs.info('FWHM = {:0.2f} arcsec from gaussian fit'.format(fwhm_fit))
 
     '''
     # build PSF model with EPSBuilder

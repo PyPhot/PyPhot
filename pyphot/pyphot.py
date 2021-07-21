@@ -257,7 +257,7 @@ class PyPhot(object):
                         coadd_ids = self.fitstbl['coadd_id'][grp_science]
 
                         ### Build Calibrations
-                        # Bias
+                        # Build Bias
                         if self.par['scienceframe']['process']['use_biasimage']:
                             masterbias_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterBias_{:}'.format(master_key))
                             if os.path.exists(masterbias_name) and self.reuse_masters:
@@ -275,7 +275,7 @@ class PyPhot(object):
                             masterbiasimg = None
                             maskbiasimg = np.zeros(raw_shape,dtype='int32')
 
-                        # Dark
+                        # Build Dark
                         if self.par['scienceframe']['process']['use_darkimage']:
                             masterdark_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterDark_{:}'.format(master_key))
 
@@ -294,7 +294,7 @@ class PyPhot(object):
                             masterdarkimg = None
                             maskdarkimg = np.zeros(raw_shape,dtype='int32')
 
-                        # Illumination Flat
+                        # Build Illumination Flat
                         if self.par['scienceframe']['process']['use_illumflat']:
                             masterillumflat_name = os.path.join(self.par['calibrations']['master_dir'],
                                                               'MasterIllumFlat_{:}'.format(master_key))
@@ -317,7 +317,7 @@ class PyPhot(object):
                             masterillumflatimg = None
                             maskillumflatimg = np.zeros(raw_shape,dtype='int32')
 
-                        # Pixel Flat
+                        # Build Pixel Flat
                         if self.par['scienceframe']['process']['use_pixelflat']:
                             masterpixflat_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterPixelFlat_{:}'.format(master_key))
 
@@ -351,6 +351,7 @@ class PyPhot(object):
                             bpm_proc = np.zeros_like(raw_shape,dtype='int32')
 
                         ## CCDPROC -- bias, dark subtraction, flat fielding and cosmic ray rejections
+                        ## Support parallel processing
                         sci_fits_list, ccdmask_fits_list = procimg.ccdproc(scifiles, self.camera, self.det,
                                         science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                         masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
@@ -362,7 +363,7 @@ class PyPhot(object):
                                         grow=self.par['scienceframe']['process']['grow'],
                                         sextractor_task=self.par['rdx']['sextractor'])
 
-                        # SuperSky Flat
+                        # Build SuperSky Flat
                         if self.par['scienceframe']['process']['use_supersky']:
                             mastersupersky_name = os.path.join(self.par['calibrations']['master_dir'], 'MasterSuperSky_{:}'.format(master_key))
 
@@ -404,6 +405,7 @@ class PyPhot(object):
                             masksuperskyimg = np.zeros(raw_shape,dtype='int16')
 
                         ## SCIPROC -- supersky flattening, extinction correction based on airmass, and background subtraction.
+                        ## Support parallel processing
                         sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, ccdmask_fits_list,
                                         mastersuperskyimg=mastersuperskyimg, airmass=sci_airmass,
                                         coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
@@ -484,6 +486,7 @@ class PyPhot(object):
                         #                          sextractor_task=self.par['rdx']['sextractor'])
 
                         ## Astrometric calibration and photometric calibration of individual chips
+                        ## Support parallel processing
                         # get pixel scale for resampling with SCAMP
                         detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), self.det)
                         pixscale = detector_par['platescale']

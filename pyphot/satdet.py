@@ -27,7 +27,7 @@ from skimage.feature import canny
 from pyphot import msgs
 
 def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh=0.5,
-           small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0)):
+           small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0), verbose=True):
 
     # rescale the image
     p1, p2 = np.percentile(image, percentile)
@@ -120,7 +120,8 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
             if len(final_grp_angle)<1:
                 SATELLITE = False
             else:
-                msgs.info('Identifyied {:} groups of satellite trails.'.format(len(final_grp_angle)))
+                if verbose:
+                    msgs.info('Identifyied {:} groups of satellite trails.'.format(len(final_grp_angle)))
                 n_satellite = 0
                 mask_final = np.zeros_like(image, dtype='bool')
                 ymax, xmax = np.shape(image)
@@ -182,7 +183,8 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
 
                     # figure out how many trails in each group
                     if this_nline<=3:
-                        msgs.info('Identified one satellite trail at angle={:} degree.'.format(iangle))
+                        if verbose:
+                            msgs.info('Identified one satellite trail at angle={:} degree.'.format(iangle))
                         xx = np.hstack([this_result_rotate[:, 0, 0],this_result_rotate[:, 1, 0]])
                         yy = np.hstack([this_result_rotate[:, 0, 1],this_result_rotate[:, 1, 1]])
                         if traversed:
@@ -195,7 +197,8 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
                     else:
                         # ToDo: Currently I assume that one trail per group.
                         # and simply copyed the above codes here.
-                        msgs.info('Identified one satellite trail at angle={:} degree.'.format(iangle))
+                        if verbose:
+                            msgs.info('Identified one satellite trail at angle={:} degree.'.format(iangle))
                         xx = np.hstack([this_result_rotate[:, 0, 0],this_result_rotate[:, 1, 0]])
                         yy = np.hstack([this_result_rotate[:, 0, 1],this_result_rotate[:, 1, 1]])
                         if traversed:
@@ -230,10 +233,12 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
                     SATELLITE = False
 
     if SATELLITE:
-        msgs.info('Identified {:} satellite trails'.format(n_satellite))
+        if verbose:
+            msgs.info('Identified {:} satellite trails'.format(n_satellite))
         return mask_final
     else:
-        msgs.info('No satellite trail was identified.')
+        if verbose:
+            msgs.info('No satellite trail was identified.')
         return np.zeros_like(image, dtype='bool')
 
 def _get_valid_indices(shape, ix0, ix1, iy0, iy1):

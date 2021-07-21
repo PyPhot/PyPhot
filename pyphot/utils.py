@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 from collections import deque
 from bisect import insort, bisect_left
 
+import multiprocessing
+from multiprocessing import Process, Queue
+
 from astropy.wcs import WCS
 from astropy.stats import sigma_clip
 from astropy.visualization import MinMaxInterval, ManualInterval, ZScaleInterval
@@ -312,78 +315,130 @@ def robust_curve_fit(func, xx, yy, niters=5, sigclip=3, maxiters_sigclip=5, cenf
 
     return popt, pcov
 
-def showimages(fitsimages, outroots=None, interval_method='zscale', vmin=None, vmax=None,
-               stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False):
+def showimage(image, header=None, outroot=None, interval_method='zscale', vmin=None, vmax=None,
+              stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=False):
 
     plt.rcParams["ytick.direction"] = 'in'
     plt.rcParams["xtick.direction"] = 'in'
     plt.rcParams["font.family"] = "Times New Roman"
 
     # if only one image, set it to list
-    if isinstance(fitsimages, str):
-        fitsimages = [fitsimages]
-    if isinstance(outroots, str):
-        outroots = [outroots]
+    if isinstance(image, str):
+        msgs.info('Plotting image {:}'.format(image))
+        header, data, flag = io.load_fits(image)
+    else:
+        data = image
 
-    # iterating
-    for ii, this_image in enumerate(fitsimages):
-        msgs.info('Showing image {:}'.format(this_image))
-        header, data, flag = io.load_fits(this_image)
-        ny, nx = data.shape
+    ny, nx = data.shape
 
-        # Create interval object
-        if interval_method.lower() == 'zscale':
-            interval = ZScaleInterval()
-        elif interval_method.lower() == 'minmax':
-            interval = MinMaxInterval()
-        else:
-            interval = ManualInterval(vmin=vmin, vmax=vmax)
+    # Create interval object
+    if interval_method.lower() == 'zscale':
+        interval = ZScaleInterval()
+    elif interval_method.lower() == 'minmax':
+        interval = MinMaxInterval()
+    else:
+        interval = ManualInterval(vmin=vmin, vmax=vmax)
 
-        vmin, vmax = interval.get_limits(data)
+    vmin, vmax = interval.get_limits(data)
+    if verbose:
         msgs.info('Using vmin={:} and vmax={:} for the plot'.format(vmin, vmax))
 
-        if stretch_method.lower()=='asinh':
-            stretch = AsinhStretch()
-        elif stretch_method.lower()=='histeq':
-            stretch = HistEqStretch()
-        elif stretch_method.lower()=='linear':
-            stretch = LinearStretch()
-        elif stretch_method.lower()=='log':
-            stretch = LogStretch()
-        elif stretch_method.lower()=='powerdist':
-            stretch = PowerDistStretch()
-        elif stretch_method.lower()=='power':
-            stretch = PowerStretch()
-        elif stretch_method.lower()=='sinh':
-            stretch = SinhStretch()
-        elif stretch_method.lower()=='sqrt':
-            stretch = SqrtStretch()
-        else:
-            msgs.error('Please use one of the following stretch: asinh, histeq, linear, log, powerdist, power, sinh, sqrt.')
+    if stretch_method.lower()=='asinh':
+        stretch = AsinhStretch()
+    elif stretch_method.lower()=='histeq':
+        stretch = HistEqStretch()
+    elif stretch_method.lower()=='linear':
+        stretch = LinearStretch()
+    elif stretch_method.lower()=='log':
+        stretch = LogStretch()
+    elif stretch_method.lower()=='powerdist':
+        stretch = PowerDistStretch()
+    elif stretch_method.lower()=='power':
+        stretch = PowerStretch()
+    elif stretch_method.lower()=='sinh':
+        stretch = SinhStretch()
+    elif stretch_method.lower()=='sqrt':
+        stretch = SqrtStretch()
+    else:
+        msgs.error('Please use one of the following stretch: asinh, histeq, linear, log, powerdist, power, sinh, sqrt.')
+
+    if verbose:
         msgs.info('Using {:} stretch for the plot'.format(stretch_method))
 
-        # making the plot
-        f = plt.figure(figsize=(4, 3.5*ny/nx))
-        f.subplots_adjust(left=0.15, right=0.98, bottom=0.1, top=0.98, wspace=0, hspace=0)
-        if plot_wcs:
-            this_wcs = WCS(header)
-            plt.subplot(projection=this_wcs)
-            plt.xlabel('RA', fontsize=14)
-            plt.ylabel('DEC', fontsize=14)
-        else:
-            plt.xlabel('X', fontsize=14)
-            plt.ylabel('Y', fontsize=14)
+    # making the plot
+    f = plt.figure(figsize=(4, 3.5*ny/nx))
+    f.subplots_adjust(left=0.15, right=0.98, bottom=0.1, top=0.98, wspace=0, hspace=0)
+    if plot_wcs and header is not None:
+        this_wcs = WCS(header)
+        plt.subplot(projection=this_wcs)
+        plt.xlabel('RA', fontsize=14)
+        plt.ylabel('DEC', fontsize=14)
+    else:
+        plt.xlabel('X', fontsize=14)
+        plt.ylabel('Y', fontsize=14)
 
-        # Create an ImageNormalize object using a SqrtStretch object
-        norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch)
+    # Create an ImageNormalize object using a SqrtStretch object
+    norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch)
 
-        plt.imshow(data, origin='lower', norm=norm, cmap=cmap)
+    plt.imshow(data, origin='lower', norm=norm, cmap=cmap)
 
-        if outroots is not None:
-            if len(outroots) != len(fitsimages):
-                msgs.error('The length of the outroots should be the same with fitsimages.')
-            msgs.info('Saving the QA to {:}.pdf'.format(outroots[ii]))
-            plt.savefig('{:}.pdf'.format(outroots[ii]))
-        if show:
-            plt.show()
-        plt.close()
+    if outroot is not None:
+        if verbose:
+            msgs.info('Saving the QA to {:}.pdf'.format(outroot))
+        plt.savefig('{:}.pdf'.format(outroot))
+    if show:
+        plt.show()
+    plt.close()
+
+def showimages(fitsimages, n_process=4, outroots=None, interval_method='zscale', vmin=None, vmax=None,
+               stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=True):
+
+    n_file = len(fitsimages)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_process > n_cpu:
+        n_process = n_cpu
+
+    if n_process>n_file:
+        n_process = n_file
+
+    if outroots is not None:
+        if len(fitsimages) != len(outroots):
+            msgs.error('The length of outroots should be the same with the number of fitsimages.')
+    else:
+        outroots = [None] * n_file
+
+    if n_process == 1:
+        for ii, scifile in enumerate(fitsimages):
+            showimage(scifile, outroot=outroots[ii], interval_method=interval_method,
+                      vmin=vmin, vmax=vmax, stretch_method=stretch_method, cmap=cmap,
+                      plot_wcs=plot_wcs, show=show, verbose=verbose)
+    else:
+        msgs.info('Start parallel processing with n_process={:}'.format(n_process))
+        work_queue = Queue()
+        processes = []
+
+        for ii in range(n_file):
+            work_queue.put((fitsimages[ii], outroots[ii]))
+
+        # creating processes
+        for w in range(n_process):
+            p = Process(target=_showimage_worker, args=(work_queue,), kwargs={
+                'interval_method': interval_method, 'vmin': vmin, 'vmax': vmax, 'stretch_method': stretch_method,
+                'cmap': cmap, 'plot_wcs': plot_wcs, 'show': False, 'verbose':False})
+            processes.append(p)
+            p.start()
+
+        # completing process
+        for p in processes:
+            p.join()
+
+def _showimage_worker(work_queue, interval_method='zscale', vmin=None, vmax=None,
+              stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=False):
+
+    """Multiprocessing worker for sciproc."""
+    while not work_queue.empty():
+        image, outroot = work_queue.get()
+        showimage(image, outroot=outroot, header=None, interval_method=interval_method,
+                  vmin=vmin, vmax=vmax, stretch_method=stretch_method, cmap=cmap,
+                  plot_wcs=plot_wcs, show=show, verbose=False)
