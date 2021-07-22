@@ -67,6 +67,7 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
     result = np.asarray(result)
     n_result = int(np.size(result)/4) # each line has four elements
 
+    #import matplotlib.pyplot as plt
     #plt.imshow(edge, origin='lower')
     #for ii in range(n_result):
     #    x0, y0 = result[ii][0]

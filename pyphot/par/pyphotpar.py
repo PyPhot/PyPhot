@@ -1356,7 +1356,7 @@ class ReduxPar(ParSet):
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
                  qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, skip_step_one=None,
-                 skip_step_two=None):
+                 skip_step_two=None, n_process=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1414,6 +1414,11 @@ class ReduxPar(ParSet):
         dtypes['skip_step_two'] = bool
         descr['skip_step_two'] = 'Skip all the coadding, detection and photometry?'
 
+        defaults['n_process'] = 4
+        dtypes['n_process'] = int
+        descr['n_process'] = 'Number of process for the parallel processing. Several core functions are paralleled.'\
+                             'Including ccdproc, sciproc, astrometric, cal_chips, and show_images'
+
         defaults['scidir'] = 'Science'
         dtypes['scidir'] = str
         descr['scidir'] = 'Directory relative to calling directory to write science files.'
@@ -1447,7 +1452,7 @@ class ReduxPar(ParSet):
 
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
-                    'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two']
+                    'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two', 'n_process']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):

@@ -361,7 +361,8 @@ class PyPhot(object):
                                         minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
                                         replace=self.par['scienceframe']['process']['replace'],
                                         grow=self.par['scienceframe']['process']['grow'],
-                                        sextractor_task=self.par['rdx']['sextractor'])
+                                        sextractor_task=self.par['rdx']['sextractor'],
+                                        n_process=self.par['rdx']['n_process'])
 
                         # Build SuperSky Flat
                         if self.par['scienceframe']['process']['use_supersky']:
@@ -437,7 +438,8 @@ class PyPhot(object):
                                         line_gap=self.par['scienceframe']['process']['line_gap'],
                                         percentile=self.par['scienceframe']['process']['percentile'],
                                         replace=self.par['scienceframe']['process']['replace'],
-                                        mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'])
+                                        mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'],
+                                        n_process=self.par['rdx']['n_process'])
 
                         ## Master Fringing.
                         if self.par['scienceframe']['process']['use_fringe']:
@@ -533,7 +535,8 @@ class PyPhot(object):
                                         scamp_second_pass=self.par['postproc']['astrometry']['scamp_second_pass'],
                                         solve_photom_scamp=self.par['postproc']['astrometry']['solve_photom_scamp'],
                                         delete=self.par['postproc']['astrometry']['delete'],
-                                        log=self.par['postproc']['astrometry']['log'])
+                                        log=self.par['postproc']['astrometry']['log'],
+                                        n_process=self.par['rdx']['n_process'])
 
                         ## Photometrically calibrating individual chips
                         if self.par['postproc']['photometry']['cal_chip_zpt']:
@@ -558,7 +561,7 @@ class PyPhot(object):
                                                             ZP=self.par['postproc']['photometry']['zpt'],
                                                             nstar_min=self.par['postproc']['photometry']['nstar_min'],
                                                             external_flag=self.par['postproc']['photometry']['external_flag'],
-                                                            pixscale=pixscale)
+                                                            pixscale=pixscale,n_process=self.par['rdx']['n_process'])
 
                             # The FITS table that stores individual zero-points
                             master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],
@@ -589,7 +592,8 @@ class PyPhot(object):
                                              stretch_method=self.par['postproc']['qa']['stretch_method'],
                                              cmap=self.par['postproc']['qa']['cmap'],
                                              plot_wcs=self.par['postproc']['qa']['plot_wcs'],
-                                             show=self.par['postproc']['qa']['show'])
+                                             show=self.par['postproc']['qa']['show'],
+                                             n_process=self.par['rdx']['n_process'])
 
                     ## ToDo: combine different detectors for each exposure. Do I need to calibrate the zeropoint again here? Probably not?
                     ##       using swarp to combine different detectors, if only one detector then skip this step.
