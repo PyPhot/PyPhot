@@ -593,7 +593,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
     if (out_refcat is not None) and np.invert(os.path.exists(out_refcat)):
         if verbose:
             msgs.info('Saving the reference catalog to {:}'.format(out_refcat))
-        ref_data.write(out_refcat, format='fits')
+        ref_data.write(out_refcat, format='fits', overwrite=True)
 
     if ref_data is not None:
         # Select high S/N stars
