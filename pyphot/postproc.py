@@ -836,7 +836,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
     if n_process == 1:
         for ii in range(n_file):
             zp_this, zp_this_std, nstar, fwhm = _cal_chip(cat_fits_list[ii], sci_fits=sci_fits_list[ii],
-                        ref_fits=ref_fits_list[ii], outqa_root_list=cat_fits_list[ii],
+                        ref_fits=ref_fits_list[ii], outqa_root_list=outqa_root_list[ii],
                         ZP=ZP, external_flag=external_flag, refcatalog=refcatalog, primary=primary, secondary=secondary,
                         coefficients=coefficients, nstar_min=nstar_min, pixscale=pixscale, verbose=verbose)
             zp_all[ii] = zp_this
@@ -850,7 +850,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         processes = []
 
         for ii in range(n_file):
-            work_queue.put((cat_fits_list[ii], sci_fits_list[ii], ref_fits_list[ii], cat_fits_list[ii]))
+            work_queue.put((cat_fits_list[ii], sci_fits_list[ii], ref_fits_list[ii], outqa_root_list[ii]))
 
         # creating processes
         for w in range(n_process):
