@@ -380,7 +380,8 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
-            par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050
+            #par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050 on UT 03/09/2021
+            par['postproc']['photometry']['zpt'] = 24.45 # Meausred from the observations of J1526-2050 on UT 07/28/2021
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             # pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
             par['postproc']['photometry']['coefficients'] = [0.015,-0.618,0.]
