@@ -382,6 +382,8 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             par['postproc']['photometry']['secondary'] = 'y'
             #par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050 on UT 03/09/2021
             par['postproc']['photometry']['zpt'] = 24.45 # Meausred from the observations of J1526-2050 on UT 07/28/2021
+                                                         # this is the average of the mosaic. det08 has zeropoint of 24.55
+                                                         # and a range of 24.36-24.55 for all detectors
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             # pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
             par['postproc']['photometry']['coefficients'] = [0.015,-0.618,0.]
