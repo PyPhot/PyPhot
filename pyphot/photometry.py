@@ -15,10 +15,11 @@ from astropy import units as u
 
 from photutils import detect_sources
 from photutils import deblend_sources
-from photutils import source_properties
+#from photutils import source_properties
 from photutils.utils import calc_total_error
 from photutils import SkyCircularAperture
 from photutils import aperture_photometry
+from photutils.segmentation import SourceCatalog
 
 from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgroundRMS
 from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
@@ -200,12 +201,12 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
 
     ## measure the source properties
     if verbose:
-        msgs.info('Measuring source properties with source_properties')
+        msgs.info('Measuring source properties with SourceCatalog')
     if morp_filter:
-        cat = source_properties(data, segm_deblend, mask=mask, background=bkgmap, error=error,
-                                filter_kernel=kernel, wcs=wcs_info)
+        cat = SourceCatalog(data, segm_deblend, mask=mask, background=bkgmap, error=error,
+                            kernel=kernel, wcs=wcs_info)
     else:
-        cat = source_properties(data, segm_deblend, mask=mask, background=bkgmap, error=error, wcs=wcs_info)
+        cat = SourceCatalog(data, segm_deblend, mask=mask, background=bkgmap, error=error, wcs=wcs_info)
     tbl = cat.to_table()
     tbl = tbl[np.invert(np.isnan(tbl['xcentroid']))] # remove sources with nan positions
     tbl['MAG_AUTO'] = -2.5*np.log10(tbl['source_sum']) + zpt
