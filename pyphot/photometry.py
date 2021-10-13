@@ -209,10 +209,10 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
         cat = SourceCatalog(data, segm_deblend, mask=mask, background=bkgmap, error=error, wcs=wcs_info)
     tbl = cat.to_table()
     tbl = tbl[np.invert(np.isnan(tbl['xcentroid']))] # remove sources with nan positions
-    tbl['MAG_AUTO'] = -2.5*np.log10(tbl['source_sum']) + zpt
-    tbl['MAGERR_AUTO'] = 2.5/np.log(10)*tbl['source_sum_err']/tbl['source_sum']
-    tbl['FLUX_AUTO'] = tbl['source_sum']
-    tbl['FLUXERR_AUTO'] = tbl['source_sum_err']
+    tbl['MAG_AUTO'] = -2.5*np.log10(tbl['segment_flux']) + zpt
+    tbl['MAGERR_AUTO'] = 2.5/np.log(10)*tbl['segment_fluxerr']/tbl['segment_flux']
+    tbl['FLUX_AUTO'] = tbl['segment_flux']
+    tbl['FLUXERR_AUTO'] = tbl['segment_fluxerr']
 
     ## Perform Aperture photometry
     if verbose:

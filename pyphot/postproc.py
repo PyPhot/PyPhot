@@ -496,6 +496,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
                       "DETECT_MINAREA": detect_minarea, "DEBLEND_NTHRESH": nlevels,
                       "DEBLEND_MINCONT": contrast, "CHECKIMAGE_TYPE": check_type,
                       "CHECKIMAGE_NAME": check_name,
+                      "GAIN": effective_gain,
                       "PHOT_APERTURES": np.array(phot_apertures) / pixscale}
         if weight_image is None and weight_type!= 'NONE':
             msgs.error('Please either provide weight_image or set weight_type to be NONE.')
@@ -516,7 +517,6 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
         # delete temperary file
         if tmp_flag is not None:
             os.system('rm {:}'.format(tmp_flag))
-
         if 'BACKGROUND_RMS' in check_list:
             phot_rmsmap = fits.getdata(os.path.join(workdir, '{:}_rms.fits'.format(outroot)))
         elif rms_image is not None:

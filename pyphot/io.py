@@ -80,16 +80,21 @@ def save_fits(fitsname, data, header, img_type, mask=None, overwrite=True):
 
 def load_fits(fitsname):
     par = fits.open(fitsname, memmap=False)
-    if len(par)==1:
+    if 'PROD_VER' in par[0].header.keys():
+        msgs.info('Loading HST drizzled images')
         head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
         del par[0].data
-    elif len(par)==3:
-        head, data, flag = par[1].header, par[1].data, par[2].data
-        del par[1].data
-        del par[2].data
     else:
-        msgs.error('{:} is not a PyPhot FITS Image.'.format(fitsname))
-        return None
+        if len(par)==1:
+            head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
+            del par[0].data
+        elif len(par)==3:
+            head, data, flag = par[1].header, par[1].data, par[2].data
+            del par[1].data
+            del par[2].data
+        else:
+            msgs.error('{:} is not a PyPhot FITS Image.'.format(fitsname))
+            return None
     par.close()
     gc.collect()
 
