@@ -137,9 +137,10 @@ def plotdither(ndither=12):
 #get_pos(231.6576708, -20.8335167)
 #plotdither()
 #get_pos(323.13829166666665, 12.298683333333333)
+#get_pos(36.1105833,-47.1915000)
 #get_pos(36.50779166666667, 3.0498)
-#get_pos(36.110569000, -47.19149)
-
+#get_pos(81.4986458,-24.1063833)
+#get_pos(140.3356667,0.1230278)
 '''
 one_mosaic(ccd_shape, long_gap, short_gap, xcen=-50, ycen=-400, color='dodgerblue', linestyle='-', fill_color='k', show=False)
 one_mosaic(ccd_shape, long_gap, short_gap, xcen=250, ycen=-50, color='g', linestyle='-', fill_color='k', show=False)
