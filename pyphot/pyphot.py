@@ -12,6 +12,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from configobj import ConfigObj
+from collections import OrderedDict
 
 from pyphot import msgs, io, utils
 from pyphot import procimg, postproc
@@ -233,6 +234,8 @@ class PyPhot(object):
                 # Find all the frames in this calibration group
                 in_grp = self.fitstbl.find_calib_group(i)
                 in_grp_sci = is_science & in_grp
+                in_grp_supersky = is_supersky & in_grp
+                in_grp_fringe = is_fringe & in_grp
 
                 if np.sum(in_grp)<1:
                     msgs.info('No frames found for the {:}th calibration group, skipping.'.format(i))
@@ -241,7 +244,9 @@ class PyPhot(object):
                     msgs.info('No science frames found for the {:}th calibration group, only perform calibrations.'.format(i))
                 else:
                     # Find the indices of the science frames in this calibration group:
-                    grp_science = frame_indx[in_grp_sci]
+                    grp_science = frame_indx[in_grp_sci] # science only
+                    grp_proc = frame_indx[in_grp_sci | in_grp_supersky | in_grp_fringe] # need run ccdproc
+                    grp_sciproc = frame_indx[in_grp_sci | in_grp_fringe] # need run both ccdproc and sciproc
 
                     # Loop on Detectors for calibrations and processing images
                     for self.det in detectors:
@@ -251,9 +256,16 @@ class PyPhot(object):
                         #master_key = '{:}_{:02d}.fits'.format(this_setup,this_det)
                         master_key = self.fitstbl.master_key(grp_science[0], det=self.det)
 
-                        scifiles = self.fitstbl.frame_paths(grp_science)
-                        raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
+                        scifiles = self.fitstbl.frame_paths(grp_science) # list for scifiles
                         sci_airmass = self.fitstbl[grp_science]['airmass']
+
+                        procfiles = self.fitstbl.frame_paths(grp_proc) # need run ccdproc
+                        proc_airmass = self.fitstbl[grp_proc]['airmass']
+
+                        sciprocfiles = self.fitstbl.frame_paths(grp_sciproc) # need run both ccdproc and sciproc
+                        sciproc_airmass = self.fitstbl[grp_sciproc]['airmass']
+
+                        raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
                         coadd_ids = self.fitstbl['coadd_id'][grp_science]
 
                         ### Build Calibrations
@@ -352,7 +364,7 @@ class PyPhot(object):
 
                         ## CCDPROC -- bias, dark subtraction, flat fielding and cosmic ray rejections
                         ## Support parallel processing
-                        sci_fits_list, ccdmask_fits_list = procimg.ccdproc(scifiles, self.camera, self.det,
+                        proc_fits_list, ccdmask_fits_list = procimg.ccdproc(procfiles, self.camera, self.det,
                                         science_path=self.science_path,masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                                         masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
                                         bpm_proc = bpm_proc.astype('bool'),
@@ -371,8 +383,7 @@ class PyPhot(object):
                             if os.path.exists(mastersupersky_name) and self.reuse_masters:
                                 msgs.info('Using existing master file {:}'.format(mastersupersky_name))
                             else:
-                                # find common between supersky and grp_science
-                                grp_supersky = np.intersect1d(frame_indx[is_supersky & in_grp], grp_science)
+                                grp_supersky = frame_indx[in_grp_supersky]
                                 if np.size(grp_supersky)<3:
                                     msgs.warn('The number of SuperSky images should be generally >=3.')
                                 superskyraw = self.fitstbl.frame_paths(grp_supersky)
@@ -407,8 +418,18 @@ class PyPhot(object):
 
                         ## SCIPROC -- supersky flattening, extinction correction based on airmass, and background subtraction.
                         ## Support parallel processing
-                        sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sci_fits_list, ccdmask_fits_list,
-                                        mastersuperskyimg=mastersuperskyimg, airmass=sci_airmass,
+                        # Prepare lists for sciproc
+                        sciproc_fits_list = []
+                        scimask_fits_list = []
+                        for ifile in sciprocfiles:
+                            rootname = os.path.join(self.science_path, os.path.basename(ifile))
+                            sci_fits_file = rootname.replace('.fits', '_det{:02d}_proc.fits'.format(self.det))
+                            flag_fits_file = rootname.replace('.fits', '_det{:02d}_ccdmask.fits'.format(self.det))
+                            sciproc_fits_list.append(sci_fits_file)
+                            scimask_fits_list.append(flag_fits_file)
+                        # Do it
+                        sci_fits_list, wht_fits_list, flag_fits_list = procimg.sciproc(sciproc_fits_list, scimask_fits_list,
+                                        mastersuperskyimg=mastersuperskyimg, airmass=sciproc_airmass,
                                         coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
                                         back_type=self.par['scienceframe']['process']['back_type'],
                                         back_rms_type=self.par['scienceframe']['process']['back_rms_type'],
@@ -440,6 +461,18 @@ class PyPhot(object):
                                         replace=self.par['scienceframe']['process']['replace'],
                                         mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'],
                                         n_process=self.par['rdx']['n_process'])
+                        # Need remove those files identified as FringeFrame but not ScienceFrame
+                        if np.size(sci_fits_list) > np.size(scifiles):
+                            sci_fits_list_old, wht_fits_list_old, flag_fits_list_old = sci_fits_list, wht_fits_list, flag_fits_list
+                            sci_fits_list, wht_fits_list, flag_fits_list = [], [], []
+                            for ifile in scifiles:
+                                rootname = os.path.join(self.science_path, os.path.basename(ifile))
+                                sci_fits_file = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(self.det))
+                                flag_fits_file = rootname.replace('.fits', '_det{:02d}_flag.fits'.format(self.det))
+                                wht_fits_file = rootname.replace('.fits', '_det{:02d}_sci.weight.fits'.format(self.det))
+                                sci_fits_list.append(sci_fits_file)
+                                wht_fits_list.append(wht_fits_file)
+                                flag_fits_list.append(flag_fits_file)
 
                         ## Master Fringing.
                         if self.par['scienceframe']['process']['use_fringe']:
@@ -448,7 +481,7 @@ class PyPhot(object):
                                 msgs.info('Using existing master file {:}'.format(masterfringe_name))
                             else:
                                 # find common between fringe and grp_science
-                                grp_fringe= np.intersect1d(frame_indx[is_fringe & in_grp], grp_science)
+                                grp_fringe = frame_indx[in_grp_fringe]
                                 if np.size(grp_fringe)<3:
                                     msgs.warn('The number of Fringe images should be generally >=3.')
                                 superskyraw = self.fitstbl.frame_paths(grp_fringe)
@@ -477,6 +510,7 @@ class PyPhot(object):
                                                         maskbrightstar_method=self.par['calibrations']['fringeframe']['process']['brightstar_method'],
                                                         sextractor_task=self.par['rdx']['sextractor'])
                             _, masterfringeimg, maskfringeimg = io.load_fits(masterfringe_name)
+                            # Do the Defringing
                             postproc.defringing(sci_fits_list, masterfringeimg)
 
                         #if self.par['scienceframe']['process']['mask_negative_star']:

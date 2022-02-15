@@ -829,6 +829,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         for this_cat in cat_fits_list:
             outqa_root_list.append(this_cat.replace('.cat',''))
 
+    sci_fits_all = np.zeros_like(np.array(sci_fits_list))
     zp_all, zp_std_all = np.zeros(n_file), np.zeros(n_file)
     nstar_all = np.zeros(n_file)
     fwhm_all = np.zeros(n_file)
@@ -836,9 +837,10 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
     if n_process == 1:
         for ii in range(n_file):
             zp_this, zp_this_std, nstar, fwhm = _cal_chip(cat_fits_list[ii], sci_fits=sci_fits_list[ii],
-                        ref_fits=ref_fits_list[ii], outqa_root_list=outqa_root_list[ii],
+                        ref_fits=ref_fits_list[ii], outqa_root=outqa_root_list[ii],
                         ZP=ZP, external_flag=external_flag, refcatalog=refcatalog, primary=primary, secondary=secondary,
                         coefficients=coefficients, nstar_min=nstar_min, pixscale=pixscale, verbose=verbose)
+            sci_fits_all[ii] = sci_fits_list[ii]
             zp_all[ii] = zp_this
             zp_std_all[ii] = zp_this_std
             nstar_all[ii] = nstar
@@ -868,13 +870,27 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         # print the output
         ii = 0
         while not done_queue.empty():
-            zp_this, zp_this_std, nstar, fwhm = done_queue.get()
+            sci_fits_this, zp_this, zp_this_std, nstar, fwhm = done_queue.get()
+            sci_fits_all[ii] = sci_fits_this
             zp_all[ii] = zp_this
             zp_std_all[ii] = zp_this_std
             nstar_all[ii] = nstar
             fwhm_all[ii] = fwhm
             ii +=1
-    return zp_all, zp_std_all, nstar_all, fwhm_all
+
+    # sort the data based on input. This is necessary for multiproccessing at least. I do this for both way just in case.
+    zp_all_sort, zp_std_all_sort = np.zeros(n_file), np.zeros(n_file)
+    nstar_all_sort = np.zeros(n_file)
+    fwhm_all_sort = np.zeros(n_file)
+
+    for ii, ifile in enumerate(sci_fits_list):
+        this_idx = sci_fits_all==ifile
+        zp_all_sort[ii] = zp_all[this_idx]
+        zp_std_all_sort[ii] = zp_std_all[this_idx]
+        nstar_all_sort[ii] = nstar_all[this_idx]
+        fwhm_all_sort[ii] = fwhm_all[this_idx]
+
+    return zp_all_sort, zp_std_all_sort, nstar_all_sort, fwhm_all_sort
 
 def _cal_chip_worker(work_queue, done_queue, ZP=25.0, external_flag=True, refcatalog='Panstarrs',
                      primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10, pixscale=None, verbose=False):
@@ -886,7 +902,7 @@ def _cal_chip_worker(work_queue, done_queue, ZP=25.0, external_flag=True, refcat
                 ZP=ZP, external_flag=external_flag, refcatalog=refcatalog, primary=primary, secondary=secondary,
                 coefficients=coefficients, nstar_min=nstar_min, pixscale=pixscale, verbose=verbose)
 
-        done_queue.put((zp_this, zp_this_std, nstar, fwhm))
+        done_queue.put((sci_fits, zp_this, zp_this_std, nstar, fwhm))
 
 
 '''
