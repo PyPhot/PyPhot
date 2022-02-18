@@ -178,8 +178,9 @@ class LBTLBCCamera(camera.Camera):
         data = hdu[det].data*1.0
         array = data[x1:x2,y1:y2]
 
-        gainimage = np.ones_like(array) * detector_par['gain'][0]
-        rnimage = np.ones_like(array) * detector_par['ronoise'][0]
+        # datasec_img and oscansec_img
+        rawdatasec_img = np.ones_like(array) #* detector_par['gain'][0]
+        oscansec_img = np.ones_like(array) #* detector_par['ronoise'][0]
 
         #from IPython import embed
         #embed()
@@ -204,7 +205,7 @@ class LBTLBCCamera(camera.Camera):
         gc.collect()
 
         # Return, transposing array back to orient the overscan properly
-        return detector_par, array, head, exptime, gainimage, rnimage
+        return detector_par, array, head, exptime, rawdatasec_img, oscansec_img
 
 
 class LBTLBCBCamera(LBTLBCCamera):

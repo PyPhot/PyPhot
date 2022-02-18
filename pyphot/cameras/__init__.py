@@ -5,6 +5,7 @@ from pyphot.cameras import camera
 # compiling of all the available cameras below
 from pyphot.cameras import cfht_wircam
 from pyphot.cameras import keck_nires
+from pyphot.cameras import keck_lris
 from pyphot.cameras import lbt_lbc
 from pyphot.cameras import magellan_imacs
 from pyphot.cameras import mmt_mmirs

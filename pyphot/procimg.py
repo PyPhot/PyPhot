@@ -91,8 +91,11 @@ def _ccdproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
         msgs.info('The Science product {:} exists, skipping...'.format(sci_fits_file))
     else:
         msgs.info('Processing {:}'.format(scifile))
-        detector_par, sci_image, header, exptime, gain_image, rn_image = camera.get_rawimage(scifile, det)
+        detector_par, raw, header, exptime, rawdatasec_img, rawoscansec_img = camera.get_rawimage(scifile, det)
         saturation, nonlinear = detector_par['saturation'], detector_par['nonlinear']
+        sci_image = trim_frame(raw, rawdatasec_img < 0.1)
+        datasec_img = trim_frame(rawdatasec_img, rawdatasec_img < 0.1)
+        oscansec_img = trim_frame(rawoscansec_img, rawdatasec_img < 0.1)
 
         # detector bad pixel mask
         bpm = camera.bpm(scifile, det, shape=None, msbias=None)>0.
@@ -112,9 +115,14 @@ def _ccdproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             sci_image *= utils.inverse(masterpixflatimg)
         if masterillumflatimg is not None:
             sci_image *= utils.inverse(masterillumflatimg)
+
         if apply_gain:
+            numamplifiers = detector_par['numamplifiers']
+            gain = detector_par['gain']
+            for iamp in range(numamplifiers):
+                this_amp = datasec_img == iamp+1
+                sci_image[this_amp] = sci_image[this_amp] * gain[iamp]
             header['GAIN'] = (1.0, 'Effective gain')
-            sci_image *= gain_image
 
         if bpm_proc is None:
             bpm_proc = np.zeros_like(sci_image, dtype='bool')

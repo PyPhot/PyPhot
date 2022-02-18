@@ -265,7 +265,9 @@ class PyPhot(object):
                         sciprocfiles = self.fitstbl.frame_paths(grp_sciproc) # need run both ccdproc and sciproc
                         sciproc_airmass = self.fitstbl[grp_sciproc]['airmass']
 
-                        raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
+                        # image shape (after triming overscan region)
+                        raw_shape = self.camera.bpm(scifiles[0], self.det, shape=None, msbias=None).astype('bool').shape
+                        #raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
                         coadd_ids = self.fitstbl['coadd_id'][grp_science]
 
                         ### Build Calibrations
@@ -323,6 +325,7 @@ class PyPhot(object):
                                                            sigma=self.par['calibrations']['illumflatframe']['process']['comb_sigrej'],
                                                            maxiters=self.par['calibrations']['illumflatframe']['process']['comb_maxiter'],
                                                            window_size=self.par['calibrations']['illumflatframe']['process']['window_size'],
+                                                           minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
                                                            maskbrightstar=False) # do not need mask bright star for illuminate flat
                             _, masterillumflatimg, maskillumflatimg = io.load_fits(masterillumflat_name)
                         else:
@@ -347,6 +350,7 @@ class PyPhot(object):
                                                            maxiters=self.par['calibrations']['pixelflatframe']['process']['comb_maxiter'],
                                                            window_size=self.par['calibrations']['pixelflatframe']['process']['window_size'],
                                                            maskpixvar=self.par['calibrations']['pixelflatframe']['process']['maskpixvar'],
+                                                           minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
                                                            maskbrightstar=self.par['calibrations']['pixelflatframe']['process']['mask_brightstar'],
                                                            brightstar_nsigma=self.par['calibrations']['pixelflatframe']['process']['brightstar_nsigma'],
                                                            maskbrightstar_method=self.par['calibrations']['pixelflatframe']['process']['brightstar_method'],

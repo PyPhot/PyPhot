@@ -234,11 +234,12 @@ class KECKNIRESCamera(camera.Camera):
         array = data[:986, :]
         #array = np.copy(data)
 
-        gainimage = np.ones_like(array) * detector_par['det01']['gain'][0]
-        rnimage = np.ones_like(array) * detector_par['det01']['ronoise'][0]
+        # datasec_img and oscansec_img
+        rawdatasec_img = np.ones_like(array) #* detector_par['det01']['gain'][0]
+        oscansec_img = np.ones_like(array) #* detector_par['det01']['ronoise'][0]
 
         # Need the exposure time
         exptime = hdu[0].header[self.meta['exptime']['card']]
 
         # Return, transposing array back to orient the overscan properly
-        return detector_par, array, head1, exptime, gainimage, rnimage
+        return detector_par, array, head1, exptime, rawdatasec_img, oscansec_img

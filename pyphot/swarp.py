@@ -103,14 +103,17 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
             os.system("rm {:}".format(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))))
 
 
-def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None, delete=False, log=False):
+def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None,
+              delete=False, log=False, verbose=False):
 
     if coaddroot is not None:
         if coadddir is None:
             coadddir = os.path.join(workdir, "Coadd")
         if not os.path.exists(coadddir):
             os.mkdir(coadddir)
-        msgs.info("Coadded images are stored at {:}".format(coadddir))
+
+        if verbose:
+            msgs.info("Coadded images are stored at {:}".format(coadddir))
 
         ## Generate a tmp list to store the imagename with path
         tmplist = open(os.path.join(workdir, "tmplist.txt"), "w")
@@ -120,7 +123,8 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
 
         ## Get the version of your swarp
         swarpversion = get_version()
-        msgs.info("SWarp version is {:}".format(swarpversion))
+        if verbose:
+            msgs.info("SWarp version is {:}".format(swarpversion))
 
         ## Generate the configuration file
         configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
@@ -158,6 +162,7 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
             os.system("mv {:} {:}".format(os.path.join(workdir, "*.swarp"), coadddir))
 
     else:
+        # ToDo: Parallel the following
         for imgname in imglist:
             msgs.info('Resampling {:} with Swarp {:}'.format(os.path.basename(imgname), get_version()))
             if config is not None:
@@ -165,5 +170,5 @@ def swarpall(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddi
             else:
                 this_config = None
             swarpone(imgname, config=this_config, workdir=workdir, defaultconfig=defaultconfig,
-                     delete=delete, log=log, verbose=False)
+                     delete=delete, log=log, verbose=verbose)
 

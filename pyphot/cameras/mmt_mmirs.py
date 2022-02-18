@@ -345,8 +345,8 @@ class MMTMMIRSCamera(camera.Camera):
 
         array = data[x1 - 1:x2, y1 - 1:y2]
 
-        gainimage = np.ones_like(array) * detector_par['gain'][0]
-        rnimage = np.ones_like(array) * detector_par['ronoise'][0]
+        rawdatasec_img = np.ones_like(array) #* detector_par['gain'][0]
+        oscansec_img = np.ones_like(array) #* detector_par['ronoise'][0]
 
         # Need the exposure time
         try:
@@ -358,7 +358,7 @@ class MMTMMIRSCamera(camera.Camera):
 
         #ToDo: need to return ramp_image which will be used for procimg
 
-        return detector_par, array, head1, exptime, gainimage, rnimage
+        return detector_par, array, head1, exptime, rawdatasec_img, oscansec_img
 
 def mmirs_read_amp(img, namps=32):
     """

@@ -14,6 +14,7 @@ from astropy.stats import sigma_clipped_stats
 from astropy.convolution import Gaussian2DKernel
 
 from pyphot import io,msgs
+from pyphot import procimg
 from pyphot.photometry import BKG2D, mask_bright_star
 
 
@@ -22,7 +23,8 @@ def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc=
 
     images = []
     for ifile in biasfiles:
-        detector_par, array, header, exptime,_,_ = camera.get_rawimage(ifile, det)
+        detector_par, raw, header, exptime, rawdatasec_img, oscansec_img = camera.get_rawimage(ifile, det)
+        array = procimg.trim_frame(raw, rawdatasec_img < 0.1)
         images.append(array)
 
     images = np.array(images)
@@ -38,6 +40,7 @@ def biasframe(biasfiles, camera, det, masterbias_name,cenfunc='median', stdfunc=
         stack = median
     else:
         stack = mean
+    stack[np.isnan(stack)] = 0.0 # replace bad pixels with 0
 
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 0.0
@@ -52,7 +55,8 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
 
     images = []
     for ifile in darkfiles:
-        detector_par, array, header, exptime,_,_ = camera.get_rawimage(ifile, det)
+        detector_par, raw, header, exptime, rawdatasec_img, oscansec_img = camera.get_rawimage(ifile, det)
+        array = procimg.trim_frame(raw, rawdatasec_img < 0.1)
         if masterbiasimg is not None:
             array -= masterbiasimg
         images.append(array/exptime)
@@ -71,6 +75,7 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
         stack = median
     else:
         stack = mean
+    stack[np.isnan(stack)] = 0.0 # replace bad pixels with 0
 
     header['OLDTIME'] = (exptime, 'Original exposure time')
     header['EXPTIME'] = 1.0
@@ -80,22 +85,28 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
 
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=None, masterdarkimg=None, cenfunc='median',
-                stdfunc='std', sigma=5, maxiters=3, window_size=(51,51), maskpixvar=None,
+                stdfunc='std', sigma=5, maxiters=3, window_size=(51,51), maskpixvar=None, minimum_vig=None,
                 maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     images = []
     masks = []
 
     for ii, ifile in enumerate(flatfiles):
+
         if camera is not None:
             msgs.info('Reading raw flat image {:}'.format(ifile))
-            detector_par, array, header, exptime,_,_ = camera.get_rawimage(ifile, det)
+            detector_par, raw, header, exptime, rawdatasec_img, oscansec_img = camera.get_rawimage(ifile, det)
+            array = procimg.trim_frame(raw, rawdatasec_img < 0.1)
+            datasec_img = procimg.trim_frame(rawdatasec_img, rawdatasec_img < 0.1)
+            numamplifiers = detector_par['numamplifiers']
+            gain = detector_par['gain']
             if masterbiasimg is not None:
                 array -= masterbiasimg
             if masterdarkimg is not None:
                 array -= masterdarkimg*exptime
             bpm = camera.bpm(ifile, det, shape=None, msbias=None).astype('bool')
         else:
+            # This is mainly used for supersky flat
             msgs.info('Reading ccd proccessed flat image {:}'.format(ifile))
             header, array, mask_image = io.load_fits(ifile)
             if maskfiles is not None:
@@ -103,28 +114,55 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
                 bpm = flag_image.astype('bool')
             else:
                 bpm = mask_image.astype('bool')
+            numamplifiers = 1
+            gain = np.atleast_1d(1.0)
+            datasec_img = np.ones_like(array, dtype=int)
+            oscansec_img = np.ones_like(array, dtype=int)
 
+        # correct gain and get extra masks for each amplifier.
+        extra_bpm = np.zeros_like(bpm)
+        for iamp in range(numamplifiers):
+            mask = datasec_img != iamp+1
+            #xx_sub = np.logical_not(np.all(mask, axis=1))
+            #yy_sub = np.logical_not(np.all(mask, axis=0))
+            #this_array = array[xx_sub, :][:, yy_sub]
+            #this_bpm = bpm[xx_sub, :][:, yy_sub]
+            this_gain = gain[iamp]
+            this_array = procimg.trim_frame(array, mask) * this_gain
+            this_bpm = procimg.trim_frame(bpm, mask)
+
+            if minimum_vig is not None:
+                # ToDo: This is specific for LRIS, but it should work for IMACS as well
+                vig_bpm = this_array < np.percentile(this_array,95)*(1-minimum_vig) #np.percentile(this_array, minimum_vig*100)
+                this_bpm |= vig_bpm
+
+            ## put sub-array back into the original one
+            array[np.invert(mask)] = this_array.flatten() #/ this_median
+            extra_bpm[np.invert(mask)] = this_bpm.flatten()
+
+        new_bpm = np.logical_or(bpm, extra_bpm)
         ## Mask bright stars
         if maskbrightstar:
-            starmask = mask_bright_star(array, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
+            this_starmask = mask_bright_star(array, mask=new_bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
                                         back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
         else:
-            starmask = np.zeros_like(array, dtype=bool)
+            this_starmask = np.zeros_like(array, dtype=bool)
 
         # Sigma_clipping statistics for the image
-        mean, median, std = sigma_clipped_stats(array, mask=np.logical_or(bpm, starmask) , sigma=sigma,
-                                                maxiters=maxiters, cenfunc=cenfunc, stdfunc=stdfunc)
+        this_mean, this_median, this_std = sigma_clipped_stats(array, mask=np.logical_or(new_bpm, this_starmask),
+                                                sigma=sigma, maxiters=maxiters, cenfunc=cenfunc, stdfunc=stdfunc)
 
         ## Mask hot pixels
-        hotmask = array > median+5*std
-        array[hotmask] = median
+        this_hotmask = array > this_median + 5 * this_std
+        array[this_hotmask] = this_median
 
         ## Mask zero pixels
-        zeromask = array == 0.
-        array[zeromask] = median
+        this_zeromask = array == 0.
+        array[this_zeromask] = this_median
 
-        images.append(array/median)
-        masks.append(bpm | starmask | hotmask | zeromask)
+        ## Append the data
+        images.append(array/this_median)
+        masks.append(new_bpm | this_starmask | this_hotmask | this_zeromask)
 
     msgs.info('Combing flat images')
     images = np.array(images)
@@ -134,9 +172,9 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
                                                      cenfunc=cenfunc, stdfunc=stdfunc, axis=0)
 
     if cenfunc == 'median':
-        stack = median / np.nanmedian(median)
+        stack = median #/ np.nanmedian(median)
     else:
-        stack = mean / np.nanmedian(median)
+        stack = mean #/ np.nanmedian(median)
 
     stack[np.isnan(stack)] = 1.0 # replace bad pixels with 1, so not flat fielding that pixel
 
@@ -161,13 +199,13 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
     return header, stack, stack_bpm
 
 def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=None, masterdarkimg=None,
-                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
+                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), minimum_vig=None,
                    maskbrightstar=False, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     msgs.info('Building illuminating flat')
     header, stack, bpm = combineflat(flatfiles, camera=camera, det=det, masterbiasimg=masterbiasimg,
                                      masterdarkimg=masterdarkimg, cenfunc=cenfunc, stdfunc=stdfunc, sigma=sigma,
-                                     maxiters=maxiters, window_size=window_size, maskpixvar=None,
+                                     maxiters=maxiters, window_size=window_size, maskpixvar=None, minimum_vig=minimum_vig,
                                      maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
                                      maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
@@ -187,13 +225,13 @@ def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=N
     io.save_fits(masterillumflat_name, flat, header, 'MasterIllumFlat', mask=bpm, overwrite=True)
 
 def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=None, masterdarkimg=None, masterillumflatimg=None,
-                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), maskpixvar=0.1,
+                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), maskpixvar=0.1, minimum_vig=None,
                    maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
     msgs.info('Building pixel flat')
     header, stack, bpm = combineflat(flatfiles, camera=camera, det=det, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg, cenfunc=cenfunc,
                                      stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size, maskpixvar=maskpixvar,
-                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
+                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma, minimum_vig=minimum_vig,
                                      maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
     if masterillumflatimg is None:
