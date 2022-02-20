@@ -353,7 +353,7 @@ class ProcessImagesPar(ParSet):
 
         defaults['grow'] = 1.5
         dtypes['grow'] = [int, float]
-        descr['grow'] = 'Factor by which to expand the masked cosmic ray, negative star, and vignetting pixels'
+        descr['grow'] = 'Factor by which to expand the masked cosmic ray, satellite, negative star, and vignetting pixels'
 
         defaults['rmcompact'] = True
         dtypes['rmcompact'] = bool
@@ -511,7 +511,7 @@ class ProcessImagesPar(ParSet):
         """
         Return the valid methods for background estimator method.
         """
-        return ['MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE',
+        return ['MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE', 'GlobalMedian',
                 'median','mean','sextractor', 'mmm', 'biweight', 'mode']
 
     @staticmethod

@@ -130,10 +130,11 @@ class KeckLRISBCamera(KeckLRISCamera):
             platescale      = 0.135,
             darkcurr        = 0.0,
             saturation      = 65535.,
-            nonlinear       = 0.86,
+            nonlinear       = 0.95,
             mincounts       = -1e10,
             numamplifiers   = 2,
-            gain            = np.atleast_1d([1.55, 1.56]),
+            #gain            = np.atleast_1d([1.55, 1.56]),
+            gain            = np.atleast_1d([1.55, 1.533]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
             ronoise         = np.atleast_1d([3.9, 4.2]),
             )
         # Detector 2
@@ -141,6 +142,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         detector_dict2.update(dict(
             det=2,
             dataext=2,
+            #gain=np.atleast_1d([1.63, 1.70]),
             gain=np.atleast_1d([1.63, 1.66]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
             ronoise=np.atleast_1d([3.6, 3.6])
         ))
@@ -183,7 +185,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['use_biasimage'] = True
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = True
@@ -192,10 +194,13 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['mask_vig'] = True
         par['scienceframe']['process']['minimum_vig'] = 0.3
 
+        # Background type for image processing
+        par['scienceframe']['process']['back_type'] = 'GlobalMedian'
+
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
-        par['scienceframe']['process']['grow'] = 0.5
+        par['scienceframe']['process']['grow'] = 1.5
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -208,12 +213,12 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['postproc']['astrometry']['scamp_second_pass'] = False
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
-        par['postproc']['astrometry']['astrefmag_limits'] = [17, 23]
+        par['postproc']['astrometry']['astrefmag_limits'] = [17, 24]
         par['postproc']['astrometry']['posangle_maxerr'] = 10.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
-        par['postproc']['astrometry']['detect_thresh'] = 30  # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 30
+        par['postproc']['astrometry']['detect_thresh'] = 15  # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 15
         par['postproc']['astrometry']['detect_minarea'] = 11
         par['postproc']['astrometry']['crossid_radius'] = 1.0
         #par['postproc']['astrometry']['delete'] = False
@@ -252,7 +257,7 @@ class KeckLRISBCamera(KeckLRISCamera):
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 27.03 #2.5*np.log10(2.09)+26.23
+            par['postproc']['photometry']['zpt'] = 27.03 #ToDo: measure it
             # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.48 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
@@ -260,14 +265,14 @@ class KeckLRISBCamera(KeckLRISCamera):
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 28.73 #2.5*np.log10(2.09)+27.93
+            par['postproc']['photometry']['zpt'] = 28.73 #ToDo: measure it
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.22 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'V':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 28.93 #2.5*np.log10(2.09)+28.13
+            par['postproc']['photometry']['zpt'] = 28.93 #ToDo: measure it
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.15 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'G':
@@ -456,6 +461,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         oscansec_img_trim =  procimg.trim_frame(oscansec_img, rawdatasec_img < 0.1)
 
         # Build WCS
+        ##ToDo: This might be not true for other data, i.e. might depends on rotator!
         head['EXPTIME'] = (exptime, 'Exposure time') # This is required
         c = SkyCoord(head['RA'], head['DEC'], frame="icrs", unit=(u.hourangle, u.deg))
 
@@ -483,8 +489,6 @@ class KeckLRISBCamera(KeckLRISCamera):
 
         # Return
         return detector_par, array, head, exptime, rawdatasec_img, oscansec_img
-        #return self.get_detector_par(det if det is not None else 1, hdu=hdu), \
-        #        array.T, hdu, exptime, rawdatasec_img.T, oscansec_img.T
 
     def bpm(self, filename, det, shape=None, msbias=None):
         """
@@ -569,7 +573,7 @@ class KeckLRISRCamera(KeckLRISCamera):
             platescale=0.123,  # From the web page
             darkcurr=0.0,
             saturation=65535.,
-            nonlinear=0.76,
+            nonlinear=0.90,
             mincounts=-1e10,
             numamplifiers=2,  # These are defaults but can modify below
             gain=np.atleast_1d([1.61, 1.67*0.959]), # Assumes AMPMODE=HSPLIT,VUP;  Corrected by JXP using 2x1 binned flats
@@ -622,8 +626,6 @@ class KeckLRISRCamera(KeckLRISCamera):
             detector_dict1['ronoise'] = np.atleast_1d([3.64, 3.45, 3.65, 3.52])
             ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
             detector_dict1['gain'] = np.atleast_1d([1.71, 1.68018, 1.6427817073170732, 1.678684])
-            #detector_dict1['gain'] = np.atleast_1d([1.715, 1.694, 1.639785, 1.678684])
-            #detector_dict1['gain'] = np.atleast_1d([1.710, 1.6917, 1.6199, 1.1.6558])
         else:
             msgs.error("Did not see this namps coming..")
 
@@ -687,8 +689,8 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['use_biasimage'] = True
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = True
-        par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_illumflat'] = False
+        par['scienceframe']['process']['use_supersky'] = False
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = True
 
@@ -696,10 +698,16 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['mask_vig'] = True
         par['scienceframe']['process']['minimum_vig'] = 0.3
 
+        # Background type for image processing
+        #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
+        par['scienceframe']['process']['back_type'] = 'median'
+
         # cosmic ray rejection
-        par['scienceframe']['process']['sigclip'] = 5.0
-        par['scienceframe']['process']['objlim'] = 2.0
-        par['scienceframe']['process']['grow'] = 0.5
+        par['scienceframe']['process']['lamaxiter'] = 1
+        par['scienceframe']['process']['cr_threshold'] = 5
+        par['scienceframe']['process']['neighbor_threshold'] = 2
+        par['scienceframe']['process']['contrast'] = 0.5
+        par['scienceframe']['process']['grow'] = 1.5
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -716,8 +724,8 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['postproc']['astrometry']['posangle_maxerr'] = 10.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
-        par['postproc']['astrometry']['detect_thresh'] = 30  # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 30
+        par['postproc']['astrometry']['detect_thresh'] = 20  # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 20
         par['postproc']['astrometry']['detect_minarea'] = 11
         par['postproc']['astrometry']['crossid_radius'] = 1.0
         #par['postproc']['astrometry']['delete'] = False
@@ -757,14 +765,14 @@ class KeckLRISRCamera(KeckLRISCamera):
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 28.73 #2.5*np.log10(2.09)+27.93
+            par['postproc']['photometry']['zpt'] = 28.73 #ToDo: measure it
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.22 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'V':
             par['postproc']['photometry']['photref_catalog'] = 'Sloan'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 28.77 #2.5*np.log10(2.14)+27.94
+            par['postproc']['photometry']['zpt'] = 28.77 #ToDo: measure it
             par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
             par['postproc']['photometry']['coeff_airmass'] = 0.16 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'R':
@@ -772,7 +780,7 @@ class KeckLRISRCamera(KeckLRISCamera):
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
             par['postproc']['photometry']['coefficients'] = [-0.010,-0.218, 0.]
-            par['postproc']['photometry']['zpt'] = 28.69 #2.5*np.log10(2.14)+27.86
+            par['postproc']['photometry']['zpt'] = 28.69 #ToDo: measure it
             par['postproc']['photometry']['coeff_airmass'] = 0.13 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
         elif self.get_meta_value(scifile, 'filter') == 'I':
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
@@ -789,7 +797,6 @@ class KeckLRISRCamera(KeckLRISCamera):
         detector, raw_img, headarr, exptime, datasec_img, oscansec_img = camera.Camera.get_rawimage(self, raw_file, det)
 
         # ToDo: should put the namp and trim in procimg.py
-        # check out procimg.trim_frame
         # trim the the bias sections
         mask = datasec_img==0.
         raw_img_trim =  procimg.trim_frame(raw_img, datasec_img < 0.1)
@@ -820,7 +827,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         for i in range(len(header_wcs)):
             head.append(header_wcs.cards[i]) #
 
-        ##ToDo: This might be not true for other data!
+        ##ToDo: This might be not true for other data, i.e. might depends on rotator!
         # Need rotate in order to get the direction of WCS correct.
         #hdu = fits.PrimaryHDU(raw_img_trim.T, header=head)
         #hdu.writeto('testr.fits', overwrite=True)

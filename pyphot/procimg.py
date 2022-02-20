@@ -153,13 +153,15 @@ def _ccdproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
 
             bpm_vig = grow_masked(bpm_vig_all, grow, verbose=verbose)
             ## Set viginetting pixel to be zero
-            sci_image[bpm_vig] = 0.
+            # sci_image[bpm_vig] = 0. # should do this in sci_proc, i.e. after the determination of sky background
         else:
             bpm_vig = np.zeros_like(sci_image, dtype=bool)
 
         # mask nan values
         bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
+        sci_image[bpm_nan] = 0.
 
+        '''
         ## master BPM mask, contains all bpm except for saturated values.
         bpm_all = bpm | bpm_zero | bpm_vig | bpm_nan | bpm_proc
 
@@ -183,13 +185,14 @@ def _ccdproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
         else:
             if verbose:
                 msgs.info('Not replacing bad pixel values')
+        '''
 
         header['CCDPROC'] = ('TRUE', 'CCDPROC is done?')
         # save images
         io.save_fits(sci_fits_file, sci_image, header, 'ScienceImage', overwrite=True)
         msgs.info('Science image {:} saved'.format(sci_fits_file))
         flag_image = bpm*np.int(2**0) + bpm_proc*np.int(2**1) + bpm_sat*np.int(2**2) + \
-                     bpm_zero * np.int(2**3) + bpm_vig*np.int(2**4) + bpm_nan*np.int(2**5)
+                     bpm_zero * np.int(2**3) + bpm_nan*np.int(2**4) + bpm_vig*np.int(2**5)
         io.save_fits(flag_fits_file, flag_image.astype('int32'), header, 'FlagImage', overwrite=True)
         msgs.info('Flag image {:} saved'.format(flag_fits_file))
 
@@ -308,7 +311,10 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         header, data, _ = io.load_fits(scifile)
         _, flag_image, _ = io.load_fits(flagfile)
         bpm = flag_image>0
-        bpm_zero = data == 0.
+        bpm_zero = (data == 0.)
+        bpm_saturation = (flag_image & 2**2)>0
+        bpm_vig = (flag_image & 2**5)>0
+        bpm_vig_only = np.logical_and(bpm_vig, np.invert(bpm_zero)) # pixels identified by vig but not zeros
 
         ## super flattening your images
         if mastersuperskyimg is not None:
@@ -320,20 +326,23 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
             data *= 10**(0.4*mag_ext)
 
         # mask bright stars before estimating the background
+        # do not mask viginetting pixels when estimating the background to reduce edge effect
+        bpm_for_star = np.logical_and(bpm, np.invert(bpm_vig_only))
         if maskbrightstar:
-            starmask = mask_bright_star(data, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+            starmask = mask_bright_star(data, mask=bpm_for_star, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
                                         back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task,
                                         verbose=verbose)
+            starmask = grow_masked(starmask, grow, verbose=verbose)
         else:
             starmask = np.zeros_like(data, dtype=bool)
 
         # estimate the 2D background with all masks
-        # do not mask viginetting pixels when estimating the background to reduce edge effect
-        bpm_bkg = (bpm | starmask)
-        background_array, background_rms = BKG2D(data, back_size, mask=bpm_bkg, filter_size=back_filtersize,
+        bpm_for_bkg = np.logical_or(bpm, starmask)
+        background_array, background_rms = BKG2D(data, back_size, mask=bpm_for_bkg, filter_size=back_filtersize,
                                                  sigclip=sigclip, back_type=back_type, back_rms_type=back_rms_type,
                                                  back_maxiters=back_maxiters,sextractor_task=sextractor_task,
                                                  verbose=verbose)
+        background_array[bpm_zero] = 0.
 
         # subtract the background
         if verbose:
@@ -341,11 +350,13 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         sci_image = data-background_array
 
         # CR mask
+        # do not trade saturation as bad pixel when searching for CR and satellite trail
+        bpm_for_cr = np.logical_and(bpm, np.invert(bpm_saturation))
         if mask_cr:
             if verbose:
                 msgs.info('Identifying cosmic rays using the L.A.Cosmic algorithm')
             bpm_cr_tmp = lacosmic(sci_image, contrast, cr_threshold, neighbor_threshold,
-                                  error=background_rms, mask=bpm, background=background_array, effective_gain=None,
+                                  error=background_rms, mask=bpm_for_cr, background=background_array, effective_gain=None,
                                   readnoise=None, maxiter=lamaxiter, border_mode='mirror', verbose=verbose)
             bpm_cr = grow_masked(bpm_cr_tmp, grow, verbose=verbose)
         else:
@@ -357,9 +368,10 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         if mask_sat:
             if verbose:
                 msgs.info('Identifying satellite trails using the Canny algorithm following ACSTOOLS.')
-            bpm_sat = satdet(sci_image, bpm=bpm|bpm_cr, sigma=sat_sig, buf=sat_buf, order=sat_order,
-                             low_thresh=low_thresh, h_thresh=h_thresh, small_edge=small_edge,
-                             line_len=line_len, line_gap=line_gap, percentile=percentile, verbose=verbose)
+            bpm_sat_tmp = satdet(sci_image, bpm=bpm_for_cr, sigma=sat_sig, buf=sat_buf, order=sat_order,
+                                 low_thresh=low_thresh, h_thresh=h_thresh, small_edge=small_edge,
+                                 line_len=line_len, line_gap=line_gap, percentile=percentile, verbose=verbose)
+            bpm_sat = grow_masked(bpm_sat_tmp, grow, verbose=verbose)
         else:
             bpm_sat = np.zeros_like(sci_image,dtype=bool)
 
@@ -374,17 +386,16 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         else:
             bpm_negative = np.zeros_like(sci_image, dtype=bool)
 
-        # add the cosmic ray and satellite trail flag
+        # add the cosmic ray and satellite trail flag to the flag images
         flag_image_new = flag_image + bpm_cr.astype('int32')*np.int(2**6) + bpm_sat.astype('int32')*np.int(2**7)
         flag_image_new += bpm_negative.astype('int32')*np.int(2**8)
 
-        # make a mask used for statistics.
-        # should not include starmask since they are not bad pixels if you want to use this mask for other purpose
-        mask_all = bpm | bpm_cr | bpm_sat | bpm_negative | starmask
-
-        ## replace cosmic ray and satellite affected pixels?
+        ## replace bad pixels but not saturated pixels to make the image nicer
+        #flag_image = bpm*np.int(2**0) + bpm_proc*np.int(2**1) + bpm_sat*np.int(2**2) + \
+        #             bpm_zero * np.int(2**3) + bpm_nan*np.int(2**4) + bpm_vig*np.int(2**5)
         # ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
-        bpm_replace = bpm_cr | bpm_sat
+        bpm_all = flag_image_new>0
+        bpm_replace = np.logical_and(bpm_all, np.invert(bpm_saturation))
         if replace == 'zero':
             sci_image[bpm_replace] = 0
         elif replace == 'median':
@@ -400,12 +411,8 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                 msgs.info('Not replacing bad pixel values')
 
         # Generate weight map used for SExtractor and SWarp (WEIGHT_TYPE = MAP_WEIGHT)
+        # ToDo: use 1/var as the weight map. The var can either be estimated from RN/photon/bkg or from BKG2D.
         wht_image = utils.inverse(background_array)
-
-        # Always set original zero values to be zero, this can avoid significant negative values after sky subtraction
-        sci_image[bpm_zero] = 0
-        # Also set negative stars to be zero
-        sci_image[bpm_negative] = 0
 
         # Set bad pixel's weight to be zero
         wht_image[flag_image_new>0] = 0

@@ -13,7 +13,7 @@ from astropy import stats
 from astropy.stats import sigma_clipped_stats
 from astropy.convolution import Gaussian2DKernel
 
-from pyphot import io,msgs
+from pyphot import io,msgs, utils
 from pyphot import procimg
 from pyphot.photometry import BKG2D, mask_bright_star
 
@@ -59,7 +59,7 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbiasimg=None, cenfu
         array = procimg.trim_frame(raw, rawdatasec_img < 0.1)
         if masterbiasimg is not None:
             array -= masterbiasimg
-        images.append(array/exptime)
+        images.append(array*utils.inverse(exptime))
 
     images = np.array(images)
 
@@ -129,18 +129,20 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
             #this_bpm = bpm[xx_sub, :][:, yy_sub]
             this_gain = gain[iamp]
             this_array = procimg.trim_frame(array, mask) * this_gain
-            this_bpm = procimg.trim_frame(bpm, mask)
+            #this_bpm = procimg.trim_frame(bpm, mask)
 
             if minimum_vig is not None:
                 # ToDo: This is specific for LRIS, but it should work for IMACS as well
                 vig_bpm = this_array < np.percentile(this_array,95)*(1-minimum_vig) #np.percentile(this_array, minimum_vig*100)
-                this_bpm |= vig_bpm
+                #this_bpm |= vig_bpm
+            else:
+                vig_bpm = np.zeros_like(this_array, dtype='bool')
 
             ## put sub-array back into the original one
             array[np.invert(mask)] = this_array.flatten() #/ this_median
-            extra_bpm[np.invert(mask)] = this_bpm.flatten()
+            extra_bpm[np.invert(mask)] = vig_bpm.flatten()
 
-        new_bpm = np.logical_or(bpm, extra_bpm)
+        new_bpm = np.logical_or(bpm, extra_bpm) # a new bpm for statistics
         ## Mask bright stars
         if maskbrightstar:
             this_starmask = mask_bright_star(array, mask=new_bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
@@ -161,8 +163,8 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
         array[this_zeromask] = this_median
 
         ## Append the data
-        images.append(array/this_median)
-        masks.append(new_bpm | this_starmask | this_hotmask | this_zeromask)
+        images.append(array * utils.inverse(this_median))
+        masks.append(bpm | this_starmask | this_hotmask | this_zeromask)
 
     msgs.info('Combing flat images')
     images = np.array(images)
@@ -176,22 +178,23 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbiasimg=
     else:
         stack = mean #/ np.nanmedian(median)
 
-    stack[np.isnan(stack)] = 1.0 # replace bad pixels with 1, so not flat fielding that pixel
+    bpm_nan = np.isnan(stack) | (stack==0.)
+    stack[bpm_nan] = 0. # replace bad pixels with 0
 
     if maskpixvar is not None:
         # mask bad pixels based on pixelflat (i.e. pixel variance greater than XX% using maskbad)
         # Only used for pixel flat
         #illum = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
-        illum, _ = BKG2D(stack, window_size, mask=np.isnan(stack), filter_size=(3,3),
+        illum, _ = BKG2D(stack, window_size, mask=bpm_nan, filter_size=(3,3),
                          sigclip=sigma, back_type='sextractor', back_rms_type='std',
                          back_maxiters=maxiters, sextractor_task=sextractor_task)
 
-        bpm_pixvar = abs(1-stack/illum)>maskpixvar
+        bpm_pixvar = abs(1-stack*utils.inverse(illum))>maskpixvar
     else:
         bpm_pixvar = np.zeros_like(array, dtype=bool)
 
     # bpm for the flat
-    stack_bpm = bpm_pixvar | (np.isnan(stack))
+    stack_bpm = bpm_pixvar | bpm_nan
 
     del images, masks
     gc.collect()
@@ -216,10 +219,10 @@ def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbiasimg=N
     #bkg = Background2D(stack.copy(), window_size, mask=bpm, filter_size=(3,3), sigma_clip=sigma_clip,
     #                   bkg_estimator=MedianBackground())
     #flat = bkg.background
-    flat, _ = BKG2D(stack, window_size, mask=np.isnan(stack), filter_size=(3, 3),
+    flat, _ = BKG2D(stack, window_size, mask=bpm, filter_size=(3, 3),
                      sigclip=sigma, back_type='sextractor', back_rms_type='std',
                      back_maxiters=maxiters, sextractor_task=sextractor_task)
-
+    flat[bpm] = 0.
     # scipy gaussian_filter seems not ideal, could produce some problem at the edge.
     #flat = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
     io.save_fits(masterillumflat_name, flat, header, 'MasterIllumFlat', mask=bpm, overwrite=True)
@@ -237,7 +240,7 @@ def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbiasimg=Non
     if masterillumflatimg is None:
         masterillumflatimg = np.ones_like(stack)
 
-    flat = stack / masterillumflatimg
+    flat = stack * utils.inverse(masterillumflatimg)
     io.save_fits(masterpixflat_name, flat, header, 'MasterPixelFlat', mask=bpm, overwrite=True)
 
 def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
@@ -251,10 +254,10 @@ def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
                                      maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
     ## ToDo: currently I am using sextractor for the supersky. Need to get a better combineflat
-    flat, _ = BKG2D(stack, window_size, mask=np.isnan(stack), filter_size=(3, 3),
+    flat, _ = BKG2D(stack, window_size, mask=bpm, filter_size=(3, 3),
                      sigclip=sigma, back_type='sextractor', back_rms_type='std',
                      back_maxiters=maxiters, sextractor_task=sextractor_task)
-
+    flat[bpm] = 0.
     #flat = gaussian_filter(stack, sigma=window_size[0], mode='mirror')
     #flat = median_filter(stack, size=window_size[0], mode='mirror')
     #io.save_fits(mastersupersky_name.replace('.fits','1.fits'), flat, header, 'MasterSuperSky', mask=bpm, overwrite=True)
@@ -271,7 +274,7 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
     for iimg in range(nz):
         this_header, this_data, this_mask_image = io.load_fits(fringefiles[iimg])
         if mastersuperskyimg is not None:
-            this_data = this_data / mastersuperskyimg
+            this_data = this_data * utils.inverse(mastersuperskyimg)
         if fringemaskfiles is not None:
             _, this_mask_image, _ = io.load_fits(fringemaskfiles[iimg])
         this_mask = this_mask_image.astype('bool')
@@ -287,7 +290,7 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
                                         back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
             this_mask = np.logical_or(this_mask, starmask)
 
-        data3D[:, :, iimg] = this_data / this_header['EXPTIME']
+        data3D[:, :, iimg] = this_data * utils.inverse(this_header['EXPTIME'])
         mask3D[:, :, iimg] = this_mask.astype('bool')
 
     ## constructing the master fringe frame

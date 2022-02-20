@@ -104,7 +104,7 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
 
 
 def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None,
-              delete=False, log=False, verbose=False):
+              n_process=4, delete=False, log=False, verbose=False):
 
     if coaddroot is not None:
         if coadddir is None:
@@ -170,5 +170,5 @@ def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddd
             else:
                 this_config = None
             swarpone(imgname, config=this_config, workdir=workdir, defaultconfig=defaultconfig,
-                     delete=delete, log=log, verbose=verbose)
+                     delete=delete, log=log, verbose=False)
 

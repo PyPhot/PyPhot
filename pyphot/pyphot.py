@@ -248,6 +248,17 @@ class PyPhot(object):
                     grp_proc = frame_indx[in_grp_sci | in_grp_supersky | in_grp_fringe] # need run ccdproc
                     grp_sciproc = frame_indx[in_grp_sci | in_grp_fringe] # need run both ccdproc and sciproc
 
+                    scifiles = self.fitstbl.frame_paths(grp_science)  # list for scifiles
+                    sci_airmass = self.fitstbl[grp_science]['airmass']
+
+                    procfiles = self.fitstbl.frame_paths(grp_proc)  # need run ccdproc
+                    proc_airmass = self.fitstbl[grp_proc]['airmass']
+
+                    sciprocfiles = self.fitstbl.frame_paths(grp_sciproc)  # need run both ccdproc and sciproc
+                    sciproc_airmass = self.fitstbl[grp_sciproc]['airmass']
+
+                    coadd_ids = self.fitstbl['coadd_id'][grp_science] # coadd_ids
+
                     # Loop on Detectors for calibrations and processing images
                     for self.det in detectors:
 
@@ -256,19 +267,9 @@ class PyPhot(object):
                         #master_key = '{:}_{:02d}.fits'.format(this_setup,this_det)
                         master_key = self.fitstbl.master_key(grp_science[0], det=self.det)
 
-                        scifiles = self.fitstbl.frame_paths(grp_science) # list for scifiles
-                        sci_airmass = self.fitstbl[grp_science]['airmass']
-
-                        procfiles = self.fitstbl.frame_paths(grp_proc) # need run ccdproc
-                        proc_airmass = self.fitstbl[grp_proc]['airmass']
-
-                        sciprocfiles = self.fitstbl.frame_paths(grp_sciproc) # need run both ccdproc and sciproc
-                        sciproc_airmass = self.fitstbl[grp_sciproc]['airmass']
-
                         # image shape (after triming overscan region)
                         raw_shape = self.camera.bpm(scifiles[0], self.det, shape=None, msbias=None).astype('bool').shape
                         #raw_shape = (self.camera.get_rawimage(scifiles[0],self.det))[1].shape
-                        coadd_ids = self.fitstbl['coadd_id'][grp_science]
 
                         ### Build Calibrations
                         # Build Bias
@@ -443,9 +444,9 @@ class PyPhot(object):
                                         brightstar_nsigma=self.par['scienceframe']['process']['brightstar_nsigma'],
                                         maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
                                         sextractor_task=self.par['rdx']['sextractor'],
+                                        sigclip=self.par['scienceframe']['process']['sigclip'],
                                         mask_cr=self.par['scienceframe']['process']['mask_cr'],
                                         lamaxiter=self.par['scienceframe']['process']['lamaxiter'],
-                                        sigclip=self.par['scienceframe']['process']['sigclip'],
                                         cr_threshold=self.par['scienceframe']['process']['cr_threshold'],
                                         neighbor_threshold=self.par['scienceframe']['process']['neighbor_threshold'],
                                         contrast=self.par['scienceframe']['process']['contrast'],
@@ -599,7 +600,9 @@ class PyPhot(object):
                                                             ZP=self.par['postproc']['photometry']['zpt'],
                                                             nstar_min=self.par['postproc']['photometry']['nstar_min'],
                                                             external_flag=self.par['postproc']['photometry']['external_flag'],
-                                                            pixscale=pixscale,n_process=self.par['rdx']['n_process'])
+                                                            pixscale=pixscale, n_process=1) #n_process=self.par['rdx']['n_process'])
+                                                            # I set n_process=1 here because mulitprocessing could cause problem for
+                                                            # downloading reference catalogs.
 
                             # The FITS table that stores individual zero-points
                             master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],

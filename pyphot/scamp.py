@@ -121,7 +121,7 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
     if delete:
         os.system("rm " + os.path.join(workdir, catroot+"*.scamp"))
 
-def run_scamp(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot',
+def run_scamp(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyphot', n_process=4,
               group=False, delete=False, log=True, verbose=False):
 
     if group:
