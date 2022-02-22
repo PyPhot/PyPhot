@@ -1,4 +1,4 @@
-0.3.0 (2021-07-28)
+0.3.0 (2022-02-21)
 ----------------
 - Modify README.md on software installation
 - Add this file and tag the previous versions
