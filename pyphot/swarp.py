@@ -1,6 +1,9 @@
 
 import os, re, subprocess
 
+import multiprocessing
+from multiprocessing import Process, Queue
+
 from pyphot import msgs
 from pkg_resources import resource_filename
 config_dir = resource_filename('pyphot', '/config/')
@@ -102,6 +105,18 @@ def swarpone(imgname, config=None, workdir='./', defaultconfig='pyphot', delete=
         if os.path.exists(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))):
             os.system("rm {:}".format(os.path.join(workdir, imgname.replace('.fits','.swarp.xml'))))
 
+def _swarpone_worker(work_queue, config=None, workdir='./', defaultconfig='pyphot', delete=True, log=False, verbose=True):
+
+    """Multiprocessing worker for sexone."""
+
+    if config is not None:
+        this_config = config.copy()  # need to copy this since the config would be possibly changed in sexone!
+    else:
+        this_config = None
+
+    while not work_queue.empty():
+        imgname = work_queue.get()
+        swarpone(imgname, config=config, workdir=workdir, defaultconfig=defaultconfig, delete=delete, log=log, verbose=verbose)
 
 def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coadddir=None, coaddroot=None,
               n_process=4, delete=False, log=False, verbose=False):
@@ -162,13 +177,33 @@ def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddd
             os.system("mv {:} {:}".format(os.path.join(workdir, "*.swarp"), coadddir))
 
     else:
-        # ToDo: Parallel the following
-        for imgname in imglist:
-            msgs.info('Resampling {:} with Swarp {:}'.format(os.path.basename(imgname), get_version()))
-            if config is not None:
-                this_config = config.copy()# need to copy this since the config would be possibly changed in swarpone!
-            else:
-                this_config = None
-            swarpone(imgname, config=this_config, workdir=workdir, defaultconfig=defaultconfig,
-                     delete=delete, log=log, verbose=False)
+        if n_process==1:
+            for imgname in imglist:
+                msgs.info('Resampling {:} with Swarp {:}'.format(os.path.basename(imgname), get_version()))
+                if config is not None:
+                    this_config = config.copy()# need to copy this since the config would be possibly changed in swarpone!
+                else:
+                    this_config = None
+                swarpone(imgname, config=this_config, workdir=workdir, defaultconfig=defaultconfig,
+                         delete=delete, log=log, verbose=False)
+        else:
+            msgs.info('Start parallel processing with n_process={:}'.format(n_process))
+            work_queue = Queue()
+            processes = []
+
+            for ii in range(len(imglist)):
+                work_queue.put(imglist[ii])
+
+            # creating processes
+            for w in range(n_process):
+                p = Process(target=_swarpone_worker, args=(work_queue,), kwargs={
+                    'config': config, 'workdir': workdir, 'defaultconfig': defaultconfig,
+                    'delete': delete, 'log': log, 'verbose': verbose})
+                processes.append(p)
+                p.start()
+
+            # completing process
+            for p in processes:
+                p.join()
+
 

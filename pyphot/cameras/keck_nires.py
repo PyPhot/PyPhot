@@ -102,7 +102,7 @@ class KECKNIRESCamera(camera.Camera):
         par.reset_all_processimages_par(**turn_off)
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_illumflat'] = False
 
 
         # Set the default exposure time ranges for the frame typing

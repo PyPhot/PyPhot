@@ -128,9 +128,9 @@ def _ccdproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             bpm_proc = np.zeros_like(sci_image, dtype='bool')
 
         # mask Vignetting pixels
-        if masterillumflatimg is not None:
+        if (masterillumflatimg is not None) and (np.sum(masterillumflatimg!=1)>0):
             flat_for_vig = masterillumflatimg.copy()
-        elif masterpixflatimg is not None:
+        elif (masterpixflatimg is not None) and (np.sum(masterpixflatimg!=1)>0):
             flat_for_vig = masterpixflatimg.copy()
         else:
             flat_for_vig = np.ones_like(sci_image)

@@ -186,7 +186,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
-        par['scienceframe']['process']['use_supersky'] = True
+        par['scienceframe']['process']['use_supersky'] = False
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = True
 
@@ -195,7 +195,8 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['minimum_vig'] = 0.3
 
         # Background type for image processing
-        par['scienceframe']['process']['back_type'] = 'GlobalMedian'
+        #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
+        par['scienceframe']['process']['back_type'] = 'median'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -208,24 +209,26 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['calibrations']['pixelflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['illumflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['superskyframe']['exprng'] = [10, None]
+        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
         # astrometry
         par['postproc']['astrometry']['scamp_second_pass'] = False
         par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
-        par['postproc']['astrometry']['astrefmag_limits'] = [17, 24]
+        par['postproc']['astrometry']['astrefmag_limits'] = [15, 24]
         par['postproc']['astrometry']['posangle_maxerr'] = 10.0
-        par['postproc']['astrometry']['position_maxerr'] = 1.0
+        par['postproc']['astrometry']['position_maxerr'] = 2.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
-        par['postproc']['astrometry']['detect_thresh'] = 15  # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 15
+        par['postproc']['astrometry']['detect_thresh'] = 20  # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 20
         par['postproc']['astrometry']['detect_minarea'] = 11
         par['postproc']['astrometry']['crossid_radius'] = 1.0
         #par['postproc']['astrometry']['delete'] = False
-        #par['postproc']['astrometry']['log'] = True
+        par['postproc']['astrometry']['log'] = True
 
         # photometry
         par['postproc']['photometry']['external_flag'] = False
+        par['postproc']['photometry']['nstar_min'] = 5
 
         return par
 
@@ -690,7 +693,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
-        par['scienceframe']['process']['use_supersky'] = False
+        par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = True
 
@@ -715,6 +718,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['calibrations']['pixelflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['illumflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['superskyframe']['exprng'] = [10, None]
+        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
         # astrometry
         par['postproc']['astrometry']['scamp_second_pass'] = True
@@ -733,6 +737,7 @@ class KeckLRISRCamera(KeckLRISCamera):
 
         # photometry
         par['postproc']['photometry']['external_flag'] = False
+        par['postproc']['photometry']['nstar_min'] = 5
 
         return par
 

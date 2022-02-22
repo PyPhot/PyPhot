@@ -299,10 +299,11 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_biasimage'] = True
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
         par['scienceframe']['process']['apply_gain'] = True
+        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -547,7 +548,7 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_biasimage'] = True
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
-        par['scienceframe']['process']['use_illumflat'] = True
+        par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = True
         par['scienceframe']['process']['apply_gain'] = True

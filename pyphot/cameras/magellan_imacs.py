@@ -323,6 +323,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
+        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
         ## We use dome flat for the pixel flat and thus do not need mask bright stars.
         par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False

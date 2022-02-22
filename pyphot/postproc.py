@@ -85,7 +85,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
 
     if skip_swarp_align:
         if verbose:
-            msgs.info('Skipping the first alignment step with Swarp')
+            msgs.info('Skipping rotating the image to the nominal projection with Swarp')
         for sci_fits_file in sci_fits_list:
             os.system('cp {:} {:}'.format(sci_fits_file,sci_fits_file.replace('.fits', '.resamp.fits')))
             os.system('cp {:} {:}'.format(sci_fits_file.replace('.fits', '.weight.fits'),
@@ -166,7 +166,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
     swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
     # resample science image
     if verbose:
-        msgs.info('Running Swarp for the first pass to align the science image.')
+        msgs.info('Running Swarp to align the science image.')
     swarp.run_swarp(sci_fits_list_resample, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                     n_process=n_process, delete=delete, log=log, verbose=verbose)
 
@@ -179,7 +179,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
 
     # resample flag image
     if verbose:
-        msgs.info('Running Swarp for the first pass to align the flag image.')
+        msgs.info('Running Swarp to align the flag image.')
     swarp.run_swarp(flag_fits_list_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
                     n_process=n_process, delete=delete, log=False, verbose=False)
 
@@ -225,7 +225,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
     ## step four: Run SExtractor on the resampled images
     ## Run SExtractor for the resampled images. The catalogs will be used for calibrating individual chips.
     if verbose:
-        msgs.info('Running SExtractor for the resampled images.')
+        msgs.info('Running SExtractor on the resampled images.')
     sex.run_sex(sci_fits_list_resample, flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample,
                 n_process=n_process, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
                 defaultconfig='pyphot', conv='sex', nnw=None, dual=False,
@@ -768,67 +768,71 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         catalog = catalog[good_cat]
         ra, dec = catalog['sky_centroid_icrs.ra'], catalog['sky_centroid_icrs.dec']
 
-    pos = np.zeros((len(ra), 2))
-    pos[:,0], pos[:,1] = ra, dec
+    if len(ra)>0:
+        pos = np.zeros((len(ra), 2))
+        pos[:,0], pos[:,1] = ra, dec
 
-    ra_cen, dec_cen = np.median(ra), np.median(dec)
-    distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
-    radius = np.nanmax(distance)*oversize
+        ra_cen, dec_cen = np.median(ra), np.median(dec)
+        distance = np.sqrt((ra-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (dec-dec_cen)**2)
+        radius = np.nanmax(distance)*oversize
 
-    # Read/Query a reference catalog
-    if (out_refcat is not None) and os.path.exists(out_refcat):
-        if verbose:
-            msgs.info('Using the existing reference catalog {:} rather than downloading a new one.'.format(out_refcat))
-        ref_data = Table.read(out_refcat, format='fits')
-        ref_ra_cen, ref_dec_ren =  np.median(ref_data['RA']), np.median(ref_data['DEC'])
-        dist_cen = np.sqrt((ref_ra_cen-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (ref_dec_ren-dec_cen)**2)
-        if dist_cen>0.7*radius:
+        # Read/Query a reference catalog
+        if (out_refcat is not None) and os.path.exists(out_refcat):
             if verbose:
-                msgs.info('Existing catalog does not fully cover the field, re-download the catalog.')
+                msgs.info('Using the existing reference catalog {:} rather than downloading a new one.'.format(out_refcat))
+            ref_data = Table.read(out_refcat, format='fits')
+            ref_ra_cen, ref_dec_ren =  np.median(ref_data['RA']), np.median(ref_data['DEC'])
+            dist_cen = np.sqrt((ref_ra_cen-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (ref_dec_ren-dec_cen)**2)
+            if dist_cen>0.7*radius:
+                if verbose:
+                    msgs.info('Existing catalog does not fully cover the field, re-download the catalog.')
+                ref_data = query.query_standard(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+        else:
             ref_data = query.query_standard(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-    else:
-        ref_data = query.query_standard(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-    # save the reference catalog to fits
-    if (out_refcat is not None) and np.invert(os.path.exists(out_refcat)):
-        if verbose:
-            msgs.info('Saving the reference catalog to {:}'.format(out_refcat))
-        ref_data.write(out_refcat, format='fits', overwrite=True)
+        # save the reference catalog to fits
+        if (out_refcat is not None) and np.invert(os.path.exists(out_refcat)):
+            if verbose:
+                msgs.info('Saving the reference catalog to {:}'.format(out_refcat))
+            ref_data.write(out_refcat, format='fits', overwrite=True)
 
-    if ref_data is not None:
-        # Select high S/N stars
-        good_ref = (1.0857 * utils.inverse(ref_data['{:}_MAG_ERR'.format(primary)]) > 10)
-        if coefficients[1]*coefficients[2] !=0:
-            good_ref &= (1.0857 * utils.inverse(ref_data['{:}_MAG_ERR'.format(secondary)]) > 10)
-        try:
-            ref_data = ref_data[good_ref.data]
-        except:
-            ref_data = ref_data[good_ref]
+        if ref_data is not None:
+            # Select high S/N stars
+            good_ref = (1.0857 * utils.inverse(ref_data['{:}_MAG_ERR'.format(primary)]) > 10)
+            if coefficients[1]*coefficients[2] !=0:
+                good_ref &= (1.0857 * utils.inverse(ref_data['{:}_MAG_ERR'.format(secondary)]) > 10)
+            try:
+                ref_data = ref_data[good_ref.data]
+            except:
+                ref_data = ref_data[good_ref]
 
-        #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
-        #try:
-        #    good_ref &= (ref_data['class']==6).data
-        #except:
-        #    msgs.warn('No point-source selection was applied to the reference catalog')
+            #ref_data = query.query_region(ra_cen, dec_cen, catalog=refcatalog, radius=radius)
+            #try:
+            #    good_ref &= (ref_data['class']==6).data
+            #except:
+            #    msgs.warn('No point-source selection was applied to the reference catalog')
 
-        ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
-        ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
-                  coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
-                  coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
+            ref_ra, ref_dec = ref_data['RA'], ref_data['DEC']
+            ref_mag = ref_data['{:}_MAG'.format(primary)] + coefficients[0] + \
+                      coefficients[1]*(ref_data['{:}_MAG'.format(primary)]-ref_data['{:}_MAG'.format(secondary)])+ \
+                      coefficients[2] * (ref_data['{:}_MAG'.format(primary)] - ref_data['{:}_MAG'.format(secondary)])**2
 
-        ref_pos = np.zeros((len(ref_ra), 2))
-        ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
+            ref_pos = np.zeros((len(ref_ra), 2))
+            ref_pos[:,0], ref_pos[:,1] = ref_ra, ref_dec
 
-        ## cross-match with 1 arcsec
-        dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
-        matched = np.invert(np.isinf(dist))
+            ## cross-match with 1 arcsec
+            dist, ind = crossmatch.crossmatch_angular(pos, ref_pos, max_distance=1.0/3600.)
+            matched = np.invert(np.isinf(dist))
 
-        matched_cat_mag = catalog['MAG_AUTO'][matched] - 2.5*np.log10(FLXSCALE*FLASCALE)
-        matched_ref_mag = ref_mag[ind[matched]]
-        #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
+            matched_cat_mag = catalog['MAG_AUTO'][matched] - 2.5*np.log10(FLXSCALE*FLASCALE)
+            matched_ref_mag = ref_mag[ind[matched]]
+            #matched_ref_mag =  ref_data['{:}mag'.format(secondary)][ind[matched]]
 
-        nstar = np.sum(matched)
+            nstar = np.sum(matched)
+        else:
+            nstar=0
     else:
         nstar=0
+        msgs.warn('No stars were found in the input catalog {:}'.format(catalogfits))
 
     if nstar==0:
         msgs.warn('No matched standard stars were found')
@@ -1081,9 +1085,11 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
     zp_all_sort, zp_std_all_sort = np.zeros(n_file), np.zeros(n_file)
     nstar_all_sort = np.zeros(n_file)
     fwhm_all_sort = np.zeros(n_file)
+    sci_fits_all_sort = np.copy(sci_fits_all)
 
     for ii, ifile in enumerate(sci_fits_list):
         this_idx = sci_fits_all==ifile
+        sci_fits_all_sort[ii] = sci_fits_all[this_idx][0]
         zp_all_sort[ii] = zp_all[this_idx]
         zp_std_all_sort[ii] = zp_std_all[this_idx]
         nstar_all_sort[ii] = nstar_all[this_idx]
