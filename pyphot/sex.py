@@ -1,5 +1,9 @@
 import os,re,subprocess
 import numpy as np
+
+import multiprocessing
+from multiprocessing import Process, Queue
+
 from pyphot import msgs
 from pkg_resources import resource_filename
 config_dir = resource_filename('pyphot', '/config/')
@@ -231,29 +235,83 @@ def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=
     if delete:
         os.system("rm {:}".format(os.path.join(workdir,imgroot+"*.sex")))
 
-def sexall(imglist, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
-           conv=None, nnw=None, dual=False, flag_image_list=None, weight_image_list=None,
-           delete=True, log=False):
+def _sexone_worker(work_queue, task='sex', config=None, workdir='./', params=None, defaultconfig='pyphot',
+                   conv=None, nnw=None, dual=False, delete=True, log=False, verbose=True):
+
+    """Multiprocessing worker for sexone."""
+
+    if config is not None:
+        this_config = config.copy()  # need to copy this since the config would be possibly changed in sexone!
+    else:
+        this_config = None
+
+    while not work_queue.empty():
+        imgname, flag_image, weight_image = work_queue.get()
+        sexone(imgname, task=task, config=this_config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
+               nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log, verbose=verbose)
+
+
+def run_sex(imglist, flag_image_list=None, weight_image_list=None, n_process=1, task='sex', config=None, workdir='./',
+            params=None, defaultconfig='pyphot', conv=None, nnw=None, dual=False, delete=True, log=False, verbose=False):
+
+    n_file = len(imglist)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_process > n_cpu:
+        n_process = n_cpu
+
+    if n_process>n_file:
+        n_process = n_file
 
     if flag_image_list is not None:
         assert len(imglist) == len(flag_image_list), "flag_image_list should have the same length with imglist"
     if weight_image_list is not None:
         assert len(imglist) == len(weight_image_list), "weight_image_list should have the same length with imglist"
 
-    for ii, imgname in enumerate(imglist):
-        msgs.info('Extracting photometric catalog with SExtractor {:} for {:}'.format(get_version(),os.path.basename(imgname)))
-        if flag_image_list is not None:
-            flag_image = flag_image_list[ii]
-        else:
-            flag_image = None
-        if weight_image_list is not None:
-            weight_image = weight_image_list[ii]
-        else:
-            weight_image = None
-        if config is not None:
-            this_config = config.copy()# need to copy this since the config would be possibly changed in sexone!
-        else:
-            this_config = None
-        sexone(imgname, task=task, config=this_config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
-               nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log, verbose=False)
+    if n_process == 1:
+        for ii, imgname in enumerate(imglist):
+            msgs.info('Extracting photometric catalog with SExtractor {:} for {:}'.format(get_version(),os.path.basename(imgname)))
+            if flag_image_list is not None:
+                flag_image = flag_image_list[ii]
+            else:
+                flag_image = None
+            if weight_image_list is not None:
+                weight_image = weight_image_list[ii]
+            else:
+                weight_image = None
+            if config is not None:
+                this_config = config.copy()# need to copy this since the config would be possibly changed in sexone!
+            else:
+                this_config = None
+            sexone(imgname, task=task, config=this_config, workdir=workdir, params=params, defaultconfig=defaultconfig, conv=conv,
+                   nnw=nnw, dual=dual, flag_image=flag_image, weight_image=weight_image, delete=delete, log=log, verbose=verbose)
+    else:
+        msgs.info('Start parallel processing with n_process={:}'.format(n_process))
+        work_queue = Queue()
+        processes = []
+
+        for ii in range(len(imglist)):
+            if flag_image_list is None:
+                this_flag = None
+            else:
+                this_flag = flag_image_list[ii]
+            if weight_image_list is None:
+                this_wht = None
+            else:
+                this_wht = weight_image_list[ii]
+
+            work_queue.put((imglist[ii], this_flag, this_wht))
+
+        # creating processes
+        for w in range(n_process):
+            p = Process(target=_sexone_worker, args=(work_queue,), kwargs={
+                'task': task, 'config': config, 'workdir': workdir, 'params': params,
+                'defaultconfig': defaultconfig, 'conv': conv, 'nnw': nnw, 'dual':dual,
+                'delete':delete, 'log':log, 'verbose':verbose})
+            processes.append(p)
+            p.start()
+
+        # completing process
+        for p in processes:
+            p.join()
 

@@ -34,7 +34,7 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
 
     ## Sky background subtraction
 
-    if back_type.lower() == 'median':
+    if 'median' in back_type.lower():
         bkg_estimator = MedianBackground()
     elif back_type.lower() == 'mean':
         bkg_estimator = MeanBackground()
@@ -111,6 +111,9 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
         bkg_map[tmp==0.] = 0.
         del tmp, bkg
         gc.collect()
+
+    if back_type == 'GlobalMedian':
+        bkg_map = np.ones_like(bkg_map) * np.nanmedian(bkg_map[np.invert(mask)])
 
     return bkg_map, rms_map
 
@@ -242,9 +245,9 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
                      method='sextractor', task='sex', verbose=True):
 
     data_copy = data.copy()
-    if mask is not None:
-        data_copy[mask] = 0. # zero out bad pixels
     if method.lower()=='photoutils':
+        if mask is not None:
+            data_copy[mask] = 0.  # zero out bad pixels
         if verbose:
             msgs.info('Masking bright stars with Photoutils')
         back_box_size = (data_copy.shape[0] // 10, data_copy.shape[1] // 10)
@@ -255,6 +258,8 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
         del data_copy, seg
         gc.collect()
     else:
+        if mask is not None:
+            data_copy[mask] = np.nan # set to zero would create junk detections at the edges
         if verbose:
             msgs.info('Masking bright stars with SExtractor.')
         letters = string.ascii_letters

@@ -179,8 +179,9 @@ class MagellanIMACSCamera(camera.Camera):
         data = hdu[detector_par['dataext']].data*1.0
         array = data[y1-1:y2, x1-1:x2]
 
-        gainimage = np.ones_like(array) * detector_par['gain'][0]
-        rnimage = np.ones_like(array) * detector_par['ronoise'][0]
+        # datasec_img and oscansec_img
+        rawdatasec_img = np.ones_like(array) #* detector_par['gain'][0]
+        oscansec_img = np.ones_like(array) #* detector_par['ronoise'][0]
 
         #from pyphot import io
         #io.save_fits('test_c{:01d}.fits'.format(det), data, head1, 'Science', overwrite=True)
@@ -192,7 +193,7 @@ class MagellanIMACSCamera(camera.Camera):
             exptime = head1[self.meta['exptime']['card']]
 
         # Return, transposing array back to orient the overscan properly
-        return detector_par, array, head1, exptime, gainimage, rnimage
+        return detector_par, array, head1, exptime, rawdatasec_img, oscansec_img
 
 
 class MagellanIMACSF2Camera(MagellanIMACSCamera):
@@ -322,6 +323,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
+        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
         ## We use dome flat for the pixel flat and thus do not need mask bright stars.
         par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False

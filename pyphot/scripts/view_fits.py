@@ -34,6 +34,7 @@ def main(args):
     from pyphot.cameras import mmt_mmirs
     from pyphot.cameras import magellan_imacs
     from pyphot.cameras import lbt_lbc
+    from pyphot.cameras import keck_lris
 
 
     # List only?
@@ -55,6 +56,12 @@ def main(args):
     elif args.camera == 'lbt_lbcr':
         gen_lbcr = lbt_lbc.LBTLBCRCamera()
         img = gen_lbcr.get_rawimage(args.file, args.det)[1]
+    elif args.camera == 'keck_lris_blue':
+        gen_lrisb = keck_lris.KeckLRISBCamera()
+        img = gen_lrisb.get_rawimage(args.file, args.det)[1]
+    elif args.camera == 'keck_lris_red':
+        gen_lrisr = keck_lris.KeckLRISRCamera()
+        img = gen_lrisr.get_rawimage(args.file, args.det)[1]
     else:
         hdu = fits.open(args.file)
         img = hdu[args.exten].data

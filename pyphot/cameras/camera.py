@@ -587,6 +587,9 @@ class Camera:
 
             # Initialize the image (0 means no amplifier)
             pix_img = np.zeros(raw_img.shape, dtype=int)
+            if section == 'datasec':
+                gainimage = np.zeros(raw_img.shape)
+                rnimage = np.zeros(raw_img.shape)
             for i in range(detector['numamplifiers']):
 
                 if image_sections is not None:  # and image_sections[i] is not None:
@@ -596,6 +599,9 @@ class Camera:
                                               binning=binning_raw)
                     # Assign the amplifier
                     pix_img[datasec] = i+1
+                    if section == 'datasec':
+                        gainimage[datasec] = detector['gain'][i]
+                        rnimage[datasec] = detector['ronoise'][i]
 
             # Finish
             if section == 'datasec':
@@ -604,7 +610,7 @@ class Camera:
                 oscansec_img = pix_img.copy()
 
         # Return
-        return detector, raw_img, hdu, exptime, rawdatasec_img, oscansec_img
+        return detector, raw_img, headarr, exptime,  rawdatasec_img, oscansec_img
 
     def get_lamps_status(self, headarr):
         """

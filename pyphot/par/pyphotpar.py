@@ -238,7 +238,7 @@ class ProcessImagesPar(ParSet):
         dtypes['use_pixelflat'] = bool
         descr['use_pixelflat'] = 'Use the pixel flat to make pixel-level corrections.  A pixelflat image must be provied.'
 
-        defaults['use_illumflat'] = True
+        defaults['use_illumflat'] = False
         dtypes['use_illumflat'] = bool
         descr['use_illumflat'] = 'Use the illumination flat to correct for the illumination profile.'
 
@@ -353,7 +353,7 @@ class ProcessImagesPar(ParSet):
 
         defaults['grow'] = 1.5
         dtypes['grow'] = [int, float]
-        descr['grow'] = 'Factor by which to expand the masked cosmic ray, negative star, and vignetting pixels'
+        descr['grow'] = 'Factor by which to expand the masked cosmic ray, satellite, negative star, and vignetting pixels'
 
         defaults['rmcompact'] = True
         dtypes['rmcompact'] = bool
@@ -511,7 +511,7 @@ class ProcessImagesPar(ParSet):
         """
         Return the valid methods for background estimator method.
         """
-        return ['MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE',
+        return ['MEDIAN','MEAN','SEXTRACTOR', 'MMM', 'BIWEIGHT', 'MODE', 'GlobalMedian',
                 'median','mean','sextractor', 'mmm', 'biweight', 'mode']
 
     @staticmethod
@@ -615,7 +615,7 @@ class AstrometricPar(ParSet):
     def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, astrefmag_limits=None, weight_type=None, solve_photom_scamp=None,
-                 posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None,
+                 posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None, group=None,
                  delete=None, log=None):
 
         # Grab the parameter names and values from the function
@@ -709,6 +709,10 @@ class AstrometricPar(ParSet):
         dtypes['solve_photom_scamp'] = bool
         descr['solve_photom_scamp'] = 'SOLVE_PHOTOM with SCAMP? I would set it to False since PyPhot will calibrate individual chip'
 
+        defaults['group'] = True
+        dtypes['group'] = bool
+        descr['group'] = 'Group all exposures when doing scamp?'
+
         defaults['delete'] = True
         dtypes['delete'] = bool
         descr['delete'] = 'Deletec the configuration files for SExtractor, SCAMP, and SWARP?'
@@ -731,7 +735,7 @@ class AstrometricPar(ParSet):
         parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band', 'astrefmag_limits',
                    'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
-                   'weight_type', 'solve_photom_scamp', 'delete', 'log']
+                   'weight_type', 'solve_photom_scamp', 'group', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1356,7 +1360,8 @@ class ReduxPar(ParSet):
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
                  qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, skip_step_one=None,
-                 skip_step_two=None, n_process=None):
+                 skip_step_two=None, skip_master=None, skip_ccdproc=None, skip_sciproc=None, skip_coadd=None,
+                 skip_img_qa=None, skip_astrometry=None, n_process=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1410,9 +1415,33 @@ class ReduxPar(ParSet):
         dtypes['skip_step_one'] = bool
         descr['skip_step_one'] = 'Skip all the calibrations and individual chip processing?'
 
+        defaults['skip_master'] = False
+        dtypes['skip_master'] = bool
+        descr['skip_master'] = 'Skip building all the master calibrations?'
+
+        defaults['skip_ccdproc'] = False
+        dtypes['skip_ccdproc'] = bool
+        descr['skip_ccdproc'] = 'Skip ccdproc for all science chips?'
+
+        defaults['skip_sciproc'] = False
+        dtypes['skip_sciproc'] = bool
+        descr['skip_sciproc'] = 'Skip sciproc for all science chips?'
+
+        defaults['skip_astrometry'] = False
+        dtypes['skip_astrometry'] = bool
+        descr['skip_astrometry'] = 'Skip astrometry for all science chips?'
+
         defaults['skip_step_two'] = False
         dtypes['skip_step_two'] = bool
         descr['skip_step_two'] = 'Skip all the coadding, detection and photometry?'
+
+        defaults['skip_coadd'] = False
+        dtypes['skip_coadd'] = bool
+        descr['skip_coadd'] = 'Skip coadding and mosaiking?'
+
+        defaults['skip_img_qa'] = False
+        dtypes['skip_img_qa'] = bool
+        descr['skip_img_qa'] = 'Skip producing QA for resampled images?'
 
         defaults['n_process'] = 4
         dtypes['n_process'] = int
@@ -1452,7 +1481,9 @@ class ReduxPar(ParSet):
 
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
-                    'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two', 'n_process']
+                    'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two',
+                    'skip_master','skip_ccdproc','skip_sciproc','skip_astrometry', 'skip_coadd', 'skip_img_qa',
+                    'n_process']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
