@@ -1,3 +1,13 @@
+0.4.0dev (2022-02-21)
+----------------
+- Major development for Keck LRIS
+- Support detectors with multiple amplifiers
+- Improve the overall flowcharting of pyphot.py
+- More step-control parameters: skip_master, skip_ccdproc, skip_sciproc, skip_astrometry
+- Switch the astrometry mode from calibrating chips individually to calibrating everything in a group
+- Minor improvement on master flatframe building
+- MaterFrame is a class and supports doing calibrations without science frames
+
 0.3.0 (2022-02-21)
 ----------------
 - Modify README.md on software installation
