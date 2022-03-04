@@ -452,7 +452,7 @@ def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
     return Table_Merged
 
 def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], image_ids=None,
-                   effective_gains=None, zero_points=None, outfile=None):
+                   flux_no_flagpix=False, effective_gains=None, zero_points=None, outfile=None):
 
 
     # If images is a string name, make it to a list
@@ -542,7 +542,12 @@ def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertu
         apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
 
         ## Get the Aperture flux with exact method
-        tbl_aper = aperture_photometry(data, apertures, error=total_error, mask=mask, method='exact', wcs=wcs_info)
+        if flux_no_flagpix:
+            # Exclude flagged pixels when measure the flux
+            tbl_aper = aperture_photometry(data, apertures, error=total_error, mask=mask, method='exact', wcs=wcs_info)
+        else:
+            # Include flagged pixels when measure the flux
+            tbl_aper = aperture_photometry(data, apertures, error=total_error, mask=None, method='exact', wcs=wcs_info)
         flux_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)))
         fluxerr_aper = np.zeros_like(flux_aper)
         mag_aper = np.zeros_like(flux_aper)
