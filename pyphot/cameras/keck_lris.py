@@ -226,6 +226,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         #par['postproc']['astrometry']['delete'] = False
         par['postproc']['astrometry']['log'] = True
 
+        par['postproc']['detection']['conv'] = 'sex995' # Should be set for 1x1 binning
         # photometry
         par['postproc']['photometry']['external_flag'] = False
         par['postproc']['photometry']['nstar_min'] = 5
@@ -735,6 +736,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         #par['postproc']['astrometry']['delete'] = False
         #par['postproc']['astrometry']['log'] = True
 
+        par['postproc']['detection']['conv'] = 'sex995' # Should be set for 1x1 binning
         # photometry
         par['postproc']['photometry']['external_flag'] = False
         par['postproc']['photometry']['nstar_min'] = 5

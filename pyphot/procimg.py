@@ -399,13 +399,13 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         if replace == 'zero':
             sci_image[bpm_replace] = 0
         elif replace == 'median':
-            _,sci_image[bpm_replace],_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigclip, maxiters=5)
+            _,sci_image[bpm_replace],_ = stats.sigma_clipped_stats(sci_image, bpm_all, sigma=sigclip, maxiters=5)
         elif replace == 'mean':
-            sci_image[bpm_replace],_,_ = stats.sigma_clipped_stats(sci_image, mask_all, sigma=sigclip, maxiters=5)
+            sci_image[bpm_replace],_,_ = stats.sigma_clipped_stats(sci_image, bpm_all, sigma=sigclip, maxiters=5)
         elif replace == 'min':
-            sci_image[bpm_replace] = np.min(sci_image[np.invert(mask_all)])
+            sci_image[bpm_replace] = np.min(sci_image[np.invert(bpm_all)])
         elif replace == 'max':
-            sci_image[bpm_replace] = np.max(sci_image[np.invert(mask_all)])
+            sci_image[bpm_replace] = np.max(sci_image[np.invert(bpm_all)])
         else:
             if verbose:
                 msgs.info('Not replacing bad pixel values')

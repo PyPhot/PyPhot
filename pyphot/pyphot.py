@@ -239,9 +239,13 @@ class PyPhot(object):
                 else:
                     this_setup = self.fitstbl[in_grp]['setup'][0]
                     # Find the indices of the science frames in this calibration group:
+                    grp_all = frame_indx[in_grp] # science only
+                    grp_science = frame_indx[in_grp_sci] # science only
                     grp_science = frame_indx[in_grp_sci] # science only
                     grp_proc = frame_indx[in_grp_sci | in_grp_supersky | in_grp_fringe] # need run ccdproc
                     grp_sciproc = frame_indx[in_grp_sci | in_grp_fringe] # need run both ccdproc and sciproc
+
+                    allfiles = self.fitstbl.frame_paths(grp_all)  # list for all files in this grp
 
                     scifiles = self.fitstbl.frame_paths(grp_science)  # list for scifiles
                     sci_airmass = self.fitstbl[grp_science]['airmass']
@@ -265,9 +269,9 @@ class PyPhot(object):
 
                     ## Build MasterFrames, including bias, dark, illumflat, and pixelflat
                     for idet in detectors:
-                        master_key = self.fitstbl.master_key(grp_science[0], det=idet)
+                        master_key = self.fitstbl.master_key(grp_all[0], det=idet)
                         msgs.info('Identify data size for detector {:} based on BPM image.'.format(idet))
-                        raw_shape = self.camera.bpm(scifiles[0], idet, shape=None, msbias=None).astype('bool').shape
+                        raw_shape = self.camera.bpm(allfiles[0], idet, shape=None, msbias=None).astype('bool').shape
                         Master = masterframe.MasterFrames(self.camera, idet, master_key,
                                     self.par['calibrations']['master_dir'], raw_shape,
                                     use_biasimage=self.par['scienceframe']['process']['use_biasimage'],
@@ -601,6 +605,7 @@ class PyPhot(object):
                                 skip_swarp_align=self.par['postproc']['astrometry']['skip_swarp_align'],
                                 scamp_second_pass=self.par['postproc']['astrometry']['scamp_second_pass'],
                                 solve_photom_scamp=self.par['postproc']['astrometry']['solve_photom_scamp'],
+                                conv=self.par['postproc']['detection']['conv'],
                                 group=self.par['postproc']['astrometry']['group'],
                                 delete=self.par['postproc']['astrometry']['delete'],
                                 log=self.par['postproc']['astrometry']['log'],

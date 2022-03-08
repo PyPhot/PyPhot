@@ -38,7 +38,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
                 task='sex', detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
                 astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
                 position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
-                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
+                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT', conv='sex',
                 group=True, skip_swarp_align=False, scamp_second_pass=False, solve_photom_scamp=False,
                 delete=False, log=True, verbose=True):
 
@@ -116,7 +116,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
 
     ## step one: extract catalogs from given images
     # configuration for SExtractor run
-    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
+    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_TYPE": "FITS_LDAC",
                   "DETECT_THRESH": detect_thresh,
                   "ANALYSIS_THRESH": analysis_thresh,
                   "DETECT_MINAREA": detect_minarea}
@@ -128,7 +128,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
         msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
     sex.run_sex(sci_fits_list_resample, flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample,
                 n_process=n_process, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-                defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=delete, log=log, verbose=verbose)
+                defaultconfig='pyphot', conv=conv, nnw=None, dual=False, delete=delete, log=log, verbose=verbose)
 
     ## step two: scamp
     # configuration for the scamp run
@@ -228,7 +228,7 @@ def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_proces
         msgs.info('Running SExtractor on the resampled images.')
     sex.run_sex(sci_fits_list_resample, flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample,
                 n_process=n_process, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-                defaultconfig='pyphot', conv='sex', nnw=None, dual=False,
+                defaultconfig='pyphot', conv=conv, nnw=None, dual=False,
                 delete=delete, log=log, verbose=verbose)
 
     return sci_fits_list_resample, wht_fits_list_resample, flag_fits_list_resample, cat_fits_list_resample
