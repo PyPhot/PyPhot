@@ -624,7 +624,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
         wcs_info = wcs.WCS(header)
         if effective_gain is None:
             try:
-                effective_gain = header['EXPTIME']
+                effective_gain = header['GAIN']
             except:
                 effective_gain = 1.0
 

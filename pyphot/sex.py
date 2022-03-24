@@ -125,6 +125,10 @@ def get_conv(conv=None, workdir='./', outroot='pyphot', verbose=True):
         os.system("cp " + os.path.join(config_dir,"sex.conv") + ' ' + os.path.join(workdir,outroot+"_conv.sex"))
         if verbose:
             msgs.info("conv.sex using 3x3 ``all-ground'' convolution mask with FWHM = 2 pixels")
+    elif conv == "sex552":
+        os.system("cp " + os.path.join(config_dir, "gauss_2.0_5x5.conv") + ' ' + os.path.join(workdir, outroot + "_conv.sex"))
+        if verbose:
+            msgs.info("conv.sex using 5x5 convolution mask of a gaussian PSF with FWHM = 2.0 pixels")
     elif conv == "sex995":
         os.system("cp " + os.path.join(config_dir, "sex995.conv") + ' ' + os.path.join(workdir, outroot+"_conv.sex"))
         if verbose:
