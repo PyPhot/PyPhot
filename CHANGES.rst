@@ -1,4 +1,13 @@
-0.4.0dev (2022-02-21)
+0.5.0dev (2022-05-24)
+----------------
+- Add variance map which includes photon noise
+- Change weight map from 1/BKG to 1/(FLAG*SKYCOUNTS)
+- Change ccdproc to detproc and add new ImageProc class
+- Add Astrometry class
+- Support external reference catalog for scamp (with datalab requirement if use)
+- Simplify pyphot.py
+
+0.4.0 (2022-02-21)
 ----------------
 - Major development for Keck LRIS
 - Support detectors with multiple amplifiers

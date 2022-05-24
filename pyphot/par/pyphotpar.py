@@ -284,10 +284,10 @@ class ProcessImagesPar(ParSet):
         descr['satpix'] = 'Handling of saturated pixels.  Options are: {0}'.format(
                                        ', '.join(options['satpix']))
 
-        # CCD process parameters
+        # Detector process parameters
         defaults['mask_proc'] = True
         dtypes['mask_proc'] = bool
-        descr['mask_proc'] = 'Mask bad pixels identified from CCD Master frames'
+        descr['mask_proc'] = 'Mask bad pixels identified from detector processing'
 
         defaults['window_size'] = (51,51)
         dtypes['window_size'] = [tuple, list]
@@ -431,7 +431,7 @@ class ProcessImagesPar(ParSet):
         dtypes['back_rms_type'] = str
         descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
-        defaults['back_size'] = (100,100)
+        defaults['back_size'] = (256,256)
         dtypes['back_size'] = [tuple, list, int, float]
         descr['back_size'] = 'Box size for background estimation'
 
@@ -612,9 +612,11 @@ class AstrometricPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
+    def __init__(self, skip=None, mosaic=None, scamp_second_pass=None, detect_thresh=None, analysis_thresh=None, detect_minarea=None,
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
-                 astref_catalog=None, astref_band=None, astrefmag_limits=None, weight_type=None, solve_photom_scamp=None,
+                 astref_catalog=None, astref_band=None, astrefmag_limits=None,
+                 astrefcat_name=None, astrefcent_keys=None, astreferr_keys=None, astrefmag_key=None, astrefmagerr_key=None,
+                 weight_type=None, solve_photom_scamp=None,
                  posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None, group=None,
                  delete=None, log=None):
 
@@ -633,6 +635,10 @@ class AstrometricPar(ParSet):
         defaults['skip'] = False
         dtypes['skip'] = bool
         descr['skip'] = 'Skip the astrometry for individual detector image?'
+
+        defaults['mosaic'] = False
+        dtypes['mosaic'] = bool
+        descr['mosaic'] = 'Mosaicing multiple detectors to a MEF fits before running scamp?'
 
         defaults['skip_swarp_align'] = False
         dtypes['skip_swarp_align'] = bool
@@ -705,6 +711,34 @@ class AstrometricPar(ParSet):
         dtypes['astrefmag_limits'] = [tuple, list]
         descr['astrefmag_limits'] = 'Default background value in MANUAL'
 
+
+        defaults['astrefcat_name'] = 'NONE'
+        dtypes['astrefcat_name'] = str
+        descr['astrefcat_name'] = 'File names of local astrometric reference catalogues ' \
+                                  '(active if ASTREF CATALOG is set to FILE), through which SCAMP ' \
+                                  'will browse to find astrometric reference stars.'
+
+        defaults['astrefcent_keys'] = 'RA, DEC'
+        dtypes['astref_band'] = [str, list]
+        descr['astref_band'] = 'Names of the columns, in the local astrometric reference catalogue(s), ' \
+                               'that contain the centroid coordinates in degrees. Active only if ASTREF CATALOG is set to FILE.'
+
+        defaults['astreferr_keys'] = 'RA_ERR, DEC_ERR, THETA_ERR'
+        dtypes['astreferr_keys'] = [str, list]
+        descr['astreferr_keys'] = 'Names of the columns, in the local astrometric reference catalogue(s), ' \
+                                  'that contain the major and minor axes and position angle of the error ' \
+                                  'ellipses. Active only if ASTREF CATALOG is set to FILE.'
+
+        defaults['astrefmag_key'] = 'MAG'
+        dtypes['astrefmag_key'] = str
+        descr['astrefmag_key'] = 'Name of the column, in the local astrometric reference catalogue(s), ' \
+                                 'that contains the catalogue magnitudes. Active only if ASTREF CATALOG is set to FILE.'
+
+        defaults['astrefmagerr_key'] = 'MAG_ERR'
+        dtypes['astrefmagerr_key'] = str
+        descr['astrefmagerr_key'] = 'Name of the optional column, in the local astrometric reference catalogue(s), ' \
+                                    'that contains the catalogue magnitude uncertainties. Active only if ASTREF CATALOG is set to FILE.'
+
         defaults['solve_photom_scamp'] = False
         dtypes['solve_photom_scamp'] = bool
         descr['solve_photom_scamp'] = 'SOLVE_PHOTOM with SCAMP? I would set it to False since PyPhot will calibrate individual chip'
@@ -732,8 +766,9 @@ class AstrometricPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
+        parkeys = ['skip', 'mosaic', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band', 'astrefmag_limits',
+                   'astrefcat_name', 'astrefcent_keys', 'astreferr_keys', 'astrefmag_key', 'astrefmagerr_key',
                    'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'group', 'delete', 'log']
 
@@ -774,7 +809,7 @@ class AstrometricPar(ParSet):
         """
         return ['NONE', 'FILE', 'USNO-A2','USNO-B1','GSC-2.3','TYCHO-2','UCAC-4','URAT-1','NOMAD-1','PPMX',
                 'CMC-15','2MASS', 'DENIS-3', 'SDSS-R9','SDSS-R12','IGSL','GAIA-DR1','GAIA-DR2','GAIA-EDR3',
-                'PANSTARRS-1','ALLWISE']
+                'PANSTARRS-1','ALLWISE', 'LS-DR9','DES-DR2']
 
     def validate(self):
         """
@@ -1360,7 +1395,7 @@ class ReduxPar(ParSet):
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
                  qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, skip_step_one=None,
-                 skip_step_two=None, skip_master=None, skip_ccdproc=None, skip_sciproc=None, skip_coadd=None,
+                 skip_step_two=None, skip_master=None, skip_detproc=None, skip_sciproc=None, skip_coadd=None,
                  skip_img_qa=None, skip_astrometry=None, n_process=None):
 
         # Grab the parameter names and values from the function
@@ -1419,9 +1454,9 @@ class ReduxPar(ParSet):
         dtypes['skip_master'] = bool
         descr['skip_master'] = 'Skip building all the master calibrations?'
 
-        defaults['skip_ccdproc'] = False
-        dtypes['skip_ccdproc'] = bool
-        descr['skip_ccdproc'] = 'Skip ccdproc for all science chips?'
+        defaults['skip_detproc'] = False
+        dtypes['skip_detproc'] = bool
+        descr['skip_detproc'] = 'Skip detproc for all science chips?'
 
         defaults['skip_sciproc'] = False
         dtypes['skip_sciproc'] = bool
@@ -1446,7 +1481,7 @@ class ReduxPar(ParSet):
         defaults['n_process'] = 4
         dtypes['n_process'] = int
         descr['n_process'] = 'Number of process for the parallel processing. Several core functions are paralleled.'\
-                             'Including ccdproc, sciproc, astrometric, cal_chips, and show_images'
+                             'Including detproc, sciproc, astrometric, cal_chips, and show_images'
 
         defaults['scidir'] = 'Science'
         dtypes['scidir'] = str
@@ -1482,7 +1517,7 @@ class ReduxPar(ParSet):
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
                     'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two',
-                    'skip_master','skip_ccdproc','skip_sciproc','skip_astrometry', 'skip_coadd', 'skip_img_qa',
+                    'skip_master','skip_detproc','skip_sciproc','skip_astrometry', 'skip_coadd', 'skip_img_qa',
                     'n_process']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
