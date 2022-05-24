@@ -1100,9 +1100,9 @@ class Astrometry():
         detect_minarea = self.par['postproc']['astrometry']['detect_minarea']
         # Load parameters for Scamp
         self.astref_catalog = self.par['postproc']['astrometry']['astref_catalog']
+        self.astrefmag_limits = self.par['postproc']['astrometry']['astrefmag_limits']
         crossid_radius = self.par['postproc']['astrometry']['crossid_radius']
         astref_band = self.par['postproc']['astrometry']['astref_band']
-        astrefmag_limits = self.par['postproc']['astrometry']['astrefmag_limits']
         position_maxerr = self.par['postproc']['astrometry']['position_maxerr']
         pixscale_maxerr = self.par['postproc']['astrometry']['pixscale_maxerr']
         posangle_maxerr = self.par['postproc']['astrometry']['posangle_maxerr']
@@ -1127,8 +1127,8 @@ class Astrometry():
             SOLVE_PHOTOM = 'Y'
         else:
             SOLVE_PHOTOM = 'N'
-        if astrefmag_limits is not None:
-            ASTREFMAG_LIMITS = '{:},{:}'.format(astrefmag_limits[0], astrefmag_limits[1])
+        if self.astrefmag_limits is not None:
+            ASTREFMAG_LIMITS = '{:},{:}'.format(self.astrefmag_limits[0], self.astrefmag_limits[1])
         else:
             ASTREFMAG_LIMITS = '-99.0,99.0'
 
@@ -1485,6 +1485,7 @@ class Astrometry():
         this_ref_cat = os.path.join(self.par['calibrations']['master_dir'],
                                     'MasterAstRefCat_{:}_{:}_ID{:03d}.fits'.format(self.astref_catalog, self.setup_id, igroup))
         ## ToDo: parameterize radius. Either use FGROUP_RADIUS parameter or add a new Par
+        # mag_min=self.astrefmag_limits[0], mag_max=self.astrefmag_limits[1],
         tbl = query.get_tbl_for_scamp(this_ref_cat, ra, dec, radius=0.1,
                                       catalog=self.astref_catalog, reuse_master=self.reuse_masters)
 
