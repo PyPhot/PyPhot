@@ -39,6 +39,7 @@ def query_datalab(ra, dec, radius=0.1, catalog='Legacy', data_release='ls_dr9'):
         data['z_MAG'] = 22.5-2.5*np.log10(result['flux_z'])
         data['z_MAG_ERR'] = 2.5/np.log(10)*(np.sqrt(1/result['flux_ivar_z']))/result['flux_z']
         data['DIST'] = np.sqrt(((result['ra']-ra)*np.cos(dec/180.*np.pi))**2 + (result['dec']-dec)**2)
+        data['maskbits'] = result['maskbits']
         sel = data['DIST']<radius
         final = data[sel]
 
@@ -222,7 +223,16 @@ def query_standard(ra, dec, radius=0.1, catalog='Panstarrs', data_release='dr2')
                 data['DIST'] = result['_r'] # in units of degree
         elif catalog == 'Legacy':  # Legacy data from datalab
             msgs.info('Selecting pointing sources from Legacy survey {:}.'.format(data_release))
-            data = result
+            # Reject objects in masks.
+            # BRIGHT BAILOUT GALAXY CLUSTER (1, 10, 12, 13) bits not set.
+            maskbits = result['maskbits'].data
+            sel  = result['PRIMARY'].data & result['POINT_SOURCE'].data
+            sel &= result['g_MAG_ERR']<5.0/1.0857
+            sel &= result['r_MAG_ERR']<5.0/1.0857
+            sel &= result['z_MAG_ERR']<5.0/1.0857
+            for bit in [1, 10, 12, 13]:
+                sel &= ((maskbits & 2 ** bit) == 0)
+            data = result[sel]
         else:
             msgs.error('TBD')
         ## make the selection

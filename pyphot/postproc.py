@@ -1424,11 +1424,11 @@ class Astrometry():
         ## Step three: run swarp to resample sciproc images
         # resample science image
         msgs.info('Running Swarp to resample science images.')
-        #swarp.run_swarp(self.sci_proc_list, config=self.swarpconfig, workdir=self.science_path, defaultconfig='pyphot',
-        #                n_process=self.n_process, delete=self.delete, log=self.log, verbose=self.verbose)
         swarp.run_swarp(self.sci_proc_list, config=self.swarpconfig, workdir=self.science_path, defaultconfig='pyphot',
-                        n_process=self.n_process, delete=self.delete, log=self.log, verbose=self.verbose,
-                        coadddir='./', coaddroot='test_coadd')
+                        n_process=self.n_process, delete=self.delete, log=self.log, verbose=self.verbose)
+        #swarp.run_swarp(self.sci_proc_list, config=self.swarpconfig, workdir=self.science_path, defaultconfig='pyphot',
+        #                n_process=self.n_process, delete=self.delete, log=self.log, verbose=self.verbose,
+        #                coadddir='./', coaddroot='test_coadd')
 
         # resample flag image
         msgs.info('Running Swarp to resample flag images.')
