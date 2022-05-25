@@ -87,17 +87,22 @@ def scampone(catname, config=None, workdir='./', QAdir='./', defaultconfig='pyph
     ## Generate the configuration file
     configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir, outroot=catroot, verbose=verbose)
 
+    if config is not None:
+        this_config = config.copy()  # need to copy this since the config would be possibly changed!
+    else:
+        this_config = None
+
     ## append your configuration
-    if 'CHECKPLOT_NAME' in config:
-        checkplot_name = config['CHECKPLOT_NAME'].split(',')
+    if 'CHECKPLOT_NAME' in this_config:
+        checkplot_name = this_config['CHECKPLOT_NAME'].split(',')
         checkplot_name_new = []
         for iname in checkplot_name:
             tmp = os.path.join(QAdir,'{:}_{:}'.format(os.path.split(catroot)[1],iname))
             checkplot_name_new.append(tmp.replace('.','_').replace('_cat',''))
         separator = ','
-        config['CHECKPLOT_NAME'] = separator.join(checkplot_name_new)
+        this_config['CHECKPLOT_NAME'] = separator.join(checkplot_name_new)
 
-    configapp = get_config(config=config)
+    configapp = get_config(config=this_config)
 
     comd = ["scamp"] + [input] + configcomd + configapp
 
@@ -132,9 +137,5 @@ def run_scamp(catlist, config=None, workdir='./', QAdir='./', defaultconfig='pyp
         # ToDo: parallel the following
         for catname in catlist:
             msgs.info('Refine the astrometric solution with SCAMP one by one.')
-            if config is not None:
-                this_config = config.copy() # need to copy this since the config would be possibly changed in scampone!
-            else:
-                this_config = None
-            scampone(catname, config=this_config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig,
+            scampone(catname, config=config, workdir=workdir, QAdir=QAdir, defaultconfig=defaultconfig,
                      delete=delete, log=log, group=False, verbose=verbose)

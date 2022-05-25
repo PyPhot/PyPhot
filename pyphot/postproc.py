@@ -1390,7 +1390,6 @@ class Astrometry():
         ## Step two: run scamp on extracted catalog
         #ToDo: The scamp part need to be grouped if use SCAMP non-supported reference catalogs.
         groups = np.unique(self.coadd_ids.data)
-        N_group = len(groups)
         for igroup in groups:
             this_group = self.proc_coadd_ids == igroup
             this_cat_proc_list = np.array(self.cat_proc_list)[this_group].tolist()
@@ -1486,7 +1485,7 @@ class Astrometry():
                                     'MasterAstRefCat_{:}_{:}_ID{:03d}.fits'.format(self.astref_catalog, self.setup_id, igroup))
         ## ToDo: parameterize radius. Either use FGROUP_RADIUS parameter or add a new Par
         # mag_min=self.astrefmag_limits[0], mag_max=self.astrefmag_limits[1],
-        tbl = query.get_tbl_for_scamp(this_ref_cat, ra, dec, radius=0.1,
+        tbl = query.get_tbl_for_scamp(this_ref_cat, ra, dec, radius=0.5,
                                       catalog=self.astref_catalog, reuse_master=self.reuse_masters)
 
         return this_ref_cat

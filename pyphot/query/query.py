@@ -20,6 +20,7 @@ def query_datalab(ra, dec, radius=0.1, catalog='Legacy', data_release='ls_dr9'):
     delta = radius*np.sqrt(2) # I query a box region first and the select according to distance.
     ra1, ra2, dec1, dec2 = ra-delta, ra+delta, dec-delta, dec+delta
     if catalog=='Legacy':
+        msgs.info('Using astro-datalab for downloading Legacy Imaging Survey catalog.')
         result = qc.query(sql='SELECT * from {:}.tractor where '
                               'ra>{:} and ra<{:} and '
                               'dec>{:} and dec<{:}'.format(data_release, ra1, ra2, dec1, dec2), fmt='table')
@@ -61,7 +62,7 @@ def query_region(ra, dec, radius=0.1, catalog='Panstarrs', data_release='dr2', t
 
     datalab_cat = {'Legacy':'Legacy'}
 
-    msgs.info('Loading catalogs from {:}'.format(catalog))
+    msgs.info('Loading catalogs from {:} survey'.format(catalog))
     if catalog in mast_cat.keys():
         ## MAST has a query limit of 500,000 rows. See https://mast.stsci.edu/api/v0/
         result = Catalogs.query_region(SkyCoord(ra=round(ra,6), dec=round(dec,6), unit=(u.deg, u.deg), frame='icrs'), radius=radius*u.deg,
