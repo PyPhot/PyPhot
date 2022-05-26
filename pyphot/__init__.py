@@ -9,7 +9,7 @@ that can be imported by submodules.
 import warnings
 
 # Set version
-__version__ = '0.4.0dev'
+__version__ = '0.5.0dev'
 
 # Import and instantiate the logger
 from pyphot import pypmsgs
