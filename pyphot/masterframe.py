@@ -120,7 +120,6 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
 
     for ii, ifile in enumerate(flatfiles):
 
-        # ToDo: change data unit to e-
         if camera is not None:
             detector_par, raw, header, exptime, rawdatasec_img, oscansec_img = camera.get_rawimage(ifile, det)
             array = procimg.trim_frame(raw, rawdatasec_img < 0.1)

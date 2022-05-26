@@ -1177,7 +1177,7 @@ class PostProc():
             this_photref_cat = np.array(self.master_phoref_cats)[this_group].tolist()[0]
 
             # run it
-            coadd_file, coadd_wht_file, coadd_flag_file = coadd(this_sci_list, this_flag_list, this_ivar_list, this_coadd_root,
+            coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file = coadd(this_sci_list, this_flag_list, this_ivar_list, this_coadd_root,
                                                         self.pixscale, self.science_path, self.coadd_path,
                                                         weight_type=self.par['postproc']['coadd']['weight_type'],
                                                         rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
