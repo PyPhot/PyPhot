@@ -7,6 +7,7 @@ The Python Imaging and Photometry Reduction Pipeline.
 * LBT/LBC
 * Magellan/IMACS
 * MMT/MMIRS
+* Keck/LRIS
 * Keck/NIRES Acquisition Camera
 
 
