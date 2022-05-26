@@ -183,9 +183,6 @@ class CFHTWIRCAMCamera(camera.Camera):
         par['postproc']['astrometry']['delete'] = True
         par['postproc']['astrometry']['log'] = False
 
-        # Photometry
-        par['postproc']['photometry']['cal_chip_zpt'] = True
-
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['standardframe']['exprng'] = [None, 6]
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -212,7 +209,6 @@ class CFHTWIRCAMCamera(camera.Camera):
             adjusted for configuration specific parameter values.
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
-        par['postproc']['photometry']['cal_zpt'] = True
 
         # https://www.cfht.hawaii.edu/Instruments/Imaging/WIRCam/quickinformation.html
         if self.get_meta_value(scifile, 'filter') == 'Y':

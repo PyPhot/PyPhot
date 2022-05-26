@@ -9,10 +9,30 @@ The Python Imaging and Photometry Reduction Pipeline.
 * MMT/MMIRS
 * Keck/NIRES Acquisition Camera
 
+# Data Processing Steps
+* Build master calibrations
+  
+ - Bias, Dark, Pixel Flat, Illuminating Flat
+
+* Image processing
+  
+ - Removing detector effects, including gain correction, bias subtraction, dark subtraction, and flat fielding
+
+ - Supersky flattening, fringe subtraction, and background subtraction
+   
+* Post processing
+
+ - Astrometric calibration
+
+ - Calibrating zeropoint for individual detector chips
+
+ - Coadding images target by target
+
+ - Extracting photometric catalogs 
 
 # Software Requirements
 #### We strongly encourage you to install the following with conda
-* python
+* Python
 * SExtractor
 * SWarp
 * Scamp

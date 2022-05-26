@@ -86,7 +86,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
 
     # prepare output file names
     sci_fits_file = rootname.replace('.fits','_det{:02d}_proc.fits'.format(det))
-    var_fits_file = rootname.replace('.fits','_det{:02d}_proc.var.fits'.format(det))
+    ivar_fits_file = rootname.replace('.fits','_det{:02d}_proc.ivar.fits'.format(det))
     wht_fits_file = rootname.replace('.fits','_det{:02d}_proc.weight.fits'.format(det))
     flag_fits_file = rootname.replace('.fits','_det{:02d}_detmask.fits'.format(det))
 
@@ -123,7 +123,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             header['UNITS'] = ('ADU', 'Data units')
 
         # Use flat and sky background to generate a weight map
-        msgs.info('Generating weight map')
+        msgs.info('Generating weight map using flat and median sky background')
         bpm_for_wht = bpm | bpm_sat | bpm_zero | bpm_proc
         starmask = mask_bright_star(sci_image, mask=bpm_for_wht, brightstar_nsigma=3, back_nsigma=3,
                                     back_maxiters=5, method='sextractor', task=sextractor_task,
@@ -132,28 +132,26 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
                                              min_pix=int(np.size(sci_image)*0.2))
         wht_image = utils.inverse(np.zeros_like(sci_image) + med_sky)
 
-        # Variance map
-        msgs.info('Generating variance map')
+        # Inverse variance map
+        msgs.info('Generating inverse variance map')
         numamplifiers = detector_par['numamplifiers']
-        var_image = np.zeros_like(raw_image)
+        ivar_image = np.zeros_like(raw_image)
         for iamp in range(numamplifiers):
             this_amp = datasec_img == iamp + 1
-            var_image[this_amp] = sci_image[this_amp] + detector_par['ronoise'][iamp]**2
+            ivar_image[this_amp] = utils.inverse(sci_image[this_amp] + detector_par['ronoise'][iamp]**2)
 
         # Detector Processing
         if masterbiasimg is not None:
-            sci_image -= masterbiasimg
-            #var_image += masterbiasimg # should I assume masterbiasimg has zero error?
+            sci_image -= masterbiasimg # should I assume masterbiasimg has zero error?
         if masterdarkimg is not None:
-            sci_image -= masterdarkimg*exptime
-            #var_image += masterdarkimg*exptime # should I assume masterdarkimg has zero error?
+            sci_image -= masterdarkimg*exptime # should I assume masterdarkimg has zero error?
         if masterpixflatimg is not None:
             sci_image *= utils.inverse(masterpixflatimg)
-            var_image *= utils.inverse(masterpixflatimg**2)
+            ivar_image *= masterpixflatimg**2
             wht_image *= masterpixflatimg ** 2
         if masterillumflatimg is not None:
             sci_image *= utils.inverse(masterillumflatimg)
-            var_image *= utils.inverse(masterillumflatimg**2)
+            ivar_image *= masterillumflatimg**2
             wht_image *= masterillumflatimg ** 2
 
         '''
@@ -256,9 +254,9 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
         # save image
         io.save_fits(sci_fits_file, sci_image, header, 'SCI', overwrite=True)
         msgs.info('Science image {:} saved'.format(sci_fits_file))
-        # save variance map
-        io.save_fits(var_fits_file, var_image, header, 'VAR', overwrite=True)
-        msgs.info('Variance image {:} saved'.format(var_fits_file))
+        # save inverse variance map
+        io.save_fits(ivar_fits_file, ivar_image, header, 'IVAR', overwrite=True)
+        msgs.info('Inverse variance image {:} saved'.format(ivar_fits_file))
         # save weight map
         io.save_fits(wht_fits_file, wht_image, header, 'WEIGHT', overwrite=True)
         msgs.info('Weight image {:} saved'.format(wht_fits_file))
@@ -373,7 +371,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
 
     # prepare output names
     sci_fits_file = scifile.replace('_proc.fits','_sci.fits')
-    var_fits_file = scifile.replace('_proc.fits','_sci.var.fits')
+    ivar_fits_file = scifile.replace('_proc.fits','_sci.ivar.fits')
     wht_fits_file = scifile.replace('_proc.fits','_sci.weight.fits')
     flag_fits_file = scifile.replace('_proc.fits','_flag.fits')
 
@@ -382,7 +380,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
     else:
         msgs.info('Processing {:}'.format(scifile))
         header, data, _ = io.load_fits(scifile)
-        _, var_image, _ = io.load_fits(scifile.replace('_proc.fits','_proc.var.fits'))
+        _, ivar_image, _ = io.load_fits(scifile.replace('_proc.fits','_proc.ivar.fits'))
         _, wht_image, _ = io.load_fits(scifile.replace('_proc.fits','_proc.weight.fits'))
         _, flag_image, _ = io.load_fits(flagfile)
         bpm = flag_image>0
@@ -393,14 +391,14 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         ## super flattening your images
         if mastersuperskyimg is not None:
             data *= utils.inverse(mastersuperskyimg)
-            var_image *= utils.inverse(mastersuperskyimg**2)
+            ivar_image *= mastersuperskyimg**2
             wht_image *= mastersuperskyimg**2
 
         # do the extinction correction.
         if airmass is not None:
             mag_ext = coeff_airmass * (airmass-1)
             data *= 10**(0.4*mag_ext)
-            var_image *= 10**(0.8*mag_ext)
+            ivar_image *= 10**(-0.8*mag_ext)
             wht_image *= 10**(-0.8*mag_ext)
 
         # mask bright stars before estimating the background
@@ -510,8 +508,8 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         # save images
         io.save_fits(sci_fits_file, sci_image, header, 'SCI', overwrite=True)
         msgs.info('Science image {:} saved'.format(sci_fits_file))
-        io.save_fits(var_fits_file, var_image, header, 'VAR', overwrite=True)
-        msgs.info('Variance image {:} saved'.format(var_fits_file))
+        io.save_fits(ivar_fits_file, ivar_image, header, 'IVAR', overwrite=True)
+        msgs.info('Inverse variance image {:} saved'.format(ivar_fits_file))
         io.save_fits(wht_fits_file, wht_image, header, 'WEIGHT', overwrite=True)
         msgs.info('Weight image {:} saved'.format(wht_fits_file))
         io.save_fits(flag_fits_file, flag_image_new.astype('int32'), header, 'FLAG', overwrite=True)
@@ -542,6 +540,22 @@ def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=
             mask_negative_star=mask_negative_star, replace=replace, verbose=verbose)
 
         done_queue.put((sci_fits_file, wht_fits_file, flag_fits_file))
+
+def defringing(sci_fits_list, masterfringeimg):
+
+    ## ToDo: matching the amplitude of friging rather than scale with exposure time.
+    for i in range(len(sci_fits_list)):
+        #ToDo: parallel this
+        header, data, _ = io.load_fits(sci_fits_list[i])
+        mask_zero = data == 0.
+        if 'DEFRING' in header.keys():
+            msgs.info('The De-fringed image {:} exists, skipping...'.format(sci_fits_list[i]))
+        else:
+            data -= masterfringeimg * header['EXPTIME']
+            data[mask_zero] = 0
+            header['DEFRING'] = ('TRUE', 'De-Fringing is done?')
+            io.save_fits(sci_fits_list[i], data, header, 'ScienceImage', overwrite=True)
+            msgs.info('De-fringed science image {:} saved'.format(sci_fits_list[i]))
 
 def trim_frame(frame, mask):
     """
@@ -822,5 +836,5 @@ class ImageProc():
             sci_fits_file = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(self.det))
             sci_fits_list.append(sci_fits_file)
 
-        postproc.defringing(sci_fits_list, self.masterfringeimg)
+        defringing(sci_fits_list, self.masterfringeimg)
 

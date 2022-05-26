@@ -374,7 +374,6 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             adjusted for configuration specific parameter values.
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
-        par['postproc']['photometry']['cal_zpt'] = True
 
         if self.get_meta_value(scifile, 'filter') == 'NB919':
             # There is no need to subtract fringing for NB919.

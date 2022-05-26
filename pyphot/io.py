@@ -109,8 +109,8 @@ def build_mef(rootname, detectors, img_type='SCI', returnname_only=False):
 
     if img_type == 'SCI':
         app = 'sci.fits'
-    elif img_type == 'VAR':
-        app = 'sci.var.fits'
+    elif img_type == 'IVAR':
+        app = 'sci.ivar.fits'
     elif img_type == 'WEIGHT':
         app = 'sci.weight.fits'
     elif img_type == 'FLAG':
@@ -136,13 +136,13 @@ def build_mef_old(rootname, detectors, type='SCI'):
 
     primary_hdu = fits.PrimaryHDU(header=initialize_header(hdr=None, primary=True))
     hdul_sci = fits.HDUList([primary_hdu])
-    hdul_var = fits.HDUList([primary_hdu])
+    hdul_ivar = fits.HDUList([primary_hdu])
     hdul_wht = fits.HDUList([primary_hdu])
     hdul_flag = fits.HDUList([primary_hdu])
 
     for idet in detectors:
         this_sci_file = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(idet))
-        this_var_file = rootname.replace('.fits', '_det{:02d}_sci.var.fits'.format(idet))
+        this_ivar_file = rootname.replace('.fits', '_det{:02d}_sci.ivar.fits'.format(idet))
         this_wht_file = rootname.replace('.fits', '_det{:02d}_sci.weight.fits'.format(idet))
         this_flag_file = rootname.replace('.fits', '_det{:02d}_flag.fits'.format(idet))
 
@@ -150,9 +150,9 @@ def build_mef_old(rootname, detectors, type='SCI'):
         this_hdu_sci = fits.ImageHDU(this_sci_data, header=this_sci_hdr, name='SCI-DET{:02d}'.format(idet))
         hdul_sci.append(this_hdu_sci)
 
-        this_var_hdr, this_var_data, _ = io.load_fits(this_var_file)
-        this_hdu_var = fits.ImageHDU(this_var_data, header=this_var_hdr, name='VAR-DET{:02d}'.format(idet))
-        hdul_var.append(this_hdu_var)
+        this_ivar_hdr, this_ivar_data, _ = io.load_fits(this_ivar_file)
+        this_hdu_ivar = fits.ImageHDU(this_ivar_data, header=this_ivar_hdr, name='IVAR-DET{:02d}'.format(idet))
+        hdul_ivar.append(this_hdu_ivar)
 
         this_wht_hdr, this_wht_data, _ = io.load_fits(this_wht_file)
         this_hdu_wht = fits.ImageHDU(this_wht_data, header=this_wht_hdr, name='WHT-DET{:02d}'.format(idet))
@@ -165,9 +165,9 @@ def build_mef_old(rootname, detectors, type='SCI'):
     out_sci_name = rootname.replace('.fits', '_mef_sci.fits')
     hdul_sci[0].header['IMGTYP'] = 'SCI'
     hdul_sci.writeto(out_sci_name, overwrite=True)
-    out_var_name = rootname.replace('.fits', '_mef_sci.var.fits')
-    hdul_var[0].header['IMGTYP'] = 'VAR'
-    hdul_var.writeto(out_var_name, overwrite=True)
+    out_ivar_name = rootname.replace('.fits', '_mef_sci.ivar.fits')
+    hdul_ivar[0].header['IMGTYP'] = 'IVAR'
+    hdul_ivar.writeto(out_ivar_name, overwrite=True)
     out_wht_name = rootname.replace('.fits', '_mef_sci.weight.fits')
     hdul_sci[0].header['IMGTYP'] = 'WEIGHT'
     hdul_wht.writeto(out_wht_name, overwrite=True)

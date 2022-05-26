@@ -349,8 +349,6 @@ class LBTLBCBCamera(LBTLBCCamera):
             adjusted for configuration specific parameter values.
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
-        par['postproc']['photometry']['cal_zpt'] = True
-
 
         # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
         # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
@@ -597,7 +595,6 @@ class LBTLBCRCamera(LBTLBCCamera):
             adjusted for configuration specific parameter values.
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
-        par['postproc']['photometry']['cal_zpt'] = True
 
         # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
         # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s

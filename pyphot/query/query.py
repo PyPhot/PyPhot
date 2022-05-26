@@ -244,6 +244,7 @@ def query_standard(ra, dec, radius=0.1, catalog='Panstarrs', data_release='dr2')
         msgs.warn('Failed to query catalog from {:}'.format(catalog))
         return None
 
+'''
 def get_tbl_for_scamp(outname, ra, dec, radius=0.1, catalog='LS-DR9', reuse_master=True):
 
     if os.path.exists(outname) and reuse_master:
@@ -258,3 +259,4 @@ def get_tbl_for_scamp(outname, ra, dec, radius=0.1, catalog='LS-DR9', reuse_mast
         hdulist.writeto(outname, overwrite=True)
 
     return tbl
+'''

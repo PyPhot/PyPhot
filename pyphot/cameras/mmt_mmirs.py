@@ -156,7 +156,6 @@ class MMTMMIRSCamera(camera.Camera):
         par['postproc']['astrometry']['log'] = True
 
         # Photometry
-        par['postproc']['photometry']['cal_chip_zpt'] = True
         par['postproc']['photometry']['external_flag'] = False
         par['postproc']['photometry']['nstar_min'] = 5
 
@@ -180,7 +179,6 @@ class MMTMMIRSCamera(camera.Camera):
             adjusted for configuration specific parameter values.
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
-        par['postproc']['photometry']['cal_zpt'] = True
 
         if self.get_meta_value(scifile, 'filter') == 'J':
             par['postproc']['photometry']['photref_catalog'] = 'TwoMass'

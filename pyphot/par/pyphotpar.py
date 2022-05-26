@@ -828,7 +828,7 @@ class CoaddPar(ParSet):
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None,
                  clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
                  back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None, resampling_type=None,
-                 pixscale=None, delete=None, log=None):
+                 pixscale=None, cal_zpt=None, delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -906,6 +906,10 @@ class CoaddPar(ParSet):
         dtypes['pixscale'] = [int, float]
         descr['pixscale'] = 'pixel scale for the final coadd image'
 
+        defaults['cal_zpt'] = True
+        dtypes['cal_zpt'] = bool
+        descr['cal_zpt'] = 'Calibrating the zeropoint for coadded image'
+
         defaults['delete'] = False
         dtypes['delete'] = bool
         descr['delete'] = 'Delete the configuration files for SWARP?'
@@ -927,7 +931,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh','resampling_type', 'pixscale', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'pixscale', 'cal_zpt', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1062,7 +1066,7 @@ class DetectionPar(ParSet):
         descr['contrast'] = ' Minimum contrast parameter for deblending'
 
         ## parameters used by SExtractor only
-        defaults['check_type'] = 'BACKGROUND_RMS'
+        defaults['check_type'] = 'OBJECTS'
         options['check_type'] = DetectionPar.valid_check_type()
         dtypes['check_type'] = str
         descr['check_type'] = 'Background Options are: {0}'.format(', '.join(options['check_type']))
@@ -1200,7 +1204,7 @@ class PhotometryPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, cal_zpt=None, cal_chip_zpt=None, photref_catalog=None, zpt=None, external_flag=None,
+    def __init__(self, skip=None, photref_catalog=None, zpt=None, external_flag=None,
                  primary=None, secondary=None, coefficients=None, coeff_airmass=None, nstar_min=None):
 
         # Grab the parameter names and values from the function
@@ -1218,14 +1222,6 @@ class PhotometryPar(ParSet):
         defaults['skip'] = False
         dtypes['skip'] = bool
         descr['skip'] = 'Skip detecting sources?'
-
-        defaults['cal_zpt'] = True
-        dtypes['cal_zpt'] = bool
-        descr['cal_zpt'] = 'Calibrating the zeropoint before photometry'
-
-        defaults['cal_chip_zpt'] = True
-        dtypes['cal_chip_zpt'] = bool
-        descr['cal_chip_zpt'] = 'Calibrating the zeropoint for individual chips'
 
         defaults['external_flag'] = True
         dtypes['external_flag'] = bool
@@ -1272,7 +1268,7 @@ class PhotometryPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'cal_zpt', 'cal_chip_zpt', 'photref_catalog', 'zpt', 'external_flag', 'primary', 'secondary',
+        parkeys = ['skip', 'photref_catalog', 'zpt', 'external_flag', 'primary', 'secondary',
                    'coefficients', 'coeff_airmass', 'nstar_min']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -1394,9 +1390,10 @@ class ReduxPar(ParSet):
     see :ref:`pyphotpar`.
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
-                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None, skip_step_one=None,
-                 skip_step_two=None, skip_master=None, skip_detproc=None, skip_sciproc=None, skip_coadd=None,
-                 skip_img_qa=None, skip_astrometry=None, n_process=None):
+                 qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None,
+                 skip_master=None, skip_detproc=None, skip_sciproc=None, skip_astrometry=None,
+                 skip_chipcal=None, skip_img_qa=None, skip_coadd=None, skip_detection=None,
+                 n_process=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -1446,10 +1443,6 @@ class ReduxPar(ParSet):
         dtypes['ignore_bad_headers'] = bool
         descr['ignore_bad_headers'] = 'Ignore bad headers (NOT recommended unless you know it is safe).'
 
-        defaults['skip_step_one'] = False
-        dtypes['skip_step_one'] = bool
-        descr['skip_step_one'] = 'Skip all the calibrations and individual chip processing?'
-
         defaults['skip_master'] = False
         dtypes['skip_master'] = bool
         descr['skip_master'] = 'Skip building all the master calibrations?'
@@ -1466,13 +1459,17 @@ class ReduxPar(ParSet):
         dtypes['skip_astrometry'] = bool
         descr['skip_astrometry'] = 'Skip astrometry for all science chips?'
 
-        defaults['skip_step_two'] = False
-        dtypes['skip_step_two'] = bool
-        descr['skip_step_two'] = 'Skip all the coadding, detection and photometry?'
+        defaults['skip_chipcal'] = False
+        dtypes['skip_chipcal'] = bool
+        descr['skip_chipcal'] = 'Skip zeropoint calibrations for individual science chips?'
 
         defaults['skip_coadd'] = False
         dtypes['skip_coadd'] = bool
         descr['skip_coadd'] = 'Skip coadding and mosaiking?'
+
+        defaults['skip_detection'] = False
+        dtypes['skip_detection'] = bool
+        descr['skip_detection'] = 'Skip extracting photometric catalog from coadded images'
 
         defaults['skip_img_qa'] = False
         dtypes['skip_img_qa'] = bool
@@ -1516,9 +1513,9 @@ class ReduxPar(ParSet):
 
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
-                    'redux_path', 'ignore_bad_headers','skip_step_one','skip_step_two',
-                    'skip_master','skip_detproc','skip_sciproc','skip_astrometry', 'skip_coadd', 'skip_img_qa',
-                    'n_process']
+                    'redux_path', 'ignore_bad_headers',
+                    'skip_master','skip_detproc','skip_sciproc','skip_astrometry', 'skip_chipcal', 'skip_img_qa',
+                    'skip_coadd', 'skip_detection','n_process']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
