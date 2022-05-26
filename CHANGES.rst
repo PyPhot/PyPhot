@@ -1,4 +1,4 @@
-0.4.0dev (2022-02-21)
+0.4.0 (2022-02-21)
 ----------------
 - Major development for Keck LRIS
 - Support detectors with multiple amplifiers
