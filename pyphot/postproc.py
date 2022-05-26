@@ -13,525 +13,15 @@ from astropy import stats
 from pyphot import msgs, io, utils, caloffset
 from pyphot import sex, scamp, swarp
 from pyphot import crossmatch
-from pyphot.query import query
+from pyphot.query import query, ldac
 from pyphot.photometry import mask_bright_star, photutils_detect
 from pyphot.psf import  psf
 
 
-def defringing(sci_fits_list, masterfringeimg):
-
-    ## ToDo: matching the amplitude of friging rather than scale with exposure time.
-    for i in range(len(sci_fits_list)):
-        #ToDo: parallel this
-        header, data, _ = io.load_fits(sci_fits_list[i])
-        mask_zero = data == 0.
-        if 'DEFRING' in header.keys():
-            msgs.info('The De-fringed image {:} exists, skipping...'.format(sci_fits_list[i]))
-        else:
-            data -= masterfringeimg * header['EXPTIME']
-            data[mask_zero] = 0
-            header['DEFRING'] = ('TRUE', 'De-Fringing is done?')
-            io.save_fits(sci_fits_list[i], data, header, 'ScienceImage', overwrite=True)
-            msgs.info('De-fringed science image {:} saved'.format(sci_fits_list[i]))
-
-def astrometric(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_process=4, science_path='./', qa_path='./',
-                task='sex', detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
-                position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
-                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT', conv='sex',
-                group=True, skip_swarp_align=False, scamp_second_pass=False, solve_photom_scamp=False,
-                delete=False, log=True, verbose=True):
-
-    # This function has a better structure and faster scamp than astrometric but need to be finished.
-    n_file = len(sci_fits_list)
-    n_cpu = multiprocessing.cpu_count()
-
-    if n_process > n_cpu:
-        n_process = n_cpu
-
-    if n_process>n_file:
-        n_process = n_file
-
-    ## Prepare output list
-    sci_fits_list_resample = []
-    wht_fits_list_resample = []
-    flag_fits_list_resample = []
-    cat_fits_list_resample = []
-    for ifits in sci_fits_list:
-        sci_fits_resample = ifits.replace('.fits','.resamp.fits')
-        wht_fits_resample = ifits.replace('.fits','.resamp.weight.fits')
-        flag_fits_resample = ifits.replace('sci.fits','flag.resamp.fits')
-        cat_fits_resample = ifits.replace('.fits','.resamp_cat.fits')
-        sci_fits_list_resample.append(sci_fits_resample)
-        wht_fits_list_resample.append(wht_fits_resample)
-        flag_fits_list_resample.append(flag_fits_resample)
-        cat_fits_list_resample.append(cat_fits_resample)
-
-    ## step zero: Roate the image and format the header with swarp
-    # configuration for the swarp run
-    # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
-    # resample science image
-    swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                   "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT": 1.0,
-                   "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
-                   "RESAMPLING_TYPE": 'NEAREST',
-                   # I would always set this to NEAREST for individual exposures to avoid interpolation
-                   "HEADER_SUFFIX": "_cat.head"}
-    # configuration for swarp the flag image
-    swarpconfig_flag = swarpconfig.copy()
-    swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
-    swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
-    swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
-
-    if skip_swarp_align:
-        if verbose:
-            msgs.info('Skipping rotating the image to the nominal projection with Swarp')
-        for sci_fits_file in sci_fits_list:
-            os.system('cp {:} {:}'.format(sci_fits_file,sci_fits_file.replace('.fits', '.resamp.fits')))
-            os.system('cp {:} {:}'.format(sci_fits_file.replace('.fits', '.weight.fits'),
-                                          sci_fits_file.replace('.fits', '.resamp.weight.fits')))
-            os.system('cp {:} {:}'.format(flag_fits_file,flag_fits_file.replace('.fits', '.resamp.fits')))
-    else:
-        ## This step is basically align the image to N to the up and E to the left.
-        ## It is important if your image has a ~180 degree from the nominal orientation.
-        if verbose:
-            msgs.info('Running Swarp to rotate the science image.')
-        swarp.run_swarp(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                        n_process=n_process, delete=delete, log=log, verbose=verbose)
-        # resample flag image
-        if verbose:
-            msgs.info('Running Swarp to rotate the flag image.')
-        swarp.run_swarp(flag_fits_list, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                        n_process=n_process, delete=delete, log=False, verbose=False)
-
-        # remove useless data and change flag image type
-        for flag_fits_resample in flag_fits_list_resample:
-            par = fits.open(flag_fits_resample, memmap=False)
-            par[0].data = par[0].data.astype('int32')  # change the dtype to be int32
-            par[0].writeto(flag_fits_resample, overwrite=True)
-            del par[0].data
-            par.close()
-            gc.collect()
-            os.system('rm {:}'.format(flag_fits_resample.replace('.fits', '.weight.fits')))
-
-    ## step one: extract catalogs from given images
-    # configuration for SExtractor run
-    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_TYPE": "FITS_LDAC",
-                  "DETECT_THRESH": detect_thresh,
-                  "ANALYSIS_THRESH": analysis_thresh,
-                  "DETECT_MINAREA": detect_minarea}
-    sexparams0 = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
-                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
-                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
-                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
-    if verbose:
-        msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
-    sex.run_sex(sci_fits_list_resample, flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample,
-                n_process=n_process, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-                defaultconfig='pyphot', conv=conv, nnw=None, dual=False, delete=delete, log=log, verbose=verbose)
-
-    ## step two: scamp
-    # configuration for the scamp run
-    if solve_photom_scamp:
-        SOLVE_PHOTOM='Y'
-    else:
-        SOLVE_PHOTOM='N'
-
-    if astrefmag_limits is not None:
-        ASTREFMAG_LIMITS = '{:},{:}'.format(astrefmag_limits[0],astrefmag_limits[1])
-    else:
-        ASTREFMAG_LIMITS = '-99.0,99.0'
-
-    scampconfig = {"CROSSID_RADIUS": crossid_radius,
-                    "ASTREF_CATALOG": astref_catalog,
-                    "ASTREF_BAND": astref_band,
-                    "ASTREFMAG_LIMITS":ASTREFMAG_LIMITS,
-                    "POSITION_MAXERR": position_maxerr,
-                    "PIXSCALE_MAXERR": pixscale_maxerr,
-                    "POSANGLE_MAXERR": posangle_maxerr,
-                    "STABILITY_TYPE": stability_type,
-                    "MOSAIC_TYPE": mosaic_type,
-                    "SOLVE_PHOTOM": SOLVE_PHOTOM,
-                    "DISTORT_DEGREES":distort_degrees,
-                    "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
-                    "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
-
-    #ToDo: Seems no difference on running scamp with group or not except for the speed.
-    scamp.run_scamp(cat_fits_list_resample, config=scampconfig, workdir=science_path, QAdir=qa_path, n_process=n_process,
-                    defaultconfig='pyphot', group=group, delete=delete, log=log, verbose=verbose)
-    #ToDo: scamp_second_pass, should we run group=False first and then group=True?
-
-    ## step three: swarp
-    # configuration for the swarp run
-    swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
-    # resample science image
-    if verbose:
-        msgs.info('Running Swarp to align the science image.')
-    swarp.run_swarp(sci_fits_list_resample, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                    n_process=n_process, delete=delete, log=log, verbose=verbose)
-
-    # configuration for swarp the flag image
-    swarpconfig_flag['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
-    # copy the .head for flag images
-    for ii, icat in enumerate(cat_fits_list_resample):
-        os.system('cp {:} {:}'.format(icat.replace('.fits', '.head'),
-                                      flag_fits_list_resample[ii].replace('.fits', '_cat.head')))
-
-    # resample flag image
-    if verbose:
-        msgs.info('Running Swarp to align the flag image.')
-    swarp.run_swarp(flag_fits_list_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                    n_process=n_process, delete=delete, log=False, verbose=False)
-
-    # change flag image type and delte unnecessary files
-    for ii, sci_fits_resample in enumerate(sci_fits_list_resample):
-        flag_fits_resample = flag_fits_list_resample[ii]
-        # delete unnecessary files
-        #os.system('rm {:}'.format(flag_fits_resample.replace('.fits', '.weight.fits')))
-        #os.system('rm {:}'.format(flag_fits_list[ii].replace('.fits', '_cat.head')))
-        #os.system('rm {:}'.format(ifits.replace('.fits', '_cat.fits')))
-        #os.system('rm {:}'.format(ifits.replace('.fits', '_cat.head')))
-
-        # Update fluxscale
-        if solve_photom_scamp:
-            if verbose:
-                msgs.info('The FLXSCALE was solved with scamp.')
-        else:
-            if verbose:
-                msgs.info('Solving the FLXSCALE for {:} with 1/EXPTIME.'.format(os.path.basename(sci_fits_resample)))
-            par = fits.open(sci_fits_resample, memmap=False)
-            # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
-            # in order to get the correct flag when doing the coadd with swarp in the later step
-            par[0].header['FLXSCALE'] = utils.inverse(par[0].header['EXPTIME'])
-            par[0].writeto(sci_fits_resample, overwrite=True)
-            del par[0].data
-            par.close()
-
-        # change flag image type to int32, flux scale to 1.0
-        if verbose:
-            msgs.info('Saving FLAG image {:} to int32.'.format(os.path.basename(flag_fits_resample)))
-        par = fits.open(flag_fits_resample, memmap=False)
-        # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
-        # in order to get the correct flag when doing the coadd with swarp in the later step
-        par[0].header['EXPTIME'] = 1.0
-        par[0].header['FLXSCALE'] = 1.0
-        par[0].header['FLASCALE'] = 1.0
-        par[0].data = par[0].data.astype('int32')
-        par[0].writeto(flag_fits_resample, overwrite=True)
-        del par[0].data
-        par.close()
-        gc.collect()
-
-    ## step four: Run SExtractor on the resampled images
-    ## Run SExtractor for the resampled images. The catalogs will be used for calibrating individual chips.
-    if verbose:
-        msgs.info('Running SExtractor on the resampled images.')
-    sex.run_sex(sci_fits_list_resample, flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample,
-                n_process=n_process, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-                defaultconfig='pyphot', conv=conv, nnw=None, dual=False,
-                delete=delete, log=log, verbose=verbose)
-
-    return sci_fits_list_resample, wht_fits_list_resample, flag_fits_list_resample, cat_fits_list_resample
-
-def astrometric_old(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, n_process=4, science_path='./', qa_path='./',
-                task='sex', detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
-                position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
-                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
-                skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
-                delete=False, log=True, verbose=True):
-
-    n_file = len(sci_fits_list)
-    n_cpu = multiprocessing.cpu_count()
-
-    if n_process > n_cpu:
-        n_process = n_cpu
-
-    if n_process>n_file:
-        n_process = n_file
-
-    sci_fits_list_resample = []
-    wht_fits_list_resample = []
-    flag_fits_list_resample = []
-    cat_fits_list_resample = []
-
-    if n_process == 1:
-        for ii, sci_fits_file in enumerate(sci_fits_list):
-            sci_fits_resample, wht_fits_resample, flag_fits_resample, cat_fits_resample = _astrometric_one(
-                    sci_fits_file, wht_fits_list[ii], flag_fits_list[ii], pixscale,
-                    science_path=science_path, qa_path=qa_path, task=task,
-                    detect_thresh=detect_thresh, analysis_thresh=analysis_thresh,
-                    detect_minarea=detect_minarea, crossid_radius=crossid_radius,
-                    astref_catalog=astref_catalog, astref_band=astref_band,
-                    astrefmag_limits=astrefmag_limits, position_maxerr=position_maxerr,
-                    distort_degrees=distort_degrees, pixscale_maxerr=pixscale_maxerr,
-                    posangle_maxerr=posangle_maxerr, stability_type=stability_type,
-                    mosaic_type=mosaic_type, weight_type=weight_type,
-                    skip_swarp_align=skip_swarp_align, solve_photom_scamp=solve_photom_scamp,
-                    scamp_second_pass=scamp_second_pass, delete=delete, log=log, verbose=verbose)
-            sci_fits_list_resample.append(sci_fits_resample)
-            wht_fits_list_resample.append(wht_fits_resample)
-            flag_fits_list_resample.append(flag_fits_resample)
-            cat_fits_list_resample.append(cat_fits_resample)
-    else:
-        msgs.info('Start parallel processing with n_process={:}'.format(n_process))
-        work_queue = Queue()
-        done_queue = Queue()
-        processes = []
-
-        for ii in range(n_file):
-            work_queue.put((sci_fits_list[ii], wht_fits_list[ii], flag_fits_list[ii], pixscale))
-
-        # creating processes
-        for w in range(n_process):
-            p = Process(target=_astrometric_worker, args=(work_queue, done_queue), kwargs={
-                'science_path': science_path, 'qa_path': qa_path,
-                'task': task, 'detect_thresh': detect_thresh, 'analysis_thresh': analysis_thresh, 'detect_minarea': detect_minarea,
-                'crossid_radius': crossid_radius, 'astref_catalog': astref_catalog, 'astref_band': astref_band,
-                'astrefmag_limits': astrefmag_limits, 'position_maxerr': position_maxerr,
-                'distort_degrees': distort_degrees, 'pixscale_maxerr': pixscale_maxerr, 'posangle_maxerr': posangle_maxerr,
-                'stability_type': stability_type, 'mosaic_type': mosaic_type, 'weight_type': weight_type,
-                'skip_swarp_align': skip_swarp_align, 'solve_photom_scamp': solve_photom_scamp,
-                'scamp_second_pass': scamp_second_pass, 'delete': delete, 'log': log, 'verbose': False})
-            processes.append(p)
-            p.start()
-
-        # completing process
-        for p in processes:
-            p.join()
-
-        # print the output
-        while not done_queue.empty():
-            sci_fits_resample, wht_fits_resample, flag_fits_resample, cat_fits_resample = done_queue.get()
-            sci_fits_list_resample.append(sci_fits_resample)
-            wht_fits_list_resample.append(wht_fits_resample)
-            flag_fits_list_resample.append(flag_fits_resample)
-            cat_fits_list_resample.append(cat_fits_resample)
-
-    return sci_fits_list_resample, wht_fits_list_resample, flag_fits_list_resample, cat_fits_list_resample
-
-def _astrometric_one(sci_fits_file, wht_fits_file, flag_fits_file, pixscale, science_path='./',qa_path='./',
-                     task='sex',detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
-                     astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
-                     position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
-                     stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
-                     skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
-                     delete=False, log=True, verbose=True):
-
-    msgs.info('Performing astrometric calibration for {:}'.format(sci_fits_file))
-    # configuration for the swarp run
-    # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
-    # resample science image
-    swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                   "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT": 1.0,
-                   "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
-                   "RESAMPLING_TYPE": 'NEAREST',
-                   # I would always set this to NEAREST for individual exposures to avoid interpolation
-                   "HEADER_SUFFIX": "_cat.head"}
-    # configuration for swarp the flag image
-    swarpconfig_flag = swarpconfig.copy()
-    swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
-    swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
-    swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
-
-    if skip_swarp_align:
-        if verbose:
-            msgs.info('Skipping the first alignment step with Swarp')
-        os.system('cp {:} {:}'.format(sci_fits_file,
-                                      sci_fits_file.replace('.fits', '.resamp.fits')))
-        os.system('cp {:} {:}'.format(sci_fits_file.replace('.fits', '.weight.fits'),
-                                      sci_fits_file.replace('.fits', '.resamp.weight.fits')))
-        os.system('cp {:} {:}'.format(flag_fits_file,
-                                      flag_fits_file.replace('.fits', '.resamp.fits')))
-    else:
-        ## This step is basically align the image to N to the up and E to the left.
-        ## It is important if your image has a ~180 degree from the nominal orientation.
-        if verbose:
-            msgs.info('Running Swarp for the first pass to align the science image.')
-        swarp.swarpone(sci_fits_file, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                       delete=delete, log=log, verbose=verbose)
-        # resample flag image
-        if verbose:
-            msgs.info('Running Swarp for the first pass to align the flag image.')
-        swarp.swarpone(flag_fits_file, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                       delete=delete, log=False, verbose=False)
-
-    ## remove useless data and change flag image type to int32
-    sci_fits_resample = sci_fits_file.replace('.fits', '.resamp.fits')
-    wht_fits_resample = sci_fits_file.replace('.fits', '.resamp.weight.fits')
-    flag_fits_resample = flag_fits_file.replace('.fits', '.resamp.fits')
-    cat_fits_resample = sci_fits_file.replace('.fits', '.resamp_cat.fits')
-    if not skip_swarp_align:
-        par = fits.open(flag_fits_resample, memmap=False)
-        par[0].data = par[0].data.astype('int32')  # change the dtype to be int32
-        par[0].writeto(flag_fits_resample, overwrite=True)
-        del par[0].data
-        par.close()
-        gc.collect()
-        os.system('rm {:}'.format(flag_fits_file.replace('.fits', '.resamp.weight.fits')))
-
-    # configuration for SExtractor run
-    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
-                  "DETECT_THRESH": detect_thresh,
-                  "ANALYSIS_THRESH": analysis_thresh,
-                  "DETECT_MINAREA": detect_minarea}
-    sexparams0 = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
-                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
-                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
-                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
-    if verbose:
-        msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
-    sex.sexone(sci_fits_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-               defaultconfig='pyphot', conv='sex', nnw=None, dual=False,
-               flag_image=flag_fits_resample, weight_image=wht_fits_resample,
-               delete=delete, log=log, verbose=verbose)
-
-    # configuration for the scamp run
-    if solve_photom_scamp:
-        SOLVE_PHOTOM='Y'
-    else:
-        SOLVE_PHOTOM='N'
-
-    if astrefmag_limits is not None:
-        ASTREFMAG_LIMITS = '{:},{:}'.format(astrefmag_limits[0],astrefmag_limits[1])
-    else:
-        ASTREFMAG_LIMITS = '-99.0,99.0'
-
-    scampconfig = {"CROSSID_RADIUS": crossid_radius,
-                    "ASTREF_CATALOG": astref_catalog,
-                    "ASTREF_BAND": astref_band,
-                    "ASTREFMAG_LIMITS":ASTREFMAG_LIMITS,
-                    "POSITION_MAXERR": position_maxerr,
-                    "PIXSCALE_MAXERR": pixscale_maxerr,
-                    "POSANGLE_MAXERR": posangle_maxerr,
-                    "STABILITY_TYPE": stability_type,
-                    "MOSAIC_TYPE": mosaic_type,
-                    "SOLVE_PHOTOM": SOLVE_PHOTOM,
-                    "DISTORT_DEGREES":distort_degrees,
-                    "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
-                    "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
-    if scamp_second_pass:
-        # first run with distort_degrees of 1
-        scampconfig1 = scampconfig.copy()
-        scampconfig1['DISTORT_DEGREES'] = np.max([1,distort_degrees-2])
-        if verbose:
-            msgs.info('Running the first pass SCAMP with DISTORT_DEGREES of {:}'.format(scampconfig1['DISTORT_DEGREES']))
-        scamp.scampone(cat_fits_resample, config=scampconfig1, workdir=science_path, QAdir=qa_path,
-                       defaultconfig='pyphot', delete=delete, log=log)
-        ## we can make the maximum errors to be smaller for the second pass.
-        scampconfig['POSITION_MAXERR'] = np.min([1.0,position_maxerr])
-        scampconfig['PIXSCALE_MAXERR'] = np.min([1.2,pixscale_maxerr])
-        scampconfig['POSANGLE_MAXERR'] = np.min([5.0,posangle_maxerr])
-        # copy the .head to .ahead
-        os.system('mv {:} {:}'.format(cat_fits_resample.replace('.fits', '.head'),
-                                      cat_fits_resample.replace('.fits', '.ahead')))
-    # run the final scamp
-    if verbose:
-        msgs.info('Running the final pass of SCAMP with DISTORT_DEGREES of {:}'.format(distort_degrees))
-    scamp.scampone(cat_fits_resample, config=scampconfig, workdir=science_path, QAdir=qa_path,
-                   defaultconfig='pyphot', delete=delete, log=log, verbose=verbose)
-
-    ## copy the .head for flag images
-    os.system('cp {:} {:}'.format(sci_fits_resample.replace('.fits', '_cat.head'),
-                                  flag_fits_resample.replace('.fits', '_cat.head')))
-
-    ## configuration for the second swarp run
-    swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
-    # resample the science image
-    if verbose:
-        msgs.info('Running Swarp for the second pass to align the science image.')
-    swarp.swarpone(sci_fits_resample, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                   delete=delete, log=log, verbose=verbose)
-    # resample the flag image
-    swarpconfig_flag['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
-    swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
-    if verbose:
-        msgs.info('Running Swarp for the second pass to align the flag image.')
-    swarp.swarpone(flag_fits_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                   delete=delete, log=False, verbose=False)
-
-    # delete unnecessary weight maps and head
-    os.system('rm {:}'.format(flag_fits_file.replace('.fits', '.resamp.weight.fits')))
-    os.system('rm {:}'.format(sci_fits_file.replace('.fits', '.resamp_cat.fits')))
-    os.system('rm {:}'.format(sci_fits_file.replace('.fits', '.resamp_cat.head')))
-    os.system('rm {:}'.format(flag_fits_file.replace('.fits', '.resamp_cat.head')))
-
-    if scamp_second_pass:
-        os.system('rm {:}'.format(sci_fits_file.replace('.fits', '.resamp_cat.ahead')))
-
-    # Update fluxscale
-    if solve_photom_scamp:
-        if verbose:
-            msgs.info('The FLXSCALE was solved with scamp.')
-    else:
-        if verbose:
-            msgs.info('Solving the FLXSCALE for {:} with 1/EXPTIME.'.format(os.path.basename(sci_fits_resample)))
-        par = fits.open(sci_fits_resample, memmap=False)
-        # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
-        # in order to get the correct flag when doing the coadd with swarp in the later step
-        par[0].header['FLXSCALE'] = utils.inverse(par[0].header['EXPTIME'])
-        par[0].writeto(sci_fits_resample, overwrite=True)
-        del par[0].data
-        par.close()
-
-    # change flag image type to int32, flux scale to 1.0
-    if verbose:
-        msgs.info('Saving FLAG image {:} to int32.'.format(os.path.basename(flag_fits_resample)))
-    par = fits.open(flag_fits_resample, memmap=False)
-    # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
-    # in order to get the correct flag when doing the coadd with swarp in the later step
-    par[0].header['EXPTIME'] = 1.0
-    par[0].header['FLXSCALE'] = 1.0
-    par[0].header['FLASCALE'] = 1.0
-    par[0].data = par[0].data.astype('int32')
-    par[0].writeto(flag_fits_resample, overwrite=True)
-    del par[0].data
-    par.close()
-    gc.collect()
-
-    ## Run SExtractor for the resampled images. The catalogs will be used for calibrating individual chips.
-    if verbose:
-        msgs.info('Running SExtractor for the second pass to extract catalog for resampled images.')
-    sex.sexone(sci_fits_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-               defaultconfig='pyphot', conv='sex', nnw=None, dual=False,
-               flag_image=flag_fits_resample, weight_image=wht_fits_resample,
-               delete=delete, log=log, verbose=verbose)
-
-    msgs.info('Finished astrometric calibration for {:}'.format(sci_fits_file))
-
-    return sci_fits_resample, wht_fits_resample, flag_fits_resample, cat_fits_resample
-
-def _astrometric_worker(work_queue, done_queue, science_path='./',qa_path='./',
-                task='sex',detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
-                position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
-                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
-                skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,
-                delete=False, log=True, verbose=True):
-
-    """Multiprocessing worker for sciproc."""
-    while not work_queue.empty():
-        sci_fits_file, wht_fits_file, flag_fits_file, pixscale = work_queue.get()
-        sci_fits_resample, wht_fits_resample, flag_fits_resample, cat_fits_resample = _astrometric_one(
-            sci_fits_file, wht_fits_file, flag_fits_file, pixscale,
-            science_path=science_path, qa_path=qa_path, task=task,
-            detect_thresh=detect_thresh, analysis_thresh=analysis_thresh,
-            detect_minarea=detect_minarea, crossid_radius=crossid_radius,
-            astref_catalog=astref_catalog, astref_band=astref_band,
-            astrefmag_limits=astrefmag_limits, position_maxerr=position_maxerr,
-            distort_degrees=distort_degrees, pixscale_maxerr=pixscale_maxerr,
-            posangle_maxerr=posangle_maxerr, stability_type=stability_type,
-            mosaic_type=mosaic_type, weight_type=weight_type,
-            skip_swarp_align=skip_swarp_align, solve_photom_scamp=solve_photom_scamp,
-            scamp_second_pass=scamp_second_pass, delete=delete, log=log, verbose=verbose)
-
-        done_queue.put((sci_fits_resample, wht_fits_resample, flag_fits_resample, cat_fits_resample))
-
-def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
+def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=100, back_filtersize=3,
-          back_filtthresh=0.0, resampling_type='LANCZOS3', detect_thresh=5, analysis_thresh=5,
-          detect_minarea=5, sextractor_task='sex',delete=True, log=True):
+          back_filtthresh=0.0, resampling_type='LANCZOS3', delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
     msgs.info('Coadding image for {:}'.format(os.path.join(coadddir,coaddroot)))
@@ -555,7 +45,8 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
                    "COMBINE_TYPE": combine_type.upper(),"CLIP_AMPFRAC":clip_ampfrac,"CLIP_SIGMA":clip_sigma,
                    "SUBTRACT_BACK": subtract,"BACK_TYPE":back_type,"BACK_DEFAULT":back_default,"BACK_SIZE":back_size,
                    "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
-
+    ## Run swarp for science image
+    msgs.info('Coadding science images.')
     swarp.run_swarp(scifiles, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
                     coadddir=coadddir, coaddroot=coaddroot + '_sci', delete=delete, log=log)
 
@@ -564,41 +55,41 @@ def coadd(scifiles, flagfiles, coaddroot, pixscale, science_path, coadddir, weig
     swarpconfig_flag['WEIGHT_TYPE'] = "NONE"
     swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
     swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
+    ## Run swarp for flag image
+    msgs.info('Coadding flag images.')
     swarp.run_swarp(flagfiles, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                    coadddir=coadddir, coaddroot=coaddroot + '_flag', delete=delete, log=log)
+                    coadddir=coadddir, coaddroot=coaddroot + '_flag', delete=True, log=False)
+
+    ## parameters for coadding inverse variance images
+    swarpconfig_ivar = swarpconfig.copy()
+    ivarlist = os.path.join(coadddir,'{:}_ivar.list'.format(coaddroot))
+    swarpconfig_ivar['WEIGHT_IMAGE'] = '@{:}'.format(ivarlist)
+    textfile = open(ivarlist, "w")
+    for this_ivar in ivarfiles:
+        textfile.write(this_ivar + "\n")
+    textfile.close()
+
+    ## Run swarp for inverse variance image
+    msgs.info('Generating inverse variance image for coadded science image.')
+    swarp.run_swarp(scifiles, config=swarpconfig_ivar, workdir=science_path, defaultconfig='pyphot',
+                    coadddir=coadddir, coaddroot=coaddroot + '_ivar', delete=True, log=False)
+    os.system('mv {:} {:}'.format(os.path.join(coadddir, coaddroot + '_ivar.weight.fits'),
+                                  os.path.join(coadddir, coaddroot + '_ivar.fits')))
     # delete unnecessary files
-    os.system('rm {:}'.format(os.path.join(coadddir, coaddroot + '_flag.swarp.xml')))
+    os.system('rm {:}'.format(ivarlist))
+    #os.system('rm {:}'.format(os.path.join(coadddir, coaddroot + '_ivar.swarp.xml')))
+    #os.system('rm {:}'.format(os.path.join(coadddir, coaddroot + '_flag.swarp.xml')))
     os.system('rm {:}'.format(os.path.join(coadddir, coaddroot + '_flag.weight.fits')))
 
     # useful file names
     coadd_file = os.path.join(coadddir,coaddroot+'_sci.fits')
-    coadd_flag_file = os.path.join(coadddir, coaddroot + '_flag.fits')
     coadd_wht_file = os.path.join(coadddir, coaddroot + '_sci.weight.fits')
+    coadd_flag_file = os.path.join(coadddir, coaddroot + '_flag.fits')
+    coadd_ivar_file = os.path.join(coadddir, coaddroot + '_ivar.fits')
 
-    # ToDO: Subtract background for the final coadded image
+    # ToDO: Subtract background for the final coadded image?
 
-    # change flag image type to int32
-    par = fits.open(coadd_flag_file, memmap=False)
-    par[0].data = np.round(par[0].data).astype('int32')
-    par[0].writeto(coadd_flag_file, overwrite=True)
-
-    # Extract a catalog for zero point calibration in the next step.
-    # configuration for the SExtractor run
-    sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
-                  "DETECT_THRESH": detect_thresh,
-                  "ANALYSIS_THRESH": analysis_thresh,
-                  "DETECT_MINAREA": detect_minarea}
-    sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
-                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
-                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
-                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
-    msgs.info('Running SExtractor for the coadded image. The catalog will be used for zero-point calibration.')
-    sex.sexone(coadd_file, catname=coadd_file.replace('.fits','_zptcat.fits'),
-               flag_image=coadd_flag_file, weight_image=coadd_wht_file,
-               task=sextractor_task, config=sexconfig, workdir=coadddir, params=sexparams,
-               defaultconfig='pyphot', dual=False, conv='sex', nnw=None, delete=True, log=False)
-
-    return coadd_file, coadd_wht_file, coadd_flag_file
+    return coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file
 
 def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_image=None, rms_image=None,
            workdir='./', detection_method='sextractor', zpt=0.,
@@ -749,7 +240,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
         # ToDo:  (catalog['NIMAFLAGS_ISO']<1) will reject most of the targets for dirty IR detector, i.e. WIRCam
         #       So, we should save another flat image that only counts for the number of bad exposures associated to the pixel
         #       and then use this number as a cut.
-        #       Currently we only remove saturated targets, catalog['NIMAFLAGS_ISO'] & 2**2<1 used for remove saturated targets, see procimg.ccdproc
+        #       Currently we only remove saturated targets, catalog['NIMAFLAGS_ISO'] & 2**2<1 used for remove saturated targets, see procimg.detproc
         if external_flag:
             #flag = (catalog['NIMAFLAGS_ISO'] & 2**2<1) & (catalog['IMAFLAGS_ISO'] & 2**2<1) #& (catalog['IMAFLAGS_ISO']<1)  #(catalog['NIMAFLAGS_ISO']<1)
             flag = (catalog['IMAFLAGS_ISO']<1) & (catalog['NIMAFLAGS_ISO']<1)
@@ -782,7 +273,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
                 msgs.info('Using the existing reference catalog {:} rather than downloading a new one.'.format(out_refcat))
             ref_data = Table.read(out_refcat, format='fits')
             ref_ra_cen, ref_dec_ren =  np.median(ref_data['RA']), np.median(ref_data['DEC'])
-            dist_cen = np.sqrt((ref_ra_cen-ra_cen)*np.cos(dec_cen/180.*np.pi)**2 + (ref_dec_ren-dec_cen)**2)
+            dist_cen = np.sqrt(((ref_ra_cen-ra_cen)*np.cos(dec_cen/180.*np.pi))**2 + (ref_dec_ren-dec_cen)**2)
             if dist_cen>0.7*radius:
                 if verbose:
                     msgs.info('Existing catalog does not fully cover the field, re-download the catalog.')
@@ -1036,6 +527,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
     zp_all, zp_std_all = np.zeros(n_file), np.zeros(n_file)
     nstar_all = np.zeros(n_file)
     fwhm_all = np.zeros(n_file)
+    idx_all = np.zeros(n_file)
 
     if n_process == 1:
         for ii in range(n_file):
@@ -1043,6 +535,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
                         ref_fits=ref_fits_list[ii], outqa_root=outqa_root_list[ii],
                         ZP=ZP, external_flag=external_flag, refcatalog=refcatalog, primary=primary, secondary=secondary,
                         coefficients=coefficients, nstar_min=nstar_min, pixscale=pixscale, verbose=verbose)
+            idx_all[ii] = ii
             sci_fits_all[ii] = sci_fits_list[ii]
             zp_all[ii] = zp_this
             zp_std_all[ii] = zp_this_std
@@ -1055,7 +548,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         processes = []
 
         for ii in range(n_file):
-            work_queue.put((cat_fits_list[ii], sci_fits_list[ii], ref_fits_list[ii], outqa_root_list[ii]))
+            work_queue.put((ii, cat_fits_list[ii], sci_fits_list[ii], ref_fits_list[ii], outqa_root_list[ii]))
 
         # creating processes
         for w in range(n_process):
@@ -1073,7 +566,8 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         # print the output
         ii = 0
         while not done_queue.empty():
-            sci_fits_this, zp_this, zp_this_std, nstar, fwhm = done_queue.get()
+            idx_this, sci_fits_this, zp_this, zp_this_std, nstar, fwhm = done_queue.get()
+            idx_all[ii] = idx_this
             sci_fits_all[ii] = sci_fits_this
             zp_all[ii] = zp_this
             zp_std_all[ii] = zp_this_std
@@ -1082,6 +576,13 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             ii +=1
 
     # sort the data based on input. This is necessary for multiproccessing at least. I do this for both way just in case.
+    zp_all_sort = zp_all[np.argsort(idx_all)]
+    zp_std_all_sort = zp_std_all[np.argsort(idx_all)]
+    nstar_all_sort = nstar_all[np.argsort(idx_all)]
+    fwhm_all_sort = fwhm_all[np.argsort(idx_all)]
+    sci_fits_all_sort = sci_fits_all[np.argsort(idx_all)]
+
+    '''
     zp_all_sort, zp_std_all_sort = np.zeros(n_file), np.zeros(n_file)
     nstar_all_sort = np.zeros(n_file)
     fwhm_all_sort = np.zeros(n_file)
@@ -1094,6 +595,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         zp_std_all_sort[ii] = zp_std_all[this_idx]
         nstar_all_sort[ii] = nstar_all[this_idx]
         fwhm_all_sort[ii] = fwhm_all[this_idx]
+    '''
 
     return zp_all_sort, zp_std_all_sort, nstar_all_sort, fwhm_all_sort
 
@@ -1102,312 +604,744 @@ def _cal_chip_worker(work_queue, done_queue, ZP=25.0, external_flag=True, refcat
 
     """Multiprocessing worker for cal_chips."""
     while not work_queue.empty():
-        cat_fits, sci_fits, ref_fits, outqa_root = work_queue.get()
+        idx, cat_fits, sci_fits, ref_fits, outqa_root = work_queue.get()
         zp_this, zp_this_std, nstar, fwhm = _cal_chip(cat_fits, sci_fits=sci_fits, ref_fits=ref_fits, outqa_root=outqa_root,
                 ZP=ZP, external_flag=external_flag, refcatalog=refcatalog, primary=primary, secondary=secondary,
                 coefficients=coefficients, nstar_min=nstar_min, pixscale=pixscale, verbose=verbose)
 
-        done_queue.put((sci_fits, zp_this, zp_this_std, nstar, fwhm))
+        done_queue.put((idx, sci_fits, zp_this, zp_this_std, nstar, fwhm))
 
 
-'''
-# Moved this part into sciproc
-def negativestar(sci_fits_list, wht_fits_list, flag_fits_list, sigma=5, maxiters=3,
-                 brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
 
-    for i in range(len(sci_fits_list)):
-        #ToDo: parallel this
-        msgs.info('Masking negative stars for {:}'.format(sci_fits_list[i]))
-        header, data, _ = io.load_fits(sci_fits_list[i])
-        header_wht, weight, _ = io.load_fits(wht_fits_list[i])
-        header_flag, flag, _ = io.load_fits(flag_fits_list[i])
-        bpm = flag>0
-        starmask = mask_bright_star(0-data, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
-                                    back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+class PostProc():
 
-        weight[starmask] = 0.
-        flag[starmask] = 2**8
-        io.save_fits(wht_fits_list[i], weight, header_wht, 'ScienceImage', overwrite=True)
-        io.save_fits(flag_fits_list[i], flag, header_flag, 'ScienceImage', overwrite=True)
-'''
+    def __init__(self, par, detectors, setup_id, scifiles, coadd_ids, sci_ra, sci_dec, sci_airmass, sci_exptime,
+                 sci_filter, sci_target, pixscale, science_path='./', qa_path='./', coadd_path='./',reuse_masters=True):
+        '''
 
-### The following functions are old code that do not support parallel processing.
-def cal_chips_old(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, ZP=25.0, external_flag=True,
-                 refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10, pixscale=None):
+        Parameters
+        ----------
+        par
+        detectors
+        setup_id
+        scifiles
+        coadd_ids
+        sci_ra
+        sci_dec
+        pixscale
+        science_path
+        qa_path
+        '''
 
-
-    zp_all, zp_std_all = np.zeros(len(cat_fits_list)), np.zeros(len(cat_fits_list))
-    nstar_all = np.zeros(len(cat_fits_list))
-    fwhm_all = np.zeros(len(cat_fits_list))
-    for ii, this_cat in enumerate(cat_fits_list):
-        if sci_fits_list is None:
-            this_sci_fits = this_cat.replace('.cat','.fits')
+        self.par = par
+        self.detectors = detectors
+        self.setup_id = setup_id
+        self.ndet = len(detectors)
+        self.scifiles = scifiles
+        self.coadd_ids = coadd_ids
+        self.sci_ra = sci_ra.data.astype('float')
+        self.sci_dec = sci_dec.data.astype('float')
+        self.sci_airmass = sci_airmass.data.astype('float')
+        self.sci_exptime = sci_exptime.data.astype('float')
+        self.sci_filter = sci_filter
+        self.sci_target = sci_target
+        self.pixscale = pixscale
+        self.science_path = science_path
+        self.qa_path = qa_path
+        self.coadd_path = coadd_path
+        self.reuse_masters = reuse_masters
+        if self.ndet == 1:
+            self.mosaic = False #ToDo: Might deprecate this in the future if mosaic works good for everything.
         else:
-            this_sci_fits = sci_fits_list[ii]
-        if ref_fits_list is None:
-            this_ref_name = this_cat.replace('.cat','_ref.cat')
-        else:
-            this_ref_name = ref_fits_list[ii]
-        if outqa_root_list is None:
-            this_qa_root = this_cat.replace('.cat','')
-        else:
-            this_qa_root = outqa_root_list[ii]
+            self.mosaic = self.par['postproc']['astrometry']['mosaic']
 
-        if not os.path.exists(this_sci_fits):
-            msgs.error('{:} was not found, make sure you have an associated image!'.format(this_sci_fits))
+        self.n_process = par['rdx']['n_process']
+        # Initial n_process
+        n_file = len(scifiles)
+        n_cpu = multiprocessing.cpu_count()
+        if self.n_process > n_cpu:
+            self.n_process = n_cpu
+        if self.n_process > n_file:
+            self.n_process = n_file
+
+        # SExtractor task in your terminal
+        self.sextask = self.par['rdx']['sextractor']
+        self.conv = self.par['postproc']['detection']['conv'] # convolve template used by SExtractor
+
+        # Other parameters
+        self.skip_swarp_align = self.par['postproc']['astrometry']['skip_swarp_align']
+        self.scamp_second_pass = self.par['postproc']['astrometry']['scamp_second_pass']
+        self.solve_photom_scamp = self.par['postproc']['astrometry']['solve_photom_scamp']
+        self.group = self.par['postproc']['astrometry']['group']
+        self.delete = self.par['postproc']['astrometry']['delete']
+        self.log = self.par['postproc']['astrometry']['log']
+        self.verbose = True
+
+        # Load parameters for SExtractor
+        detect_thresh = self.par['postproc']['astrometry']['detect_thresh']
+        analysis_thresh = self.par['postproc']['astrometry']['analysis_thresh']
+        detect_minarea = self.par['postproc']['astrometry']['detect_minarea']
+        # Load parameters for Scamp
+        self.astref_catalog = self.par['postproc']['astrometry']['astref_catalog']
+        self.astrefmag_limits = self.par['postproc']['astrometry']['astrefmag_limits']
+        crossid_radius = self.par['postproc']['astrometry']['crossid_radius']
+        astref_band = self.par['postproc']['astrometry']['astref_band']
+        position_maxerr = self.par['postproc']['astrometry']['position_maxerr']
+        pixscale_maxerr = self.par['postproc']['astrometry']['pixscale_maxerr']
+        posangle_maxerr = self.par['postproc']['astrometry']['posangle_maxerr']
+        distort_degrees = self.par['postproc']['astrometry']['distort_degrees']
+        stability_type = self.par['postproc']['astrometry']['stability_type']
+        mosaic_type = self.par['postproc']['astrometry']['mosaic_type']
+        # Load parameters for Swarp
+        weight_type = self.par['postproc']['astrometry']['weight_type']
+
+        # Configuration for SExtractor
+        self.sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_TYPE": "FITS_LDAC",
+                          "DETECT_THRESH":detect_thresh,"ANALYSIS_THRESH": analysis_thresh,"DETECT_MINAREA": detect_minarea}
+        # Parameters for SExtractor
+        self.sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
+                          'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE',
+                          'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO',
+                          'MAG_APER', 'MAGERR_APER', 'FLUX_RADIUS', 'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR',
+                          'FLAGS', 'FLAGS_WEIGHT']
+
+        # Configuration for Scamp
+        if self.solve_photom_scamp:
+            SOLVE_PHOTOM = 'Y'
         else:
-            msgs.info('Calibrating the zero point for {:}'.format(this_sci_fits))
+            SOLVE_PHOTOM = 'N'
+        if self.astrefmag_limits is not None:
+            ASTREFMAG_LIMITS = '{:},{:}'.format(self.astrefmag_limits[0], self.astrefmag_limits[1])
+        else:
+            ASTREFMAG_LIMITS = '-99.0,99.0'
 
-        par = fits.open(this_sci_fits, memmap=False)
-        ## ToDo: If we read in FLXSCALE, the zpt would change if you run this code twice
-        ##  Maybe just give the input of 1.0/EXPTIME and measure the FLXSCALE use calzpt?
-        ##  Thus that the ZPT won't change no matter how many times you run the code.
-        try:
-            FLXSCALE = 1.0 * utils.inverse(par[0].header['EXPTIME'])
-            #FLXSCALE = par[0].header['FLXSCALE']
-        except:
-            msgs.warn('EXPTIME was not found in the FITS Image Header, assuming the image unit is counts/sec.')
-            FLXSCALE = 1.0
-        try:
-            FLASCALE = par[0].header['FLASCALE']
-        except:
-            msgs.warn('FLASCALE was not found in the FITS Image Header.')
-            FLASCALE = 1.0
+        self.scamp_supported_cat = ['USNO-A2','USNO-B1','GSC-2.3','TYCHO-2','UCAC-4','URAT-1','NOMAD-1','PPMX',
+                'CMC-15','2MASS', 'DENIS-3', 'SDSS-R9','SDSS-R12','IGSL','GAIA-DR1','GAIA-DR2','GAIA-EDR3',
+                'PANSTARRS-1','ALLWISE']
+        self.pyphot_supported_cat = ['LS-DR9','DES-DR2']
+        if self.astref_catalog in self.scamp_supported_cat:
+            self.scampconfig = {"CROSSID_RADIUS": crossid_radius,
+                                "ASTREF_CATALOG": self.astref_catalog,
+                                "ASTREF_BAND": astref_band,
+                                "ASTREFMAG_LIMITS": ASTREFMAG_LIMITS,
+                                "POSITION_MAXERR": position_maxerr,
+                                "PIXSCALE_MAXERR": pixscale_maxerr,
+                                "POSANGLE_MAXERR": posangle_maxerr,
+                                "STABILITY_TYPE": stability_type,
+                                "MOSAIC_TYPE": mosaic_type,
+                                "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                                "DISTORT_DEGREES": distort_degrees,
+                                "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
+                                "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
+        elif self.astref_catalog in self.pyphot_supported_cat:
+            astrefcat_name = self.par['postproc']['astrometry']['astrefcat_name']
+            astrefcent_keys = 'RA, DEC'
+            astreferr_keys = 'RA_ERR, DEC_ERR, THETA_ERR'
+            astrefmag_key = astref_band+'_MAG'
+            astrefmagerr_key = astref_band+'_MAG_ERR'
+            self.scampconfig = {"CROSSID_RADIUS": crossid_radius,
+                                "ASTREF_CATALOG": 'FILE',
+                                "ASTREF_BAND": 'DEFAULT',
+                                "ASTREFMAG_LIMITS": ASTREFMAG_LIMITS,
+                                "ASTREFCAT_NAME":astrefcat_name,
+                                "ASTREFCENT_KEYS":astrefcent_keys,
+                                "ASTREFERR_KEYS":astreferr_keys,
+                                "ASTREFMAG_KEY":astrefmag_key,
+                                "ASTREFMAGERR_KEY":astrefmagerr_key,
+                                "POSITION_MAXERR": position_maxerr,
+                                "PIXSCALE_MAXERR": pixscale_maxerr,
+                                "POSANGLE_MAXERR": posangle_maxerr,
+                                "STABILITY_TYPE": stability_type,
+                                "MOSAIC_TYPE": mosaic_type,
+                                "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                                "DISTORT_DEGREES": distort_degrees,
+                                "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
+                                "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
+        else:
+            msgs.warn('The astrometric reference catalog is not supported by SCAMP or PyPhot. Make sure'
+                      'to set related keyworlds properly.')
+            astrefcat_name = self.par['postproc']['astrometry']['astrefcat_name']
+            astrefcent_keys = ','.join(str(e) for e in self.par['postproc']['astrometry']['astrefcent_keys'])
+            astreferr_keys = ','.join(str(e) for e in self.par['postproc']['astrometry']['astreferr_keys'])
+            astrefmag_key = self.par['postproc']['astrometry']['astrefmag_key']
+            astrefmagerr_key = self.par['postproc']['astrometry']['astrefmagerr_key']
+            self.scampconfig = {"CROSSID_RADIUS": crossid_radius,
+                                "ASTREF_CATALOG": 'FILE',
+                                "ASTREF_BAND": 'DEFAULT',
+                                "ASTREFMAG_LIMITS": ASTREFMAG_LIMITS,
+                                "ASTREFCAT_NAME":astrefcat_name,
+                                "ASTREFCENT_KEYS":astrefcent_keys,
+                                "ASTREFERR_KEYS":astreferr_keys,
+                                "ASTREFMAG_KEY":astrefmag_key,
+                                "ASTREFMAGERR_KEY":astrefmagerr_key,
+                                "POSITION_MAXERR": position_maxerr,
+                                "PIXSCALE_MAXERR": pixscale_maxerr,
+                                "POSANGLE_MAXERR": posangle_maxerr,
+                                "STABILITY_TYPE": stability_type,
+                                "MOSAIC_TYPE": mosaic_type,
+                                "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                                "DISTORT_DEGREES": distort_degrees,
+                                "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
+                                "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
 
-        # query a bigger (by a factor of 2 as specified by oversize) radius for safe given that you might have a big dither when re-use this catalog
-        zp_this, zp_this_std, nstar, cat_matched = calzpt(this_cat, refcatalog=refcatalog, primary=primary, secondary=secondary,
-                                   coefficients=coefficients, FLXSCALE=FLXSCALE, FLASCALE=FLASCALE, external_flag=external_flag,
-                                   oversize=2.0, out_refcat=this_ref_name, outqaroot=this_qa_root)
-        if nstar>nstar_min:
-            msgs.info('Calibrating the zero point of {:} to {:} AB magnitude.'.format(os.path.basename(this_sci_fits),ZP))
-            mag_ext = ZP-zp_this
-            FLXSCALE *= 10**(0.4*(mag_ext))
-            if mag_ext>0.5:
-                msgs.warn('{:} has an extinction of {:0.3f} magnitude, cloudy???'.format(os.path.basename(this_sci_fits), mag_ext))
-            elif mag_ext>0.1:
-                msgs.info('{:} has an extinction of {:0.3f} magnitude, good conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
+
+        ## Configuration for Swarp
+        self.swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
+                            "PIXEL_SCALE": self.pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT": 1.0,
+                            "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
+                            "RESAMPLING_TYPE": 'NEAREST',
+                            # I would always set this to NEAREST for individual exposures to avoid interpolation
+                            "HEADER_SUFFIX": "_cat.head"}
+        # configuration for swarp the flag image
+        self.swarpconfig_flag = self.swarpconfig.copy()
+        self.swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
+        self.swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
+        self.swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
+        # configuration for swarp the inverse variance image
+        self.swarpconfig_ivar = self.swarpconfig.copy()
+        self.swarpconfig_ivar['WEIGHT_TYPE'] = 'NONE'
+
+        ## Configuration for photometric calibration
+        self.photref_catalog = self.par['postproc']['photometry']['photref_catalog']
+        self.primary = self.par['postproc']['photometry']['primary']
+        self.secondary = self.par['postproc']['photometry']['secondary']
+        self.coefficients = self.par['postproc']['photometry']['coefficients']
+        self.zeropoint = self.par['postproc']['photometry']['zpt']
+        self.nstar_min = self.par['postproc']['photometry']['nstar_min']
+        self.external_flag = self.par['postproc']['photometry']['external_flag']
+
+        ## Prepare lists
+        self.sci_proc_list, self.ivar_proc_list, self.wht_proc_list, self.flag_proc_list = [], [], [], []
+        self.sci_resample_list, self.ivar_resample_list, self.wht_resample_list, self.flag_resample_list = [], [], [], []
+        self.cat_proc_list = []
+        self.cat_resample_list = []
+        self.proc_coadd_ids = []
+        self.resamp_coadd_ids = []
+        self.resamp_det_ids = []
+        self.master_astref_cats = []  # reference catalog for astronometric calibrations,
+                                      # The astrometric reference catalog is only used when the reference is not supported by scamp
+        self.master_phoref_cats = []  # reference catalog for photometric calibrations
+        self.outqa_list = []  # for ploting resampled images
+
+        ## Coadd root names
+        self.coadd_root_ids = []
+        self.coadd_root_names = []
+        groups = np.unique(self.coadd_ids.data)
+        for igroup in groups:
+            this_target = self.sci_target[self.coadd_ids==igroup][0]
+            this_filter = self.sci_filter[self.coadd_ids==igroup][0]
+            this_coadd_root = '{:}_{:}_coadd_ID{:03d}'.format(this_target, this_filter, igroup)
+            self.coadd_root_ids.append(igroup)
+            self.coadd_root_names.append(this_coadd_root)
+
+        if self.mosaic:
+            # Prepare list for mosaic mode
+            for ii, ifile in enumerate(self.scifiles):
+                # Save MEF files
+                rootname = os.path.join(self.science_path, os.path.basename(ifile))
+                sci_proc_file = io.build_mef(rootname, self.detectors, img_type='SCI', returnname_only=True)
+                ivar_proc_file = io.build_mef(rootname, self.detectors, img_type='IVAR', returnname_only=True)
+                wht_proc_file = io.build_mef(rootname, self.detectors, img_type='WEIGHT', returnname_only=True)
+                flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=True)
+                self.sci_proc_list.append(sci_proc_file)
+                self.ivar_proc_list.append(ivar_proc_file)
+                self.wht_proc_list.append(wht_proc_file)
+                self.flag_proc_list.append(flag_proc_file)
+                self.cat_proc_list.append(sci_proc_file.replace('.fits','_cat.fits'))
+                self.proc_coadd_ids.append(self.coadd_ids[ii])
+                for jj, idet in enumerate(self.detectors):
+                    sci_resample_file = sci_proc_file.replace('.fits', '.{:04d}.resamp.fits'.format(jj+1))
+                    wht_resample_file = sci_proc_file.replace('.fits', '.{:04d}.resamp.weight.fits'.format(jj+1))
+                    ivar_resample_file = sci_proc_file.replace('.fits', '.ivar.{:04d}.resamp.fits'.format(jj+1))
+                    flag_resample_file = sci_proc_file.replace('sci.fits', 'flag.{:04d}.resamp.fits'.format(jj+1))
+                    cat_resample_file = sci_proc_file.replace('.fits', '.{:04d}.resamp_cat.fits'.format(jj+1))
+                    if (self.par['rdx']['skip_astrometry']) and not (os.path.exists(sci_resample_file)):
+                        self.sci_resample_list.append(rootname.replace('.fits', '_det{:02d}_sci.fits'.format(idet)))
+                        self.ivar_resample_list.append(rootname.replace('.fits', '_det{:02d}_sci.ivar.fits'.format(idet)))
+                        self.wht_resample_list.append(rootname.replace('.fits', '_det{:02d}_sci.weight.fits'.format(idet)))
+                        self.flag_resample_list.append(rootname.replace('.fits', '_det{:02d}_flag.fits'.format(idet)))
+                        self.cat_resample_list.append(rootname.replace('.fits', '_det{:02d}_sci_cat.fits'.format(idet)))
+                        this_qa = os.path.basename(rootname.replace('.fits', '_det{:02d}_sci.fits'.format(idet))).replace('.fits', '')
+                    else:
+                        self.sci_resample_list.append(sci_resample_file)
+                        self.wht_resample_list.append(wht_resample_file)
+                        self.ivar_resample_list.append(ivar_resample_file)
+                        self.flag_resample_list.append(flag_resample_file)
+                        self.cat_resample_list.append(cat_resample_file)
+                        this_qa = os.path.basename(sci_resample_file).replace('.fits', '')
+                    self.outqa_list.append(os.path.join(self.qa_path, this_qa))
+                    this_astcat = 'MasterAstRefCat_{:}_{:}_ID{:03d}.fits'.format(self.astref_catalog, self.setup_id,
+                                                                                  self.coadd_ids[ii])
+                    this_phocat = 'MasterPhoRefCat_{:}_{:}_ID{:03d}.fits'.format(self.photref_catalog, self.setup_id,
+                                                                                  self.coadd_ids[ii])
+                    self.master_astref_cats.append(os.path.join(self.par['calibrations']['master_dir'], this_astcat))
+                    self.master_phoref_cats.append(os.path.join(self.par['calibrations']['master_dir'], this_phocat))
+                    self.resamp_coadd_ids.append(self.coadd_ids[ii])
+                    self.resamp_det_ids.append(idet)
+        else:
+            # Prepare list for non-mosaic mode
+            for ii, ifile in enumerate(self.scifiles):
+                rootname = os.path.join(self.science_path, os.path.basename(ifile))
+                for idet in self.detectors:
+                    sci_proc_file = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(idet))
+                    ivar_proc_file = rootname.replace('.fits', '_det{:02d}_sci.ivar.fits'.format(idet))
+                    wht_proc_file = rootname.replace('.fits', '_det{:02d}_sci.weight.fits'.format(idet))
+                    flag_proc_file = rootname.replace('.fits', '_det{:02d}_flag.fits'.format(idet))
+                    cat_proc_file = rootname.replace('.fits', '_det{:02d}_sci_cat.fits'.format(idet))
+                    self.sci_proc_list.append(sci_proc_file)
+                    self.ivar_proc_list.append(ivar_proc_file)
+                    self.wht_proc_list.append(wht_proc_file)
+                    self.flag_proc_list.append(flag_proc_file)
+                    self.cat_proc_list.append(cat_proc_file)
+
+                    sci_resample_file = rootname.replace('.fits', '_det{:02d}_sci.resamp.fits'.format(idet))
+                    ivar_resample_file = rootname.replace('.fits', '_det{:02d}_sci.ivar.resamp.fits'.format(idet))
+                    wht_resample_file = rootname.replace('.fits', '_det{:02d}_sci.resamp.weight.fits'.format(idet))
+                    flag_resample_file = rootname.replace('.fits', '_det{:02d}_flag.resamp.fits'.format(idet))
+                    cat_resample_file = rootname.replace('.fits', '_det{:02d}_sci.resamp_cat.fits'.format(idet))
+
+                    if (self.par['rdx']['skip_astrometry']) and not (os.path.exists(sci_resample_file)):
+                        self.sci_resample_list.append(sci_proc_file)
+                        self.ivar_resample_list.append(ivar_proc_file)
+                        self.wht_resample_list.append(wht_proc_file)
+                        self.flag_resample_list.append(flag_proc_file)
+                        self.cat_resample_list.append(cat_proc_file)
+                        this_qa = os.path.basename(sci_proc_file).replace('.fits', '')
+                    else:
+                        self.sci_resample_list.append(sci_resample_file)
+                        self.ivar_resample_list.append(ivar_resample_file)
+                        self.wht_resample_list.append(wht_resample_file)
+                        self.flag_resample_list.append(flag_resample_file)
+                        self.cat_resample_list.append(cat_resample_file)
+                        this_qa = os.path.basename(sci_resample_file).replace('.fits', '')
+
+                    self.outqa_list.append(os.path.join(self.qa_path, this_qa))
+                    this_astcat = 'MasterAstRefCat_{:}_{:}_ID{:03d}.fits'.format(self.astref_catalog, self.setup_id,
+                                                                                  self.coadd_ids[ii])
+                    this_phocat = 'MasterPhoRefCat_{:}_{:}_ID{:03d}.fits'.format(self.photref_catalog, self.setup_id,
+                                                                                  self.coadd_ids[ii])
+                    self.master_astref_cats.append(os.path.join(self.par['calibrations']['master_dir'], this_astcat))
+                    self.master_phoref_cats.append(os.path.join(self.par['calibrations']['master_dir'], this_phocat))
+                    self.proc_coadd_ids.append(self.coadd_ids[ii])
+                    self.resamp_coadd_ids.append(self.coadd_ids[ii])
+                    self.resamp_det_ids.append(idet)
+
+        self.proc_coadd_ids = np.array(self.proc_coadd_ids, dtype=self.coadd_ids.dtype)
+        self.resamp_coadd_ids = np.array(self.resamp_coadd_ids, dtype=self.coadd_ids.dtype)
+        self.resamp_det_ids = np.array(self.resamp_det_ids, dtype=self.coadd_ids.dtype)
+
+    def run_astrometry(self):
+        '''
+
+        Returns
+        -------
+
+        '''
+
+        '''
+        self.log = True
+        self.mosaic = True
+        self.group = True
+        #self.scampconfig['MOSAIC_TYPE'] = 'LOOSE'
+        self.scampconfig['MOSAIC_TYPE'] = 'UNCHANGED'
+        #self.scampconfig['MOSAIC_TYPE'] = 'SAME_CRVAL'
+        #self.scampconfig['MOSAIC_TYPE'] = 'SHARE_PROJAXIS'
+        #self.scampconfig['MOSAIC_TYPE'] = 'FIX_FOCALPLANE'
+        self.scampconfig['ASTREF_CATALOG'] = 'PANSTARRS-1'
+        #self.scampconfig['ASTREF_CATALOG'] = 'GAIA-EDR3'
+        self.sexconfig['DETECT_THRESH'] = 30
+        self.scampconfig['ASTREF_WEIGHT'] = 0.1
+        '''
+        if not self.skip_swarp_align and not self.mosaic:
+            ## This step is to align the image to N to the up and E to the left.
+            ## It might be necessary if your image has a ~180 degree from the nominal orientation.
+            msgs.info('Running Swarp to rotate the science image.')
+            swarpconfig0 = self.swarpconfig.copy()
+            swarpconfig0['RESAMPLE_SUFFIX'] = '.fits' # Replace the original image
+            swarp.run_swarp(self.sci_proc_list, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
+                            n_process=self.n_process, delete=self.delete, log=self.log, verbose=False)
+            # resample inverse variance image
+            msgs.info('Running Swarp to rotate the inverse variance image.')
+            swarpconfig_ivar0 = self.swarpconfig_ivar.copy()
+            swarpconfig_ivar0['RESAMPLE_SUFFIX'] = '.fits'
+            swarp.run_swarp(self.ivar_proc_list, config=swarpconfig_ivar0, workdir=self.science_path, defaultconfig='pyphot',
+                            n_process=self.n_process, delete=self.delete, log=False, verbose=False)
+            # resample flag image
+            msgs.info('Running Swarp to rotate the flag image.')
+            swarpconfig_flag0 = self.swarpconfig_flag.copy()
+            swarpconfig_flag0['RESAMPLE_SUFFIX'] = '.fits'
+            swarp.run_swarp(self.flag_proc_list, config=swarpconfig_flag0, workdir=self.science_path, defaultconfig='pyphot',
+                            n_process=self.n_process, delete=self.delete, log=False, verbose=False)
+
+            # remove useless data and change flag image type
+            for ii, flag_fits in enumerate(self.flag_proc_list):
+                ## It seems swarp does not change the dtype now therefore I do not need the following.
+                #par = fits.open(flag_fits, memmap=False)
+                #par[0].data = par[0].data.astype('int32')  # change the dtype to be int32
+                #par[0].writeto(flag_fits, overwrite=True)
+                #del par[0].data
+                #par.close()
+                #gc.collect()
+                os.system('rm {:}'.format(flag_fits.replace('.fits', '.weight.fits')))
+                os.system('rm {:}'.format(self.ivar_proc_list[ii].replace('.fits', '.weight.fits')))
+
+        if self.mosaic:
+            msgs.info('Build MEF format fits files')
+            for ifile in self.scifiles:
+                # Save MEF files
+                rootname = os.path.join(self.science_path, os.path.basename(ifile))
+                sci_proc_file = io.build_mef(rootname, self.detectors, img_type='SCI', returnname_only=False)
+                ivar_proc_file = io.build_mef(rootname, self.detectors, img_type='IVAR', returnname_only=False)
+                wht_proc_file = io.build_mef(rootname, self.detectors, img_type='WEIGHT', returnname_only=False)
+                flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=False)
+
+        ## Step one: extract catalog from sciproc files
+        msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
+        sex.run_sex(self.sci_proc_list, flag_image_list=self.flag_proc_list, weight_image_list=self.wht_proc_list,
+                    n_process=self.n_process, task=self.sextask, config=self.sexconfig, workdir=self.science_path, params=self.sexparams,
+                    defaultconfig='pyphot', conv=self.conv, nnw=None, dual=False, delete=self.delete, log=self.log, verbose=self.verbose)
+
+        ## Step two: run scamp on extracted catalog
+        #ToDo: The scamp part need to be grouped if use SCAMP non-supported reference catalogs.
+        groups = np.unique(self.coadd_ids.data)
+        for igroup in groups:
+            this_group = self.proc_coadd_ids == igroup
+            this_cat_proc_list = np.array(self.cat_proc_list)[this_group].tolist()
+
+            if self.astref_catalog in self.pyphot_supported_cat:
+                self.scampconfig['ASTREFCAT_NAME'] = self.get_astref_cat(igroup)
+
+            if self.mosaic and self.scampconfig['MOSAIC_TYPE'] !='LOOSE':
+                msgs.info('Running SCAMP for the first loop with LOOSE mode.')
+                scampconfig0 = self.scampconfig.copy()
+                scampconfig0['MOSAIC_TYPE'] = 'LOOSE'
+                scamp.run_scamp(this_cat_proc_list, config=scampconfig0, workdir=self.science_path, QAdir=self.qa_path,
+                                n_process=self.n_process, defaultconfig='pyphot', group=self.group, delete=self.delete,
+                                log=self.log, verbose=self.verbose)
+                # Copy .head to .ahead
+                for ii, icat in enumerate(this_cat_proc_list):
+                    os.system('mv {:} {:}'.format(icat.replace('.fits', '.head'),
+                                                  icat.replace('.fits', '.ahead')))
+                msgs.info('Running SCAMP for the second loop with {:} mode.'.format(self.scampconfig['MOSAIC_TYPE']))
+                scamp.run_scamp(this_cat_proc_list, config=self.scampconfig, workdir=self.science_path, QAdir=self.qa_path,
+                                n_process=self.n_process, defaultconfig='pyphot', group=self.group, delete=self.delete,
+                                log=self.log, verbose=self.verbose)
+                for ii, icat in enumerate(this_cat_proc_list):
+                    # remove .ahead
+                    os.system('rm {:}'.format(icat.replace('.fits', '.ahead')))
             else:
-                msgs.info('{:} has an extinction of {:0.3f} magnitude, Excellent conditions!'.format(os.path.basename(this_sci_fits), mag_ext))
+                msgs.info('Running SCAMP to solve the astronometric solutions.')
+                scamp.run_scamp(this_cat_proc_list, config=self.scampconfig, workdir=self.science_path, QAdir=self.qa_path,
+                                n_process=self.n_process, defaultconfig='pyphot', group=self.group, delete=self.delete,
+                                log=self.log, verbose=self.verbose)
 
-            # measure the PSF
-            star_table=Table()
-            try:
-                star_table['x'] = cat_matched['XWIN_IMAGE']
-                star_table['y'] = cat_matched['YWIN_IMAGE']
-            except:
-                star_table['x'] = cat_matched['xcentroid']
-                star_table['y'] = cat_matched['ycentroid']
-            fwhm, _, _,_ = psf.buildPSF(star_table, this_sci_fits, size=51, sigclip=5, maxiters=10, norm_radius=2.5,
-                                   pixscale=pixscale, cenfunc='median', outroot=this_qa_root)
+        ## Step three: run swarp to resample sciproc images
+        # resample science image
+        msgs.info('Running Swarp to resample science images.')
+        swarp.run_swarp(self.sci_proc_list, config=self.swarpconfig, workdir=self.science_path, defaultconfig='pyphot',
+                        n_process=self.n_process, delete=self.delete, log=self.log, verbose=self.verbose)
+        #swarp.run_swarp(self.sci_proc_list, config=self.swarpconfig, workdir=self.science_path, defaultconfig='pyphot',
+        #                n_process=self.n_process, delete=self.delete, log=self.log, verbose=self.verbose,
+        #                coadddir='./', coaddroot='test_coadd')
 
-            # Save the important parameters
-            par[0].header['FLXSCALE'] = FLXSCALE
-            par[0].header['FLASCALE'] = FLASCALE
-            par[0].header['ZP'] = (zp_this, 'Zero point measured from stars')
-            par[0].header['ZP_STD'] = (zp_this_std, 'The standard deviration of ZP')
-            par[0].header['ZP_NSTAR'] = (nstar, 'The number of stars used for ZP and FWHM')
-            par[0].header['FWHM'] = (fwhm, 'FWHM in units of arcsec measured from stars')
-            par.writeto(this_sci_fits, overwrite=True)
-        else:
-            msgs.warn('The number of stars found for calibration is smaller than nstar_min. skipping the ZPT calibrations.')
-            fwhm = 0
-        zp_all[ii] = zp_this
-        zp_std_all[ii] = zp_this_std
-        nstar_all[ii] = nstar
-        fwhm_all[ii] = fwhm
-
-    return zp_all, zp_std_all, nstar_all, fwhm_all
-
-def astrometric_old_old(sci_fits_list, wht_fits_list, flag_fits_list, pixscale, science_path='./',qa_path='./',
-                task='sex',detect_thresh=5.0, analysis_thresh=5.0, detect_minarea=5, crossid_radius=1.0,
-                astref_catalog='GAIA-DR2', astref_band='DEFAULT', astrefmag_limits=None,
-                position_maxerr=1.0, distort_degrees=3, pixscale_maxerr=1.1, posangle_maxerr=10.0,
-                stability_type='INSTRUMENT', mosaic_type='LOOSE', weight_type='MAP_WEIGHT',
-                skip_swarp_align=False, solve_photom_scamp=False, scamp_second_pass=False,delete=False, log=True):
-    # ToDo: parallel this. Maybe parallel sexall, scampall, and swarpall
-    # configuration for the swarp run
-    # Note that I would apply the gain correction before doing the astrometric calibration, so I set Gain to 1.0
-    # resample science image
-    swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "PIXELSCALE_TYPE": "MANUAL",
-                   "PIXEL_SCALE": pixscale, "SUBTRACT_BACK": "N", "COMBINE_TYPE": "MEDIAN", "GAIN_DEFAULT": 1.0,
-                   "RESAMPLE_SUFFIX": ".resamp.fits", "WEIGHT_TYPE": weight_type,
-                   "RESAMPLING_TYPE": 'NEAREST',
-                   # I would always set this to NEAREST for individual exposures to avoid interpolation
-                   "HEADER_SUFFIX": "_cat.head"}
-    # configuration for swarp the flag image
-    swarpconfig_flag = swarpconfig.copy()
-    swarpconfig_flag['WEIGHT_TYPE'] = 'NONE'
-    swarpconfig_flag['COMBINE_TYPE'] = 'SUM'
-    swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
-
-    if skip_swarp_align:
-        msgs.info('Skipping the first alignment step with Swarp')
-        for i in range(len(sci_fits_list)):
-            os.system('cp {:} {:}'.format(sci_fits_list[i],
-                                          sci_fits_list[i].replace('.fits', '.resamp.fits')))
-            os.system('cp {:} {:}'.format(sci_fits_list[i].replace('.fits', '.weight.fits'),
-                                          sci_fits_list[i].replace('.fits', '.resamp.weight.fits')))
-            os.system('cp {:} {:}'.format(flag_fits_list[i],
-                                          flag_fits_list[i].replace('.fits', '.resamp.fits')))
-    else:
-        ## This step is basically align the image to N to the up and E to the left.
-        ## It is important if your image has a ~180 degree from the nominal orientation.
-        msgs.info('Running Swarp for the first pass to align the science image.')
-        swarp.run_swarp(sci_fits_list, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                        coaddroot=None, delete=delete, log=log)
         # resample flag image
-        msgs.info('Running Swarp for the first pass to align the flag image.')
-        swarp.run_swarp(flag_fits_list, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                        coaddroot=None, delete=delete, log=False)
+        msgs.info('Running Swarp to resample flag images.')
+        # copy the .head for flag images
+        for ii, icat in enumerate(self.cat_proc_list):
+            os.system('cp {:} {:}'.format(icat.replace('.fits', '.head'),
+                                          self.flag_proc_list[ii].replace('.fits', '_cat.head')))
+        swarp.run_swarp(self.flag_proc_list, config=self.swarpconfig_flag, workdir=self.science_path, defaultconfig='pyphot',
+                        n_process=self.n_process, delete=self.delete, log=False, verbose=False)
 
-    ## remove useless data and change flag image type to int32
-    sci_fits_list_resample = []
-    wht_fits_list_resample = []
-    flag_fits_list_resample = []
-    cat_fits_list_resample = []
-    for i in range(len(sci_fits_list)):
-        sci_fits_list_resample.append(sci_fits_list[i].replace('.fits', '.resamp.fits'))
-        wht_fits_list_resample.append(sci_fits_list[i].replace('.fits', '.resamp.weight.fits'))
-        flag_fits_list_resample.append(flag_fits_list[i].replace('.fits', '.resamp.fits'))
-        cat_fits_list_resample.append(sci_fits_list[i].replace('.fits', '.resamp_cat.fits'))
-        if not skip_swarp_align:
-            par = fits.open(flag_fits_list[i].replace('.fits', '.resamp.fits'), memmap=False)
-            par[0].data = par[0].data.astype('int32')  # change the dtype to be int32
-            par[0].writeto(flag_fits_list[i].replace('.fits', '.resamp.fits'), overwrite=True)
+        # resample inverse variance image
+        msgs.info('Running Swarp to resample flag images.')
+        # copy the .head for flag images
+        for ii, icat in enumerate(self.cat_proc_list):
+            os.system('cp {:} {:}'.format(icat.replace('.fits', '.head'),
+                                          self.ivar_proc_list[ii].replace('.fits', '_cat.head')))
+        swarp.run_swarp(self.ivar_proc_list, config=self.swarpconfig_ivar, workdir=self.science_path, defaultconfig='pyphot',
+                        n_process=self.n_process, delete=self.delete, log=False, verbose=False)
+
+        # remove useless data and change flag image type
+        msgs.info('Cleaning up temporary files.')
+        for ii, flag_fits in enumerate(self.flag_resample_list):
+            par = fits.open(flag_fits, memmap=False)
+            # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
+            # in order to get the correct flag when doing the coadd with swarp in the later step
+            par[0].header['EXPTIME'] = 1.0
+            par[0].header['FLXSCALE'] = 1.0
+            par[0].header['FLASCALE'] = 1.0
+            par[0].data = par[0].data.astype('int32')
+            par[0].writeto(flag_fits, overwrite=True)
             del par[0].data
             par.close()
             gc.collect()
+            # remove weight map for flag and ivar
+            os.system('rm {:}'.format(self.flag_resample_list[ii].replace('.fits', '.weight.fits')))
+            os.system('rm {:}'.format(self.ivar_resample_list[ii].replace('.fits', '.weight.fits')))
+        for ii, sci_fits in enumerate(self.sci_proc_list): # not that for mosaic, sci_proc_list has different size with sci_resample_list
+            # remove _cat.head
+            os.system('rm {:}'.format(self.sci_proc_list[ii].replace('.fits', '_cat.head')))
+            os.system('rm {:}'.format(self.flag_proc_list[ii].replace('.fits', '_cat.head')))
+            os.system('rm {:}'.format(self.ivar_proc_list[ii].replace('.fits', '_cat.head')))
 
-            os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
+        ## Step four: run SExtractor on resampled sciproc images
+        msgs.info('Running SExtractor for the second pass to extract catalog from resampled images.')
+        sex.run_sex(self.sci_resample_list, flag_image_list=self.flag_resample_list, weight_image_list=self.wht_resample_list,
+                    n_process=self.n_process, task=self.sextask, config=self.sexconfig, workdir=self.science_path, params=self.sexparams,
+                    defaultconfig='pyphot', conv=self.conv, nnw=None, dual=False, delete=self.delete, log=self.log, verbose=self.verbose)
 
-    # configuration for the first SExtractor run
-    sexconfig0 = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
-                  "DETECT_THRESH": detect_thresh,
-                  "ANALYSIS_THRESH": analysis_thresh,
-                  "DETECT_MINAREA": detect_minarea}
-    sexparams0 = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
-                  'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE', 'ELLIPTICITY',
-                  'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER',
-                  'FLUX_RADIUS','IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
-    msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
-    sex.run_sex(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-                defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=delete, log=log,
-                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
+    def run_chip_cal(self):
+        '''
+        Calibrate the zeropoint of individual chips
+        Returns
+        -------
 
-    #for ii in range(len(cat_fits_list_resample)):
-    #    this_cat = cat_fits_list_resample[ii]
-    #    par = fits.open(this_cat)
-    #    this_clean = (par[2].data['NIMAFLAGS_ISO']<1) & (par[2].data['IMAFLAGS_ISO']<1) & (par[2].data['FLAGS']<1)
-    #    par[2].data = par[2].data[this_clean]
-    #    par.writeto(this_cat,overwrite=True)
+        '''
+        # Prepare reference catalogs
+        groups = np.unique(self.coadd_ids.data)
+        for igroup in groups:
+            _ = self.get_phoref_cat(igroup)
 
-    # configuration for the scamp run
-    if solve_photom_scamp:
-        SOLVE_PHOTOM='Y'
-    else:
-        SOLVE_PHOTOM='N'
+        # Calibrate zero point chip by chip
+        zp_all, zp_std_all, nstar_all, fwhm_all = cal_chips(self.cat_resample_list,
+                                                            sci_fits_list=self.sci_resample_list,
+                                                            ref_fits_list=self.master_phoref_cats,
+                                                            outqa_root_list=self.outqa_list,
+                                                            refcatalog=self.photref_catalog,
+                                                            primary=self.primary,
+                                                            secondary=self.secondary,
+                                                            coefficients=self.coefficients,
+                                                            ZP=self.zeropoint,
+                                                            nstar_min=self.nstar_min,
+                                                            external_flag=self.external_flag,
+                                                            pixscale=self.pixscale,
+                                                            n_process=self.n_process)
 
-    if astrefmag_limits is not None:
-        ASTREFMAG_LIMITS = '{:},{:}'.format(astrefmag_limits[0],astrefmag_limits[1])
-    else:
-        ASTREFMAG_LIMITS = '-99.0,99.0'
+        # The FITS table that stores individual zero-points
+        # ToDo: add filter to master_zpt_name
+        master_zpt_name = os.path.join(self.par['calibrations']['master_dir'],'MasterChipZPT_{:}.fits'.format(self.setup_id))
+        master_zpt_tbl = Table()
+        master_zpt_tbl['Name'] = [os.path.basename(i) for i in self.sci_resample_list]
+        master_zpt_tbl['DETID'] = self.resamp_det_ids
+        master_zpt_tbl['exptime'] = np.repeat(self.sci_exptime, len(self.detectors))
+        master_zpt_tbl['airmass'] = np.repeat(self.sci_airmass, len(self.detectors))
+        master_zpt_tbl['ZPT'] = zp_all
+        master_zpt_tbl['ZPT_Std'] = zp_std_all
+        master_zpt_tbl['FWHM'] = fwhm_all
+        master_zpt_tbl['NStar'] = nstar_all.astype('int32')
+        master_zpt_tbl.write(master_zpt_name, overwrite=True)
+        msgs.info('Calibrated zeropoint information for individual chips are saved to {:}'.format(master_zpt_name))
 
-    scampconfig = {"CROSSID_RADIUS": crossid_radius,
-                    "ASTREF_CATALOG": astref_catalog,
-                    "ASTREF_BAND": astref_band,
-                    "ASTREFMAG_LIMITS":ASTREFMAG_LIMITS,
-                    "POSITION_MAXERR": position_maxerr,
-                    "PIXSCALE_MAXERR": pixscale_maxerr,
-                    "POSANGLE_MAXERR": posangle_maxerr,
-                    "STABILITY_TYPE": stability_type,
-                    "MOSAIC_TYPE": mosaic_type,
-                    "SOLVE_PHOTOM": SOLVE_PHOTOM,
-                    "DISTORT_DEGREES":distort_degrees,
-                    "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
-                    "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
-    if scamp_second_pass:
-        # first run with distort_degrees of 1
-        scampconfig1 = scampconfig.copy()
-        scampconfig1['DISTORT_DEGREES'] = np.max([1,distort_degrees-2])
-        msgs.info('Running the first pass SCAMP with DISTORT_DEGREES of {:}'.format(scampconfig1['DISTORT_DEGREES']))
-        scamp.run_scamp(cat_fits_list_resample, config=scampconfig1, workdir=science_path, QAdir=qa_path,
-                        defaultconfig='pyphot', delete=delete, log=log)
-        ## we can make the maximum errors to be smaller for the second pass.
-        scampconfig['POSITION_MAXERR'] = np.min([1.0,position_maxerr])
-        scampconfig['PIXSCALE_MAXERR'] = np.min([1.2,pixscale_maxerr])
-        scampconfig['POSANGLE_MAXERR'] = np.min([5.0,posangle_maxerr])
-        # copy the .head to .ahead
-        for i in range(len(sci_fits_list_resample)):
-            os.system('mv {:} {:}'.format(cat_fits_list_resample[i].replace('.fits', '.head'),
-                                          cat_fits_list_resample[i].replace('.fits', '.ahead')))
-    # run the final scamp
-    msgs.info('Running the final pass of SCAMP with DISTORT_DEGREES of {:}'.format(distort_degrees))
-    scamp.run_scamp(cat_fits_list_resample, config=scampconfig, workdir=science_path, QAdir=qa_path,
-                    defaultconfig='pyphot', delete=delete, log=log)
+    def run_img_qa(self):
+        '''
+        Make QA plot for calibrated individual chips
+        Returns
+        -------
 
-    ## copy the .head for flag images
-    for i in range(len(sci_fits_list_resample)):
-        os.system('cp {:} {:}'.format(sci_fits_list_resample[i].replace('.fits', '_cat.head'),
-                                      flag_fits_list_resample[i].replace('.fits', '_cat.head')))
+        '''
+        outroots = []
+        for this_image in self.sci_resample_list:
+            outroots.append(os.path.join(self.qa_path, os.path.basename(this_image).replace('.fits', '_img')))
+        utils.showimages(self.sci_resample_list, outroots=outroots,
+                         interval_method=self.par['postproc']['qa']['interval_method'],
+                         vmin=self.par['postproc']['qa']['vmin'],
+                         vmax=self.par['postproc']['qa']['vmax'],
+                         stretch_method=self.par['postproc']['qa']['stretch_method'],
+                         cmap=self.par['postproc']['qa']['cmap'],
+                         plot_wcs=self.par['postproc']['qa']['plot_wcs'],
+                         show=self.par['postproc']['qa']['show'],
+                         n_process=self.n_process)
 
-    ## configuration for the second swarp run
-    swarpconfig['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
-    # resample the science image
-    msgs.info('Running Swarp for the second pass to align the science image.')
-    swarp.run_swarp(sci_fits_list_resample, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
-                    coaddroot=None, delete=delete, log=log)
-    # resample the flag image
-    swarpconfig_flag['RESAMPLE_SUFFIX'] = '.fits' # overwright the previous resampled image
-    swarpconfig_flag['RESAMPLING_TYPE'] = 'FLAGS'
-    msgs.info('Running Swarp for the second pass to align the flag image.')
-    swarp.run_swarp(flag_fits_list_resample, config=swarpconfig_flag, workdir=science_path, defaultconfig='pyphot',
-                    coaddroot=None, delete=delete, log=False)
+    def run_coadd(self):
+        '''
+        Coadd images for each target based on coadd_ids
+        Returns
+        -------
 
-    # delete unnecessary weight maps and head
-    for i in range(len(sci_fits_list)):
-        os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp.weight.fits')))
-        os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.fits')))
-        os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.head')))
-        os.system('rm {:}'.format(flag_fits_list[i].replace('.fits', '.resamp_cat.head')))
+        '''
+        if self.par['postproc']['coadd']['pixscale'] is not None:
+            self.pixscale = self.par['postproc']['coadd']['pixscale'] # Update pixscale
 
-    if scamp_second_pass:
-        for i in range(len(sci_fits_list)):
-            os.system('rm {:}'.format(sci_fits_list[i].replace('.fits', '.resamp_cat.ahead')))
+        # Coadd by group
+        groups = np.unique(self.coadd_ids.data)
+        for igroup in groups:
+            this_group = self.resamp_coadd_ids == igroup
+            this_sci_list = np.array(self.sci_resample_list)[this_group].tolist()
+            this_flag_list = np.array(self.flag_resample_list)[this_group].tolist()
+            this_ivar_list = np.array(self.ivar_resample_list)[this_group].tolist()
+            #this_target = self.sci_target[self.coadd_ids==igroup][0]
+            #this_filter = self.sci_filter[self.coadd_ids==igroup][0]
+            #this_coadd_root = '{:}_{:}_coadd_ID{:03d}'.format(this_target, this_filter, igroup)
+            this_coadd_root = self.coadd_root_names[np.where(np.array(self.coadd_root_ids)==igroup)[0][0]]
+            this_photref_cat = np.array(self.master_phoref_cats)[this_group].tolist()[0]
 
-    # Update fluxscale
-    if solve_photom_scamp:
-        msgs.info('The FLXSCALE was solved with scamp.')
-    else:
-        for i in range(len(sci_fits_list)):
-            msgs.info('Solving the FLXSCALE for {:} with 1/EXPTIME.'.format(os.path.basename(sci_fits_list_resample[i])))
-            par = fits.open(sci_fits_list_resample[i], memmap=False)
-            # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
-            # in order to get the correct flag when doing the coadd with swarp in the later step
-            par[0].header['FLXSCALE'] = utils.inverse(par[0].header['EXPTIME'])
-            par[0].writeto(sci_fits_list_resample[i], overwrite=True)
-            del par[0].data
-            par.close()
+            # run it
+            coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file = coadd(this_sci_list, this_flag_list, this_ivar_list, this_coadd_root,
+                                                        self.pixscale, self.science_path, self.coadd_path,
+                                                        weight_type=self.par['postproc']['coadd']['weight_type'],
+                                                        rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
+                                                        combine_type=self.par['postproc']['coadd']['combine_type'],
+                                                        clip_ampfrac=self.par['postproc']['coadd']['clip_ampfrac'],
+                                                        clip_sigma=self.par['postproc']['coadd']['clip_sigma'],
+                                                        blank_badpixels=self.par['postproc']['coadd']['blank_badpixels'],
+                                                        subtract_back=self.par['postproc']['coadd']['subtract_back'],
+                                                        back_type=self.par['postproc']['coadd']['back_type'],
+                                                        back_default=self.par['postproc']['coadd']['back_default'],
+                                                        back_size=self.par['postproc']['coadd']['back_size'],
+                                                        back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
+                                                        back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
+                                                        resampling_type=self.par['postproc']['coadd']['resampling_type'],
+                                                        delete=self.par['postproc']['coadd']['delete'],
+                                                        log=self.par['postproc']['coadd']['log'])
 
-    # change flag image type to int32, flux scale to 1.0
-    for i in range(len(sci_fits_list)):
-        msgs.info('Saving FLAG image {:} to int32.'.format(os.path.basename(flag_fits_list_resample[i])))
-        par = fits.open(flag_fits_list_resample[i], memmap=False)
-        # Force the exptime=1 and FLXSCALE=1 (FLXSCALE was generated from the scamp run and will be used by Swarp later on)
-        # in order to get the correct flag when doing the coadd with swarp in the later step
-        par[0].header['EXPTIME'] = 1.0
-        par[0].header['FLXSCALE'] = 1.0
-        par[0].header['FLASCALE'] = 1.0
-        par[0].data = par[0].data.astype('int32')
-        par[0].writeto(flag_fits_list_resample[i], overwrite=True)
-        del par[0].data
-        par.close()
-        gc.collect()
+            # Extract a catalog for zero point calibration.
+            msgs.info('Extracting a catalog using SExtractor for zero-point calibration.')
+            sex.sexone(coadd_file, catname=coadd_file.replace('.fits', '_zptcat.fits'),
+                       flag_image=coadd_flag_file, weight_image=coadd_wht_file,
+                       task=self.sextask, config=self.sexconfig, workdir=self.coadd_path, params=self.sexparams,
+                       defaultconfig='pyphot', dual=False, conv='sex', nnw=None, delete=True, log=False)
 
+            # Calibrate zeropoint for the coadded image
+            if self.par['postproc']['coadd']['cal_zpt']:
+                msgs.info('Calcuating the zeropoint for {:}'.format(coadd_file))
+                zpt, zpt_std, nstar, matched_table = calzpt(coadd_file.replace('.fits', '_zptcat.fits'),
+                        refcatalog=self.photref_catalog, primary=self.primary, secondary=self.secondary,
+                        coefficients=self.coefficients, FLXSCALE=1.0, FLASCALE=1.0,
+                        out_refcat=this_photref_cat, external_flag=self.external_flag, nstar_min=self.nstar_min,
+                        outqaroot=os.path.join(self.qa_path, this_coadd_root))
 
-    ## Run SExtractor for the resampled images. The catalogs will be used for calibrating individual chips.
-    msgs.info('Running SExtractor for the second pass to extract catalog for resampled images.')
-    sex.run_sex(sci_fits_list_resample, task=task, config=sexconfig0, workdir=science_path, params=sexparams0,
-                defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=delete, log=log,
-                flag_image_list=flag_fits_list_resample, weight_image_list=wht_fits_list_resample)
+                if matched_table is not None:
+                    star_table = Table()
+                    star_table['x'] = matched_table['XWIN_IMAGE']
+                    star_table['y'] = matched_table['YWIN_IMAGE']
+                    fwhm, _, _, _ = psf.buildPSF(star_table, coadd_file, pixscale=self.pixscale,
+                                                 outroot=os.path.join(self.qa_path, this_coadd_root))
+                else:
+                    fwhm = 0.
+            else:
+                zpt = self.par['postproc']['photometry']['zpt']
+                zpt_std = 0.
+                nstar = 0
 
-    return sci_fits_list_resample, wht_fits_list_resample, flag_fits_list_resample, cat_fits_list_resample
+            ## Write the ZPT into fits header
+            par = fits.open(coadd_file, memmap=False)
+            par[0].header['ZP'] = (zpt, 'Zero point')
+            par[0].header['ZP_STD'] = (zpt_std, 'The standard deviration of ZP')
+            par[0].header['ZP_NSTAR'] = (nstar, 'The number of stars used for ZP and FWHM')
+            par[0].header['FWHM'] = (fwhm, 'FWHM in units of arcsec measured from stars')
+            par.writeto(coadd_file, overwrite=True)
+
+    def extract_catalog(self):
+        '''
+        Extract catalog from coadded images
+        Returns
+        -------
+
+        '''
+        if self.par['postproc']['coadd']['pixscale'] is not None:
+            self.pixscale = self.par['postproc']['coadd']['pixscale'] # Update pixscale
+
+        # Coadd by group
+        groups = np.unique(self.coadd_ids.data)
+        for igroup in groups:
+            this_group = self.resamp_coadd_ids == igroup
+            this_photref_cat = np.array(self.master_phoref_cats)[this_group].tolist()[0]
+            this_coadd_root = self.coadd_root_names[np.where(np.array(self.coadd_root_ids)==igroup)[0][0]]
+
+            coadd_file = this_coadd_root + '_sci.fits'
+            coadd_wht_file = this_coadd_root + '_sci.weight.fits'
+            coadd_flag_file = this_coadd_root + '_flag.fits'
+
+            this_zpt = fits.getheader(os.path.join(self.coadd_path, coadd_file))['ZP']
+
+            phot_table, rmsmap, bkgmap = detect(coadd_file, outroot=this_coadd_root,
+                                            flag_image=coadd_flag_file, weight_image=coadd_wht_file,
+                                            workdir=self.coadd_path, bkg_image=None, rms_image=None,
+                                            zpt=this_zpt, effective_gain=None, pixscale=self.pixscale,
+                                            detection_method=self.par['postproc']['detection']['detection_method'],
+                                            detect_thresh=self.par['postproc']['detection']['detect_thresh'],
+                                            analysis_thresh=self.par['postproc']['detection']['analysis_thresh'],
+                                            detect_minarea=self.par['postproc']['detection']['detect_minarea'],
+                                            fwhm=self.par['postproc']['detection']['fwhm'],
+                                            nlevels=self.par['postproc']['detection']['nlevels'],
+                                            contrast=self.par['postproc']['detection']['contrast'],
+                                            back_type=self.par['postproc']['detection']['back_type'],
+                                            back_rms_type=self.par['postproc']['detection']['back_rms_type'],
+                                            back_size=self.par['postproc']['detection']['back_size'],
+                                            back_filter_size=self.par['postproc']['detection']['back_filtersize'],
+                                            back_default=self.par['postproc']['detection']['back_default'],
+                                            backphoto_type=self.par['postproc']['detection']['backphoto_type'],
+                                            backphoto_thick=self.par['postproc']['detection']['backphoto_thick'],
+                                            weight_type=self.par['postproc']['detection']['weight_type'],
+                                            check_type=self.par['postproc']['detection']['check_type'],
+                                            back_nsigma=self.par['postproc']['detection']['back_nsigma'],
+                                            back_maxiters=self.par['postproc']['detection']['back_maxiters'],
+                                            morp_filter=self.par['postproc']['detection']['morp_filter'],
+                                            defaultconfig='pyphot', dual=False,
+                                            conv=self.par['postproc']['detection']['conv'],
+                                            nnw=self.par['postproc']['detection']['nnw'],
+                                            delete=self.par['postproc']['detection']['delete'],
+                                            log=self.par['postproc']['detection']['log'],
+                                            phot_apertures=self.par['postproc']['detection']['phot_apertures'],
+                                            sextractor_task = self.sextask)
+
+    def get_astref_cat(self, igroup):
+        '''
+        Download astrometric reference catalog and save to FITS-LDAC format
+        Parameters
+        ----------
+        igroup
+
+        Returns
+        -------
+
+        '''
+        ra = np.median(self.sci_ra[self.coadd_ids == igroup])
+        dec = np.median(self.sci_dec[self.coadd_ids == igroup])
+        this_ref_cat = os.path.join(self.par['calibrations']['master_dir'],
+                                    'MasterAstRefCat_{:}_{:}_ID{:03d}.fits'.format(self.astref_catalog, self.setup_id, igroup))
+
+        if os.path.exists(this_ref_cat) and self.reuse_master:
+            msgs.info('Astrometric reference catalog {:} exists.'.format(this_ref_cat))
+        else:
+            ## ToDo: parameterize radius. Either use FGROUP_RADIUS parameter or add a new Par
+            msgs.info('Querying astrometric reference catalog {:}.'.format(this_ref_cat))
+            if self.astref_catalog == 'LS-DR9':
+                tbl = query_standard(ra, dec, radius=0.5, catalog='Legacy', data_release='ls_dr9')
+            elif self.astref_catalog == 'DES-DR2':
+                tbl = query_standard(ra, dec, radius=0.5, catalog='DES')
+
+            hdulist = ldac.convert_table_to_ldac(tbl)
+            hdulist.writeto(outname, overwrite=True)
+        # mag_min=self.astrefmag_limits[0], mag_max=self.astrefmag_limits[1],
+        #tbl = query.get_tbl_for_scamp(this_ref_cat, ra, dec, radius=0.5,
+        #                              catalog=self.astref_catalog, reuse_master=self.reuse_masters)
+
+        return this_ref_cat
+
+    def get_phoref_cat(self, igroup):
+        '''
+        Download photometric reference catalog and save to FITS-LDAC format
+        Parameters
+        ----------
+        igroup
+
+        Returns
+        -------
+
+        '''
+        ra = np.median(self.sci_ra[self.coadd_ids == igroup])
+        dec = np.median(self.sci_dec[self.coadd_ids == igroup])
+        this_ref_cat = os.path.join(self.par['calibrations']['master_dir'],
+                                    'MasterPhoRefCat_{:}_{:}_ID{:03d}.fits'.format(self.photref_catalog, self.setup_id, igroup))
+
+        if os.path.exists(this_ref_cat) and self.reuse_masters:
+            msgs.info('Photometric reference catalog {:} exists.'.format(this_ref_cat))
+        else:
+            msgs.info('Querying photometric reference catalog {:}.'.format(this_ref_cat))
+            ## ToDo: parameterize radius.
+            tbl = query.query_standard(ra, dec, catalog=self.photref_catalog, radius=0.5)
+            tbl.write(this_ref_cat, overwrite=True, format='fits')
+
+        return this_ref_cat

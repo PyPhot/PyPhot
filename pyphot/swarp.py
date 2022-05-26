@@ -142,7 +142,7 @@ def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddd
             msgs.info("SWarp version is {:}".format(swarpversion))
 
         ## Generate the configuration file
-        configcomd = get_default_config(defaultconfig=defaultconfig, workdir=workdir)
+        configcomd = get_default_config(defaultconfig=defaultconfig, workdir=coadddir, outroot=coaddroot, verbose=verbose)
 
         ## append your configuration
         configapp = get_config(config=config)
@@ -159,7 +159,7 @@ def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddd
         os.system("rm {:}".format(os.path.join(workdir, "tmplist.txt")))
 
         if log:
-            logfile = open(os.path.join(coadddir, coaddroot+".scamp.log"), "w")
+            logfile = open(os.path.join(coadddir, coaddroot+".swarp.log"), "w")
             logfile.write("swarp was called with :\n")
             logfile.write(" ".join(comd))
             logfile.write("\n\n####### stdout #######\n")
@@ -168,13 +168,11 @@ def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddd
             logfile.write(err.decode("utf-8"))
             logfile.write("\n")
             logfile.close()
-            msgs.info("Processing log generated: " + os.path.join(coadddir, coaddroot+".scamp.log"))
+            msgs.info("Processing log generated: " + os.path.join(coadddir, coaddroot+".swarp.log"))
         if delete:
-            os.system("rm " + os.path.join(workdir, "*.swarp"))
-            if os.path.exists(os.path.join(workdir, "swarp.xml")):
-                os.system("rm " + os.path.join(workdir, "swarp.xml"))
-        else:
-            os.system("mv {:} {:}".format(os.path.join(workdir, "*.swarp"), coadddir))
+            os.system("rm " + os.path.join(coadddir, coaddroot+"_config.swarp"))
+            if os.path.exists(os.path.join(coadddir, coaddroot + ".swarp.xml")):
+                os.system("rm " + os.path.join(coadddir, coaddroot + ".swarp.xml"))
 
     else:
         if n_process==1:

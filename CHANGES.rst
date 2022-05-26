@@ -1,3 +1,12 @@
+0.5.0dev (2022-05-24)
+----------------
+- Add inverse variance map which includes photon noise
+- Change weight map from 1/BKG to 1/(FLAT*MedianSky)
+- Change ccdproc to detproc and add new ImageProc class
+- Add Postproc class
+- Support external reference catalog for scamp (with datalab requirement if use)
+- Simplify pyphot.py
+
 0.4.0 (2022-02-21)
 ----------------
 - Major development for Keck LRIS
@@ -38,4 +47,4 @@
 0.0.0 (2020-12-14)
 ----------------
 
-Start development of PyPhot
+Start the development of PyPhot

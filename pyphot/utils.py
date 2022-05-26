@@ -14,6 +14,7 @@ from multiprocessing import Process, Queue
 
 from astropy.wcs import WCS
 from astropy.stats import sigma_clip
+from astropy.stats import biweight_location, biweight_midvariance
 from astropy.visualization import MinMaxInterval, ManualInterval, ZScaleInterval
 from astropy.visualization import AsinhStretch, HistEqStretch, LinearStretch, LogStretch
 from astropy.visualization import PowerDistStretch, PowerStretch, SinhStretch, SqrtStretch
@@ -259,6 +260,51 @@ def rebin_evlist(frame, newshape):
              ['/factor[%d]' % i for i in range(lenShape)]
     return eval(''.join(evList))
 
+def gain_correct(data, datasec_img, gain):
+    '''
+    Convert data from ADU to e-
+    Parameters
+    ----------
+    data
+    datasec_img
+    gain
+
+    Returns
+    -------
+
+    '''
+
+    numamplifiers = np.size(gain)
+    for iamp in range(numamplifiers):
+        this_amp = datasec_img == iamp + 1
+        data[this_amp] *= gain[iamp]
+
+    return data
+
+def pixel_stats(pixels, bpm=None, clip_sig=3, n_clip=10, min_pix=50):
+    """
+    Calculate image statistics to determine median sky level and RMS noise. Uses
+    biweight as "robust" estimator of these quantities.
+
+    :param pixels: Array to calculate statistics for
+    :param clip_sig: Sigma value at which to clip outliers
+    :param n_clip: Number of clipping iterations
+    :param min_pix: Minimum number of retained pixels
+    :return: 2-tuple of distribution mode, scale
+    """
+    clip_iter = 0
+    sky, rms = 0, 1
+    if bpm is None:
+        bpm = np.ones(pixels.shape, dtype=bool)
+    gpm = np.invert(bpm)
+    while True:
+        sky = biweight_location(pixels[gpm], ignore_nan=True)
+        rms = np.sqrt(biweight_midvariance(pixels[gpm]))
+        gpm &= np.abs(pixels - sky) < clip_sig * rms
+        clip_iter += 1
+        if np.sum(gpm) < min_pix or clip_iter >= n_clip:
+            break
+    return sky, rms
 
 def gauss1D(x, amplitude, mean, stddev, offset):
     return amplitude * np.exp(-((x - mean)**2 / (2*stddev**2))) + offset

@@ -237,7 +237,15 @@ class PyPhotSetup:
                     if os.path.isdir(root) else '{0}*{1}*'.format(root, extension)
         # configuration lines
         cfg_lines = ['[rdx]']
-        cfg_lines += ['    camera = {0}'.format(camera)]
+        cfg_lines += ['    camera          = {0}'.format(camera)]
+        cfg_lines += ['    skip_detproc    = False']
+        cfg_lines += ['    skip_sciproc    = False']
+        cfg_lines += ['    skip_astrometry = False']
+        cfg_lines += ['    skip_chipcal    = False']
+        cfg_lines += ['    skip_img_qa     = False']
+        cfg_lines += ['    skip_coadd      = False']
+        cfg_lines += ['    skip_detection  = False']
+        cfg_lines += ['    n_process       = 8']
 #        cfg_lines += ['    sortroot = {0}'.format(root)]
         make_pyphot_file(pyphot_file, camera, [dfname], cfg_lines=cfg_lines, setup_mode=True)
 
