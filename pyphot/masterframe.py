@@ -7,7 +7,6 @@ Implements the master frame base class.
 """
 import gc, os
 import numpy as np
-import prospect.models.model_setup
 from scipy.ndimage import gaussian_filter,median_filter
 
 from astropy import stats
