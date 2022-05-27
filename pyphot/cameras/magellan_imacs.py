@@ -328,6 +328,9 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         ## We use dome flat for the pixel flat and thus do not need mask bright stars.
         par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
 
+        # Skybackground
+        par['scienceframe']['process']['use_medsky'] = True
+
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = True
         par['scienceframe']['process']['minimum_vig'] = 0.3
@@ -340,8 +343,9 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['objlim'] = 2.0
 
         # astrometry
-        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['mosaic'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
         par['postproc']['astrometry']['astrefmag_limits'] = [18, 21]
         par['postproc']['astrometry']['detect_thresh'] = 10
         par['postproc']['astrometry']['analysis_thresh'] = 10

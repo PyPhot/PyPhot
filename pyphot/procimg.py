@@ -19,7 +19,8 @@ from pyphot.photometry import BKG2D, mask_bright_star
 
 def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
             masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
-            replace=None, sextractor_task='sex', verbose=True):
+            maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
+            sextractor_task='sex', verbose=True):
 
     n_file = len(scifiles)
     n_cpu = multiprocessing.cpu_count()
@@ -38,7 +39,9 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
                         science_path=science_path, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                         masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg, bpm_proc=bpm_proc,
                         mask_vig=mask_vig, minimum_vig=minimum_vig, apply_gain=apply_gain, grow=grow,
-                        replace=replace, sextractor_task=sextractor_task, verbose=verbose)
+                        maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
+                        maskbrightstar_method=maskbrightstar_method, conv=conv,
+                        sextractor_task=sextractor_task, verbose=verbose)
             sci_fits_list.append(sci_fits_file)
             flag_fits_list.append(flag_fits_file)
     else:
@@ -56,7 +59,8 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
                 'science_path': science_path, 'masterbiasimg': masterbiasimg,
                 'masterdarkimg': masterdarkimg, 'masterpixflatimg': masterpixflatimg, 'masterillumflatimg': masterillumflatimg,
                 'bpm_proc': bpm_proc, 'mask_vig': mask_vig, 'minimum_vig': minimum_vig, 'apply_gain': apply_gain,
-                'grow': grow, 'replace': replace, 'sextractor_task': sextractor_task, 'verbose':False})
+                'maskbrightstar':maskbrightstar, 'brightstar_nsigma':brightstar_nsigma, 'maskbrightstar_method':maskbrightstar_method,
+                'conv':conv, 'grow': grow, 'sextractor_task': sextractor_task, 'verbose':False})
             processes.append(p)
             p.start()
 
@@ -74,7 +78,8 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
 
 def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
                  masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
-                 replace=None, sextractor_task='sex', verbose=True):
+                 maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
+                 sextractor_task='sex', verbose=True):
 
     rootname = scifile.split('/')[-1]
     if science_path is not None:
@@ -89,6 +94,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
     ivar_fits_file = rootname.replace('.fits','_det{:02d}_proc.ivar.fits'.format(det))
     wht_fits_file = rootname.replace('.fits','_det{:02d}_proc.weight.fits'.format(det))
     flag_fits_file = rootname.replace('.fits','_det{:02d}_detmask.fits'.format(det))
+    star_fits_file = rootname.replace('.fits','_det{:02d}_starmask.fits'.format(det))
 
     if os.path.exists(sci_fits_file):
         msgs.info('The Science product {:} exists, skipping...'.format(sci_fits_file))
@@ -109,11 +115,16 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
         # Zero pixel mask
         bpm_zero = raw_image == 0.
 
+        # mask nan values
+        bpm_nan = np.isnan(raw_image) | np.isinf(raw_image)
+        raw_image[bpm_nan] = 0.
+
+        # mask generated from the processing of master files
         if bpm_proc is None:
             bpm_proc = np.zeros_like(raw_image, dtype='bool')
 
-        # ToDo: remove apply_gain. Always correct for gain, otherwise noise model will be wrong
-        apply_gain = True
+        ## Always set apply_gain to be True for reduction, otherwise the noise model would be incorrect.
+        ## This parameter can be set to False when people want to measure the gain for your detectors.
         if apply_gain:
             sci_image = utils.gain_correct(raw_image, datasec_img, detector_par['gain'])
             header['GAIN'] = (1.0, 'Effective gain')
@@ -122,15 +133,65 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             sci_image = np.copy(raw_image)
             header['UNITS'] = ('ADU', 'Data units')
 
+        # Detector Processing
+        if masterbiasimg is not None:
+            sci_image -= masterbiasimg # should I assume masterbiasimg has zero error?
+        if masterdarkimg is not None:
+            sci_image -= masterdarkimg*exptime # should I assume masterdarkimg has zero error?
+        if masterpixflatimg is not None:
+            sci_image *= utils.inverse(masterpixflatimg)
+        if masterillumflatimg is not None:
+            sci_image *= utils.inverse(masterillumflatimg)
+
+        # Mask Vignetting pixels, should be done after gain correction and detector processing!
+        if mask_vig:
+            msgs.info('Masking significantly vignetting (>{:}%) pixels'.format(minimum_vig*100))
+            if (masterillumflatimg is not None) and (np.sum(masterillumflatimg != 1) > 0):
+                flat_for_vig = masterillumflatimg.copy()
+            elif (masterpixflatimg is not None) and (np.sum(masterpixflatimg != 1) > 0):
+                flat_for_vig = masterpixflatimg.copy()
+            else:
+                flat_for_vig = np.ones_like(sci_image)
+            bpm_vig_1 = flat_for_vig < 1-minimum_vig
+            bad_vig_cameras = ['magellan_imacsf2', 'keck_lris_blue', 'keck_lris_red']
+            if camera.name in bad_vig_cameras:
+                # ToDo: This is a hack. Not sure whether the following is safe or not.
+                #  Basically, we are using the sky background for vignetting.
+                #  IMACS need this since the guider moves around the detector.
+                #  Keck LIRS also need this given its weid illumination at the edge.
+                bpm_for_vig = bpm | bpm_sat | bpm_zero | bpm_proc | bpm_vig_1
+                #starmask = mask_bright_star(sci_image, mask=bpm_for_vig, brightstar_nsigma=5., back_nsigma=3.,
+                #                            back_maxiters=5, method='sextractor', conv=conv,
+                #                            task=sextractor_task, verbose=verbose)
+                bkg_for_vig, _ = BKG2D(sci_image, (50,50), mask=bpm_for_vig, filter_size=(3,3),
+                                       sigclip=5., back_type='sextractor', verbose=verbose)
+                bpm_vig_2 = sci_image < (1-minimum_vig) * np.median(bkg_for_vig[np.invert(bpm_for_vig)])
+                bpm_vig_3 = bkg_for_vig < (1-minimum_vig) * np.median(bkg_for_vig[np.invert(bpm_for_vig)])
+                bpm_vig_all = bpm_vig_1 | bpm_vig_2 | bpm_vig_3
+                bpm_vig = grow_masked(bpm_vig_all, grow, verbose=verbose)
+            else:
+                bpm_vig = bpm_vig_1
+        else:
+            bpm_vig = np.zeros_like(sci_image, dtype=bool)
+
+        # Get a total mask up to this stage
+        bpm_for_wht = bpm | bpm_sat | bpm_zero | bpm_nan | bpm_proc | bpm_vig
+
+        if maskbrightstar:
+            msgs.info('Masking bright stars before calculating median sky background')
+            starmask = mask_bright_star(sci_image, mask=bpm_for_wht, brightstar_nsigma=brightstar_nsigma,
+                                        method=maskbrightstar_method, conv=conv, task=sextractor_task,
+                                        verbose=verbose)
+        else:
+            starmask = np.zeros_like(sci_image, dtype=bool)
+
+        # Calculate median sky background
+        med_sky, med_rms = utils.pixel_stats(sci_image, bpm=bpm_for_wht | starmask, sigclip=3, n_clip=10,
+                                             min_pix=int(np.size(sci_image)*0.2))
+        msgs.info('Median sky value is {:0.2f} e-'.format(med_sky))
         # Use flat and sky background to generate a weight map
         msgs.info('Generating weight map using flat and median sky background')
-        bpm_for_wht = bpm | bpm_sat | bpm_zero | bpm_proc
-        starmask = mask_bright_star(sci_image, mask=bpm_for_wht, brightstar_nsigma=3, back_nsigma=3,
-                                    back_maxiters=5, method='sextractor', task=sextractor_task,
-                                    verbose=verbose)
-        med_sky, med_rms = utils.pixel_stats(sci_image, bpm=bpm_for_wht | starmask, clip_sig=3, n_clip=10,
-                                             min_pix=int(np.size(sci_image)*0.2))
-        wht_image = utils.inverse(np.zeros_like(sci_image) + med_sky)
+        wht_image = utils.inverse(np.ones_like(sci_image) * med_sky)
 
         # Inverse variance map
         msgs.info('Generating inverse variance map')
@@ -140,114 +201,17 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             this_amp = datasec_img == iamp + 1
             ivar_image[this_amp] = utils.inverse(sci_image[this_amp] + detector_par['ronoise'][iamp]**2)
 
-        # Detector Processing
-        if masterbiasimg is not None:
-            sci_image -= masterbiasimg # should I assume masterbiasimg has zero error?
-        if masterdarkimg is not None:
-            sci_image -= masterdarkimg*exptime # should I assume masterdarkimg has zero error?
+        ## Propagate errors
+        #if masterbiasimg is not None:
+        #    sci_image -= masterbiasimg # should I assume masterbiasimg has zero error?
+        #if masterdarkimg is not None:
+        #    sci_image -= masterdarkimg*exptime # should I assume masterdarkimg has zero error?
         if masterpixflatimg is not None:
-            sci_image *= utils.inverse(masterpixflatimg)
             ivar_image *= masterpixflatimg**2
-            wht_image *= masterpixflatimg ** 2
+            wht_image *= masterpixflatimg**2
         if masterillumflatimg is not None:
-            sci_image *= utils.inverse(masterillumflatimg)
             ivar_image *= masterillumflatimg**2
-            wht_image *= masterillumflatimg ** 2
-
-        '''
-        starmask = mask_bright_star(sci_image, mask=bpm, brightstar_nsigma=5, back_nsigma=3,
-                                    back_maxiters=5, method='sextractor', task=sextractor_task,
-                                    verbose=verbose)
-        bkg_for_vig, bkg_rms = BKG2D(sci_image, (50, 50), mask=bpm | starmask, filter_size=(3, 3),
-                               sigclip=5., back_type='sextractor', verbose=verbose)
-
-        ## calculate variance map and apply gain
-        DARK = np.zeros_like(sci_image) + detector_par['darkcurr']
-        FLAT = masterpixflatimg * masterillumflatimg
-        VAR = np.zeros_like(sci_image)
-
-        numamplifiers = detector_par['numamplifiers']
-        for iamp in range(numamplifiers):
-            this_amp = datasec_img == iamp + 1
-            RN = np.zeros_like(sci_image[this_amp]) + detector_par['ronoise'][iamp]
-            GAIN = np.ones_like(sci_image[this_amp]) * detector_par['gain'][iamp]
-            PHOTON = raw_image[this_amp] - masterbiasimg[this_amp] - DARK[this_amp]/GAIN*exptime
-            VAR[this_amp] = PHOTON + \
-                            FLAT[this_amp]*(DARK[this_amp]+masterbiasimg[this_amp])/GAIN + \
-                            RN**2*FLAT[this_amp]**2
-            if apply_gain:
-                sci_image[this_amp] *= GAIN
-                VAR[this_amp] *= GAIN**2
-                header['GAIN'] = (1.0, 'Effective gain')
-
-        #if apply_gain:
-        #    numamplifiers = detector_par['numamplifiers']
-        #    gain = detector_par['gain']
-        #    for iamp in range(numamplifiers):
-        #        this_amp = datasec_img == iamp+1
-        #        sci_image[this_amp] = sci_image[this_amp] * gain[iamp]
-        #    header['GAIN'] = (1.0, 'Effective gain')
-        '''
-
-        # mask Vignetting pixels
-        if (masterillumflatimg is not None) and (np.sum(masterillumflatimg!=1)>0):
-            flat_for_vig = masterillumflatimg.copy()
-        elif (masterpixflatimg is not None) and (np.sum(masterpixflatimg!=1)>0):
-            flat_for_vig = masterpixflatimg.copy()
-        else:
-            flat_for_vig = np.ones_like(sci_image)
-        if mask_vig:
-            if verbose:
-                msgs.info('Masking significantly vignetting (>{:}%) pixels'.format(minimum_vig*100))
-            bpm_vig_1 = flat_for_vig < 1-minimum_vig
-
-            # ToDo: Not sure whether the following is safe or not.
-            #  Basically, we are using the sky background for vignetting.
-            #  IMACS need this since the guider moves around the detector.
-            bpm_for_vig = bpm | bpm_zero | bpm_vig_1 | bpm_proc
-            starmask = mask_bright_star(sci_image, mask=bpm_for_vig, brightstar_nsigma=5., back_nsigma=3.,
-                                        back_maxiters=5, method='sextractor', task=sextractor_task, verbose=verbose)
-            bkg_for_vig, _ = BKG2D(sci_image, (50,50), mask=bpm_for_vig | starmask, filter_size=(3,3),
-                                   sigclip=5., back_type='sextractor', verbose=verbose)
-            bpm_vig_2 = sci_image < (1-minimum_vig) * np.median(bkg_for_vig[np.invert(bpm_for_vig)])
-            bpm_vig_3 = bkg_for_vig < (1-minimum_vig) * np.median(bkg_for_vig[np.invert(bpm_for_vig)])
-            bpm_vig_all = bpm_vig_1 | bpm_vig_2 | bpm_vig_3
-
-            bpm_vig = grow_masked(bpm_vig_all, grow, verbose=verbose)
-            ## Set viginetting pixel to be zero
-            # sci_image[bpm_vig] = 0. # should do this in sci_proc, i.e. after the determination of sky background
-        else:
-            bpm_vig = np.zeros_like(sci_image, dtype=bool)
-
-        # mask nan values
-        bpm_nan = np.isnan(sci_image) | np.isinf(sci_image)
-        sci_image[bpm_nan] = 0.
-
-        '''
-        ## master BPM mask, contains all bpm except for saturated values.
-        bpm_all = bpm | bpm_zero | bpm_vig | bpm_nan | bpm_proc
-
-        ## replace saturated values
-        ## ToDo: explore the replacement algorithm, replace a bad pixel using the median of a box
-        ##       replace saturated values with 65535 or maximum value, this will make the final coadd image looks better
-        ##       replace other bad pixels with median or zero for other pixels?
-        #sci_image[bpm_sat] = np.max(sci_image[np.invert(bpm_all)])
-
-        ## replace other bad pixel values.
-        if replace == 'zero':
-            sci_image[bpm_all] = 0
-        elif replace == 'median':
-            _,sci_image[bpm_all],_ = stats.sigma_clipped_stats(sci_image, bpm_all, sigma=3, maxiters=5)
-        elif replace == 'mean':
-            sci_image[bpm_all],_,_ = stats.sigma_clipped_stats(sci_image, bpm_all, sigma=3, maxiters=5)
-        elif replace == 'min':
-            sci_image[bpm_all] = np.min(sci_image[np.invert(bpm_all)])
-        elif replace == 'max':
-            sci_image[bpm_all] = np.max(sci_image[np.invert(bpm_all)])
-        else:
-            if verbose:
-                msgs.info('Not replacing bad pixel values')
-        '''
+            wht_image *= masterillumflatimg**2
 
         header['MEDSKY'] = (med_sky, 'Median Sky Value, units e-')
         header['DETPROC'] = ('TRUE', 'DETPROC is done?')
@@ -265,12 +229,16 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
                      bpm_zero * np.int(2**3) + bpm_nan*np.int(2**4) + bpm_vig*np.int(2**5)
         io.save_fits(flag_fits_file, flag_image.astype('int32'), header, 'FLAG', overwrite=True)
         msgs.info('Flag image {:} saved'.format(flag_fits_file))
+        # I save star mask here to avoid running maskbrightstar again in the future
+        io.save_fits(star_fits_file, starmask.astype('int32'), header, 'FLAG', overwrite=True)
+        msgs.info('Bright star mask image {:} saved'.format(star_fits_file))
 
     return sci_fits_file, flag_fits_file
 
 def _detproc_worker(work_queue, done_queue, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
                     masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
-                    replace=None, sextractor_task='sex', verbose=True):
+                    maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
+                    sextractor_task='sex', verbose=True):
 
     """Multiprocessing worker for sciproc."""
     while not work_queue.empty():
@@ -279,14 +247,16 @@ def _detproc_worker(work_queue, done_queue, science_path=None, masterbiasimg=Non
                         science_path=science_path, masterbiasimg=masterbiasimg, masterdarkimg=masterdarkimg,
                         masterpixflatimg=masterpixflatimg, masterillumflatimg=masterillumflatimg,
                         bpm_proc=bpm_proc, mask_vig=mask_vig, minimum_vig=minimum_vig,
-                        apply_gain=apply_gain, grow=grow, replace=replace,
+                        apply_gain=apply_gain, grow=grow,
+                        maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma, conv=conv,
+                        maskbrightstar_method=maskbrightstar_method,
                         sextractor_task=sextractor_task, verbose=verbose)
 
         done_queue.put((sci_fits_file, flag_fits_file))
 
-def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., mastersuperskyimg=None,
+def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
             back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5, grow=1.5,
-            maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', sextractor_task='sex',
+            maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex', sextractor_task='sex',
             mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
             mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
             small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0),
@@ -312,10 +282,10 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
     if n_process == 1:
         for ii, scifile in enumerate(scifiles):
             sci_fits_file, wht_fits_file, flag_fits_file = _sciproc_one(scifile, flagfiles[ii],
-                airmass=airmass[ii], coeff_airmass=coeff_airmass, mastersuperskyimg=mastersuperskyimg,
+                airmass=airmass[ii], coeff_airmass=coeff_airmass, mastersuperskyimg=mastersuperskyimg, use_medsky=use_medsky,
                 back_type=back_type, back_rms_type=back_rms_type, back_size=back_size, back_filtersize=back_filtersize,
                 back_maxiters=back_maxiters, grow=grow, maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
-                maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task,
+                maskbrightstar_method=maskbrightstar_method, conv=conv, sextractor_task=sextractor_task,
                 mask_cr=mask_cr, contrast=contrast, lamaxiter=lamaxiter, sigclip=sigclip, cr_threshold=cr_threshold,
                 neighbor_threshold=neighbor_threshold, mask_sat=mask_sat, sat_sig=sat_sig, sat_buf=sat_buf,
                 sat_order=sat_order, low_thresh=low_thresh, h_thresh=h_thresh,
@@ -336,10 +306,10 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
         # creating processes
         for w in range(n_process):
             p = Process(target=_sciproc_worker, args=(work_queue, done_queue), kwargs={
-                'mastersuperskyimg': mastersuperskyimg, 'coeff_airmass': coeff_airmass,
+                'mastersuperskyimg': mastersuperskyimg, 'coeff_airmass': coeff_airmass, 'use_medsky':use_medsky,
                 'back_type': back_type, 'back_rms_type': back_rms_type, 'back_size': back_size, 'back_filtersize': back_filtersize,
                 'back_maxiters': back_maxiters, 'grow': grow, 'maskbrightstar': maskbrightstar, 'brightstar_nsigma': brightstar_nsigma,
-                'maskbrightstar_method': maskbrightstar_method, 'sextractor_task': sextractor_task,
+                'maskbrightstar_method': maskbrightstar_method, 'conv':conv, 'sextractor_task': sextractor_task,
                 'mask_cr': mask_cr, 'contrast': contrast, 'lamaxiter': lamaxiter, 'sigclip': sigclip, 'cr_threshold': cr_threshold,
                 'neighbor_threshold': neighbor_threshold, 'mask_sat': mask_sat, 'sat_sig': sat_sig, 'sat_buf': sat_buf,
                 'sat_order': sat_order, 'low_thresh': low_thresh, 'h_thresh': h_thresh,
@@ -361,9 +331,9 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
 
     return sci_fits_list, wht_fits_list, flag_fits_list
 
-def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg=None,
+def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
                  back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5, grow=1.5,
-                 maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', sextractor_task='sex',
+                 maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex', sextractor_task='sex',
                  mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
                  mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
                  small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0),
@@ -374,6 +344,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
     ivar_fits_file = scifile.replace('_proc.fits','_sci.ivar.fits')
     wht_fits_file = scifile.replace('_proc.fits','_sci.weight.fits')
     flag_fits_file = scifile.replace('_proc.fits','_flag.fits')
+    star_fits_file = scifile.replace('_proc.fits','_starmask.fits')
 
     if os.path.exists(sci_fits_file):
         msgs.info('The Science product {:} exists, skipping...'.format(sci_fits_file))
@@ -402,32 +373,39 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
             wht_image *= 10**(-0.8*mag_ext)
 
         # mask bright stars before estimating the background
-        # do not mask viginetting pixels when estimating the background to reduce edge effect
-        bpm_for_star = np.logical_and(bpm, np.invert(bpm_vig_only))
         if maskbrightstar:
-            starmask = mask_bright_star(data, mask=bpm_for_star, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
-                                        back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task,
-                                        verbose=verbose)
-            starmask = grow_masked(starmask, grow, verbose=verbose)
+            if os.path.exists(star_fits_file):
+                msgs.info('Loading star mask from existing star mask image')
+                _, star_image, _ = io.load_fits(star_fits_file)
+                starmask = star_image>0
+            else:
+                # do not mask viginetting pixels when estimating the background to reduce edge effect
+                bpm_for_star = np.logical_and(bpm, np.invert(bpm_vig_only))
+                starmask = mask_bright_star(data, mask=bpm_for_star, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
+                                            back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task,
+                                            conv=conv, verbose=verbose)
+                io.save_fits(star_fits_file, starmask.astype('int32'), header, 'FLAG', overwrite=True)
+                msgs.info('Stark mask image {:} saved'.format(star_fits_file))
         else:
             starmask = np.zeros_like(data, dtype=bool)
 
         # estimate the 2D background with all masks
         bpm_for_bkg = np.logical_or(bpm, starmask)
-        med_sky, med_rms = utils.pixel_stats(data, bpm=bpm_for_bkg, clip_sig=3, n_clip=10, min_pix=int(np.size(data)*0.2))
+        med_sky, med_rms = utils.pixel_stats(data, bpm=bpm_for_bkg, sigclip=sigclip, n_clip=back_maxiters,
+                                             min_pix=int(np.size(data)*0.2))
         # ToDo: Scale the wht_image?
         wht_image *= header['MEDSKY']/med_sky
         # Update the medium sky value in fits header
         msgs.info('Median sky value is {:0.2f} e-'.format(med_sky))
         header['MEDSKY'] = (med_sky, 'Median Sky Value, units e-')
 
-        #ToDo: add to parset. Set it to True if you worry about bright star halo oversubtraction
-        use_medsky = False
+        rms_image = utils.inverse(np.sqrt(ivar_image))
+
         if use_medsky:
-            msgs.info('Using median sky for the skysubtraction.')
+            msgs.info('Using median sky counts for sky subtraction.')
             background_array = np.zeros_like(data) + med_sky
         else:
-            background_array, background_rms = BKG2D(data, back_size, mask=bpm_for_bkg, filter_size=back_filtersize,
+            background_array, _ = BKG2D(data, back_size, mask=bpm_for_bkg, filter_size=back_filtersize,
                                                      sigclip=sigclip, back_type=back_type, back_rms_type=back_rms_type,
                                                      back_maxiters=back_maxiters, sextractor_task=sextractor_task,
                                                      verbose=verbose)
@@ -446,7 +424,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
             if verbose:
                 msgs.info('Identifying cosmic rays using the L.A.Cosmic algorithm')
             bpm_cr_tmp = lacosmic(sci_image, contrast, cr_threshold, neighbor_threshold,
-                                  error=background_rms, mask=bpm_for_cr, background=background_array, effective_gain=None,
+                                  error=rms_image, mask=bpm_for_cr, background=background_array, effective_gain=None,
                                   readnoise=None, maxiter=lamaxiter, border_mode='mirror', verbose=verbose)
             bpm_cr = grow_masked(bpm_cr_tmp, grow, verbose=verbose)
         else:
@@ -471,7 +449,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                 msgs.info('Masking negative stars with {:}'.format(maskbrightstar_method))
             bpm_negative_tmp = mask_bright_star(0-sci_image, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
                                                 back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task,
-                                                verbose=verbose)
+                                                conv=conv, verbose=verbose)
             bpm_negative = grow_masked(bpm_negative_tmp, grow, verbose=verbose)
         else:
             bpm_negative = np.zeros_like(sci_image, dtype=bool)
@@ -517,9 +495,9 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
 
     return sci_fits_file, wht_fits_file, flag_fits_file
 
-def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=None,
+def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
                     back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5, grow=1.5,
-                    maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', sextractor_task='sex',
+                    maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex', sextractor_task='sex',
                     mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
                     mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
                     small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0),
@@ -529,10 +507,10 @@ def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=
     while not work_queue.empty():
         scifile, flagfile, airmass = work_queue.get()
         sci_fits_file, wht_fits_file, flag_fits_file = _sciproc_one(scifile, flagfile, airmass,
-            coeff_airmass=coeff_airmass, mastersuperskyimg=mastersuperskyimg,
+            coeff_airmass=coeff_airmass, mastersuperskyimg=mastersuperskyimg, use_medsky=use_medsky,
             back_type=back_type, back_rms_type=back_rms_type, back_size=back_size, back_filtersize=back_filtersize,
             back_maxiters=back_maxiters, grow=grow, maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
-            maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task,
+            maskbrightstar_method=maskbrightstar_method, conv=conv, sextractor_task=sextractor_task,
             mask_cr=mask_cr, contrast=contrast, lamaxiter=lamaxiter, sigclip=sigclip, cr_threshold=cr_threshold,
             neighbor_threshold=neighbor_threshold, mask_sat=mask_sat, sat_sig=sat_sig, sat_buf=sat_buf,
             sat_order=sat_order, low_thresh=low_thresh, h_thresh=h_thresh,
@@ -632,6 +610,14 @@ class ImageProc():
         self.masterfringeimg = np.ones(raw_shape)
         self.maskfringeimg = np.zeros(raw_shape, dtype='int32')
 
+        self.sextask = self.par['rdx']['sextractor']
+        self.n_process=self.par['rdx']['n_process']
+
+        self.maskbrightstar = self.par['scienceframe']['process']['mask_brightstar']
+        self.brightstar_nsigma = self.par['scienceframe']['process']['brightstar_nsigma']
+        self.maskbrightstar_method = self.par['scienceframe']['process']['brightstar_method']
+        self.conv= self.par['scienceframe']['process']['conv']
+
     def run_detproc(self, procfiles, masterbiasimg, masterdarkimg, masterpixflatimg, masterillumflatimg, bpm_proc):
         '''
         Bias, dark subtraction and flat fielding, support parallel processing
@@ -656,13 +642,16 @@ class ImageProc():
                                                     masterpixflatimg=masterpixflatimg,
                                                     masterillumflatimg=masterillumflatimg,
                                                     bpm_proc=bpm_proc,
+                                                    maskbrightstar=self.maskbrightstar,
+                                                    brightstar_nsigma=self.brightstar_nsigma,
+                                                    maskbrightstar_method=self.maskbrightstar_method,
+                                                    conv=self.conv,
                                                     apply_gain=self.par['scienceframe']['process']['apply_gain'],
                                                     mask_vig=self.par['scienceframe']['process']['mask_vig'],
                                                     minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
-                                                    replace=self.par['scienceframe']['process']['replace'],
                                                     grow=self.par['scienceframe']['process']['grow'],
-                                                    sextractor_task=self.par['rdx']['sextractor'],
-                                                    n_process=self.par['rdx']['n_process'])
+                                                    sextractor_task=self.sextask,
+                                                    n_process=self.n_process)
 
     def build_supersky(self, superskyrawfiles):
         '''
@@ -704,13 +693,11 @@ class ImageProc():
                                       sigma=self.par['calibrations']['superskyframe']['process']['comb_sigrej'],
                                       maxiters=self.par['calibrations']['superskyframe']['process']['comb_maxiter'],
                                       window_size=self.par['calibrations']['superskyframe']['process']['window_size'],
-                                      maskbrightstar=self.par['calibrations']['superskyframe']['process'][
-                                          'mask_brightstar'],
-                                      brightstar_nsigma=self.par['calibrations']['superskyframe']['process'][
-                                          'brightstar_nsigma'],
-                                      maskbrightstar_method=self.par['calibrations']['superskyframe']['process'][
-                                          'brightstar_method'],
-                                      sextractor_task=self.par['rdx']['sextractor'])
+                                      maskbrightstar=self.maskbrightstar,
+                                      brightstar_nsigma=self.brightstar_nsigma,
+                                      maskbrightstar_method=self.maskbrightstar_method,
+                                      conv=self.conv,
+                                      sextractor_task=self.sextask)
         _, self.mastersuperskyimg, self.masksuperskyimg = io.load_fits(mastersupersky_name)
 
     def run_sciproc(self, sciprocfiles, sciproc_airmass):
@@ -741,14 +728,15 @@ class ImageProc():
                                                     mastersuperskyimg=self.mastersuperskyimg,
                                                     airmass=sciproc_airmass,
                                                     coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
+                                                    use_medsky=self.par['scienceframe']['process']['use_medsky'],
                                                     back_type=self.par['scienceframe']['process']['back_type'],
                                                     back_rms_type=self.par['scienceframe']['process']['back_rms_type'],
                                                     back_size=self.par['scienceframe']['process']['back_size'],
                                                     back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
-                                                    maskbrightstar=self.par['scienceframe']['process']['mask_brightstar'],
-                                                    brightstar_nsigma=self.par['scienceframe']['process']['brightstar_nsigma'],
-                                                    maskbrightstar_method=self.par['scienceframe']['process']['brightstar_method'],
-                                                    sextractor_task=self.par['rdx']['sextractor'],
+                                                    maskbrightstar=self.maskbrightstar,
+                                                    brightstar_nsigma=self.brightstar_nsigma,
+                                                    maskbrightstar_method=self.maskbrightstar_method,
+                                                    conv=self.conv,
                                                     sigclip=self.par['scienceframe']['process']['sigclip'],
                                                     mask_cr=self.par['scienceframe']['process']['mask_cr'],
                                                     lamaxiter=self.par['scienceframe']['process']['lamaxiter'],
@@ -770,7 +758,8 @@ class ImageProc():
                                                     percentile=self.par['scienceframe']['process']['percentile'],
                                                     replace=self.par['scienceframe']['process']['replace'],
                                                     mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'],
-                                                    n_process=self.par['rdx']['n_process'])
+                                                    sextractor_task=self.sextask,
+                                                    n_process=self.n_process)
 
     def build_fringe(self, fringerawfiles):
         '''
@@ -811,10 +800,11 @@ class ImageProc():
                                     stdfunc=self.par['calibrations']['fringeframe']['process']['comb_stdfunc'],
                                     sigma=self.par['calibrations']['fringeframe']['process']['comb_sigrej'],
                                     maxiters=self.par['calibrations']['fringeframe']['process']['comb_maxiter'],
-                                    maskbrightstar=self.par['calibrations']['fringeframe']['process']['mask_brightstar'],
-                                    brightstar_nsigma=self.par['calibrations']['fringeframe']['process']['brightstar_nsigma'],
-                                    maskbrightstar_method=self.par['calibrations']['fringeframe']['process']['brightstar_method'],
-                                    sextractor_task=self.par['rdx']['sextractor'])
+                                    maskbrightstar=self.maskbrightstar,
+                                    brightstar_nsigma=self.brightstar_nsigma,
+                                    maskbrightstar_method=self.maskbrightstar_method,
+                                    conv=self.conv,
+                                    sextractor_task=self.sextask)
         _, self.masterfringeimg, self.maskfringeimg = io.load_fits(masterfringe_name)
 
     def run_defringing(self, scifiles):

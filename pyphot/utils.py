@@ -281,13 +281,13 @@ def gain_correct(data, datasec_img, gain):
 
     return data
 
-def pixel_stats(pixels, bpm=None, clip_sig=3, n_clip=10, min_pix=50):
+def pixel_stats(pixels, bpm=None, sigclip=3, n_clip=10, min_pix=50):
     """
     Calculate image statistics to determine median sky level and RMS noise. Uses
     biweight as "robust" estimator of these quantities.
 
     :param pixels: Array to calculate statistics for
-    :param clip_sig: Sigma value at which to clip outliers
+    :param sigclip: Sigma value at which to clip outliers
     :param n_clip: Number of clipping iterations
     :param min_pix: Minimum number of retained pixels
     :return: 2-tuple of distribution mode, scale
@@ -300,7 +300,7 @@ def pixel_stats(pixels, bpm=None, clip_sig=3, n_clip=10, min_pix=50):
     while True:
         sky = biweight_location(pixels[gpm], ignore_nan=True)
         rms = np.sqrt(biweight_midvariance(pixels[gpm]))
-        gpm &= np.abs(pixels - sky) < clip_sig * rms
+        gpm &= np.abs(pixels - sky) < sigclip * rms
         clip_iter += 1
         if np.sum(gpm) < min_pix or clip_iter >= n_clip:
             break

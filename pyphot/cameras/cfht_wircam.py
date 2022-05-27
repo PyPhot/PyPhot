@@ -153,9 +153,6 @@ class CFHTWIRCAMCamera(camera.Camera):
         par['scienceframe']['process']['use_fringe'] = True
         par['scienceframe']['process']['mask_negative_star'] = True # detector 4 is very dirty, need to mask out some negative stars
 
-        ## the zeropints for WIRCam are for e/s, so please set apply_gain to True
-        par['scienceframe']['process']['apply_gain'] = True
-
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = False
         par['scienceframe']['process']['minimum_vig'] = 0.7
@@ -173,8 +170,9 @@ class CFHTWIRCAMCamera(camera.Camera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['mosaic'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
         par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['detect_thresh'] = 5
         par['postproc']['astrometry']['analysis_thresh'] = 5

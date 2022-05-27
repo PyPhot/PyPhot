@@ -302,7 +302,6 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
-        par['scienceframe']['process']['apply_gain'] = True
         par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
         # cosmic ray rejection
@@ -312,8 +311,9 @@ class LBTLBCBCamera(LBTLBCCamera):
 
         # astrometry
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
-        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['mosaic'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
         par['postproc']['astrometry']['astrefmag_limits'] = [18,21]
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0
@@ -549,7 +549,6 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = True
-        par['scienceframe']['process']['apply_gain'] = True
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -557,9 +556,10 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for LBC images
-        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-DR2'
+        par['postproc']['astrometry']['scamp_second_pass'] = True
+        par['postproc']['astrometry']['mosaic'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
+        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
         par['postproc']['astrometry']['astrefmag_limits'] = [18, 21] # change the bright end limit if your image is shallow
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0

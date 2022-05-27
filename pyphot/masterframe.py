@@ -98,7 +98,8 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbias=None, cenfunc=
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=None, masterdark=None, cenfunc='median',
                 stdfunc='std', sigma=5, maxiters=3, window_size=(51,51), maskpixvar=None, minimum_vig=None,
-                maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
+                maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', conv='sex',
+                sextractor_task='sex'):
 
     if masterbias is not None:
         _, masterbiasimg, maskbiasimg = io.load_fits(masterbias)
@@ -122,6 +123,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
 
         if camera is not None:
             detector_par, raw, header, exptime, rawdatasec_img, oscansec_img = camera.get_rawimage(ifile, det)
+            star_fits_file = ifile.replace('.fits', '_starmask.fits')
             array = procimg.trim_frame(raw, rawdatasec_img < 0.1)
             datasec_img = procimg.trim_frame(rawdatasec_img, rawdatasec_img < 0.1)
             flat_image = utils.gain_correct(array, datasec_img, detector_par['gain'])
@@ -134,6 +136,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
         else:
             # This is mainly used for supersky flat
             msgs.info('Reading detector proccessed flat image {:}'.format(ifile))
+            star_fits_file = ifile.replace('_proc.fits', '_starmask.fits')
             header, flat_image, mask_image = io.load_fits(ifile)
             if maskfiles is not None:
                 _, flag_image, _ = io.load_fits(maskfiles[ii])
@@ -176,8 +179,15 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
         new_bpm = np.logical_or(bpm, extra_bpm) # a new bpm for statistics
         ## Mask bright stars
         if maskbrightstar:
-            this_starmask = mask_bright_star(flat_image, mask=new_bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
-                                        back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+            if os.path.exists(star_fits_file):
+                msgs.info('Loading star mask from existing star mask image')
+                _, star_image, _ = io.load_fits(star_fits_file)
+                this_starmask = star_image>0
+            else:
+                this_starmask = mask_bright_star(flat_image, mask=new_bpm, brightstar_nsigma=brightstar_nsigma,
+                                                 back_nsigma=sigma, back_maxiters=maxiters,
+                                                 method=maskbrightstar_method, conv=conv,
+                                                 task=sextractor_task)
         else:
             this_starmask = np.zeros_like(flat_image, dtype=bool)
 
@@ -242,13 +252,14 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
 
 def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbias=None, masterdark=None,
                    cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), minimum_vig=None,
-                   maskbrightstar=False, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
+                   maskbrightstar=False, brightstar_nsigma=5, maskbrightstar_method='sextractor',
+                   conv='sex', sextractor_task='sex'):
 
     msgs.info('Building illuminating flat')
     header, stack, bpm = combineflat(flatfiles, camera=camera, det=det, masterbias=masterbias,
                                      masterdark=masterdark, cenfunc=cenfunc, stdfunc=stdfunc, sigma=sigma,
                                      maxiters=maxiters, window_size=window_size, maskpixvar=None, minimum_vig=minimum_vig,
-                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
+                                     maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma, conv=conv,
                                      maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
 
     ## ToDo: currently I am using sextractor for the illuminating flat. Need to get a better combineflat
@@ -268,13 +279,14 @@ def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbias=None
 
 def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbias=None, masterdark=None, masterillumflat=None,
                    cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), maskpixvar=0.1, minimum_vig=None,
-                   maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
+                   maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', conv='sex',
+                   sextractor_task='sex'):
 
     msgs.info('Building pixel flat')
     header, stack, bpm = combineflat(flatfiles, camera=camera, det=det, masterbias=masterbias, masterdark=masterdark, cenfunc=cenfunc,
                                      stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size, maskpixvar=maskpixvar,
                                      maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma, minimum_vig=minimum_vig,
-                                     maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
+                                     maskbrightstar_method=maskbrightstar_method, conv=conv, sextractor_task=sextractor_task)
 
     if masterillumflat is None:
         masterillumflatimg = np.ones_like(stack)
@@ -286,13 +298,15 @@ def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbias=None, 
 
 def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
-                  maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', sextractor_task='sex'):
+                  maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', conv='sex',
+                  sextractor_task='sex'):
 
     msgs.info('Building super sky flat')
     header, stack, bpm = combineflat(superskyfiles, maskfiles=maskfiles, cenfunc=cenfunc, maskpixvar=None,
                                      stdfunc=stdfunc, sigma=sigma, maxiters=maxiters, window_size=window_size,
                                      maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
-                                     maskbrightstar_method=maskbrightstar_method, sextractor_task=sextractor_task)
+                                     maskbrightstar_method=maskbrightstar_method, conv=conv,
+                                     sextractor_task=sextractor_task)
 
     ## ToDo: currently I am using sextractor for the supersky. Need to get a better combineflat
     flat, _ = BKG2D(stack, window_size, mask=bpm, filter_size=(3, 3),
@@ -306,7 +320,7 @@ def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
 
 def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersuperskyimg=None, cenfunc='median', stdfunc='std',
                 sigma=3, maxiters=3, maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor',
-                sextractor_task='sex'):
+                conv='sex',sextractor_task='sex'):
 
     header, data0, mask0 = io.load_fits(fringefiles[0])
     nx, ny, nz = data0.shape[0], data0.shape[1], len(fringefiles)
@@ -320,16 +334,26 @@ def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersupe
             _, this_mask_image, _ = io.load_fits(fringemaskfiles[iimg])
         this_mask = this_mask_image.astype('bool')
 
-        # Mask very bright stars
+        # Mask bright stars
         if maskbrightstar:
-            #from photutils import detect_sources
-            #mean, median, stddev = stats.sigma_clipped_stats(this_data, mask=this_mask, sigma=sigma, maxiters=maxiters,
-            #                                                 cenfunc=cenfunc, stdfunc=stdfunc)
-            #segm = detect_sources(this_data, brightstar_nsigma*stddev, npixels=5)
-            #starmask = segm.data.astype('bool')
-            starmask = mask_bright_star(this_data, mask=this_mask, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigma,
-                                        back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
-            this_mask = np.logical_or(this_mask, starmask)
+            star_fits_file = fringefiles[iimg].replace('_sci.fits', '_starmask.fits')
+            if os.path.exists(star_fits_file):
+                msgs.info('Loading star mask from existing star mask image')
+                _, star_image, _ = io.load_fits(star_fits_file)
+                starmask = star_image>0
+            else:
+                # from photutils import detect_sources
+                # mean, median, stddev = stats.sigma_clipped_stats(this_data, mask=this_mask, sigma=sigma, maxiters=maxiters,
+                #                                                 cenfunc=cenfunc, stdfunc=stdfunc)
+                # segm = detect_sources(this_data, brightstar_nsigma*stddev, npixels=5)
+                # starmask = segm.data.astype('bool')
+                starmask = mask_bright_star(this_data, mask=this_mask, brightstar_nsigma=brightstar_nsigma,
+                                            back_nsigma=sigma, back_maxiters=maxiters,
+                                             method=maskbrightstar_method, conv=conv, task=sextractor_task)
+        else:
+            starmask = np.zeros_like(this_data, dtype=bool)
+
+        this_mask = np.logical_or(this_mask, starmask)
 
         data3D[:, :, iimg] = this_data * utils.inverse(this_header['EXPTIME'])
         mask3D[:, :, iimg] = this_mask.astype('bool')
@@ -410,6 +434,7 @@ class MasterFrames():
         i_maskbrigtstar = self.par['calibrations']['illumflatframe']['process']['mask_brightstar']
         i_brightstar_nsigma = self.par['calibrations']['illumflatframe']['process']['brightstar_nsigma']
         i_maskbrightstar_method = self.par['calibrations']['illumflatframe']['process']['brightstar_method']
+        i_conv = self.par['calibrations']['illumflatframe']['process']['conv']
         # PixelFlag
         p_cenfunc = self.par['calibrations']['pixelflatframe']['process']['comb_cenfunc']
         p_stdfunc = self.par['calibrations']['pixelflatframe']['process']['comb_stdfunc']
@@ -419,6 +444,7 @@ class MasterFrames():
         p_maskbrigtstar = self.par['calibrations']['pixelflatframe']['process']['mask_brightstar']
         p_brightstar_nsigma = self.par['calibrations']['pixelflatframe']['process']['brightstar_nsigma']
         p_maskbrightstar_method = self.par['calibrations']['pixelflatframe']['process']['brightstar_method']
+        p_conv = self.par['calibrations']['pixelflatframe']['process']['conv']
         maskpixvar = self.par['calibrations']['pixelflatframe']['process']['maskpixvar']
         # all
         minimum_vig = self.par['scienceframe']['process']['minimum_vig']
@@ -454,7 +480,8 @@ class MasterFrames():
                                cenfunc=i_cenfunc,stdfunc=i_stdfunc,sigma=i_sigrej,maxiters=i_maxiter,
                                window_size=i_window,minimum_vig=minimum_vig,
                                maskbrightstar=i_maskbrigtstar,brightstar_nsigma=i_brightstar_nsigma,
-                               maskbrightstar_method=i_maskbrightstar_method,sextractor_task=sextractor_task)
+                               maskbrightstar_method=i_maskbrightstar_method,
+                               conv=i_conv, sextractor_task=sextractor_task)
 
         # Build Pixel Flat
         if self.use_pixel:
@@ -468,7 +495,8 @@ class MasterFrames():
                                cenfunc=p_cenfunc,stdfunc=p_stdfunc,sigma=p_sigrej,maxiters=p_maxiter,
                                window_size=p_window,minimum_vig=minimum_vig,maskpixvar=maskpixvar,
                                maskbrightstar=p_maskbrigtstar,brightstar_nsigma=p_brightstar_nsigma,
-                               maskbrightstar_method=p_maskbrightstar_method,sextractor_task=sextractor_task)
+                               maskbrightstar_method=p_maskbrightstar_method,
+                               conv=p_conv, sextractor_task=sextractor_task)
 
     def load(self):
 

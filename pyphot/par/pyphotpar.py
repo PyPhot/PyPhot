@@ -168,7 +168,7 @@ class ProcessImagesPar(ParSet):
                  comb_cenfunc=None, comb_stdfunc=None, clip=None, comb_maxiter=None,comb_sigrej=None,
                  satpix=None, mask_proc=None, window_size=None, maskpixvar=None, mask_negative_star=None,
                  mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,brightstar_method=None,
-                 mask_cr=None, contrast=None,
+                 conv=None, mask_cr=None, contrast=None, use_medsky=None,
                  cr_threshold=None, neighbor_threshold=None,
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
@@ -308,7 +308,11 @@ class ProcessImagesPar(ParSet):
         descr['brightstar_method'] = 'If all pixels are rejected, replace them using this method.  ' \
                            'Options are: {0}'.format(', '.join(options['brightstar_method']))
 
-        defaults['brightstar_nsigma'] = 3
+        defaults['conv'] = 'sex'
+        dtypes['conv'] = str
+        descr['conv'] = 'Convolution matrix, either default sex, or sex995 or you can provide the full path of your conv file'
+
+        defaults['brightstar_nsigma'] = 5
         dtypes['brightstar_nsigma'] = [int, float]
         descr['brightstar_nsigma'] = 'Sigma level to mask bright stars.'
 
@@ -353,7 +357,8 @@ class ProcessImagesPar(ParSet):
 
         defaults['grow'] = 1.5
         dtypes['grow'] = [int, float]
-        descr['grow'] = 'Factor by which to expand the masked cosmic ray, satellite, negative star, and vignetting pixels'
+        descr['grow'] = 'Factor by which to expand the masked cosmic ray, satellite, ' \
+                        'negative star, and vignetting pixels'
 
         defaults['rmcompact'] = True
         dtypes['rmcompact'] = bool
@@ -420,6 +425,10 @@ class ProcessImagesPar(ParSet):
                            'Options are: {0}'.format(', '.join(options['replace']))
 
         ## Background methods
+        defaults['use_medsky'] = False
+        dtypes['use_medsky'] = bool
+        descr['use_medsky'] = 'Use the median sky level measured by biweight_location?'
+
         defaults['back_type'] = 'sextractor'
         options['back_type'] = ProcessImagesPar.valid_back_type()
         dtypes['back_type'] = str
@@ -462,11 +471,11 @@ class ProcessImagesPar(ParSet):
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
                    'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe', 'mask_negative_star',
                    'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc', 'mask_vig','minimum_vig',
-                   'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method',
+                   'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method', 'conv',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
                    'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
                    'mask_sat', 'sat_sig', 'sat_buf', 'sat_order', 'low_thresh', 'h_thresh',
-                   'small_edge', 'line_len', 'line_gap', 'percentile',
+                   'small_edge', 'line_len', 'line_gap', 'percentile', 'use_medsky',
                    'back_type', 'back_rms_type','back_size','back_filtersize','back_maxiters']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
@@ -616,7 +625,7 @@ class AstrometricPar(ParSet):
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, astrefmag_limits=None,
                  astrefcat_name=None, astrefcent_keys=None, astreferr_keys=None, astrefmag_key=None, astrefmagerr_key=None,
-                 weight_type=None, solve_photom_scamp=None,
+                 astrefsn_limits=None, weight_type=None, solve_photom_scamp=None,
                  posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None, group=None,
                  delete=None, log=None):
 
@@ -636,7 +645,7 @@ class AstrometricPar(ParSet):
         dtypes['skip'] = bool
         descr['skip'] = 'Skip the astrometry for individual detector image?'
 
-        defaults['mosaic'] = False
+        defaults['mosaic'] = True
         dtypes['mosaic'] = bool
         descr['mosaic'] = 'Mosaicing multiple detectors to a MEF fits before running scamp?'
 
@@ -691,13 +700,13 @@ class AstrometricPar(ParSet):
         descr['stability_type'] = 'Reference catalog  Options are: {0}'.format(
                                        ', '.join(options['stability_type']))
 
-        defaults['mosaic_type'] = 'LOOSE'
+        defaults['mosaic_type'] = 'UNCHANGED'
         options['mosaic_type'] = AstrometricPar.valid_mosaic_methods()
         dtypes['mosaic_type'] = str
         descr['mosaic_type'] = 'Reference catalog  Options are: {0}'.format(
                                        ', '.join(options['mosaic_type']))
 
-        defaults['astref_catalog'] = 'GAIA-DR2'
+        defaults['astref_catalog'] = 'GAIA-EDR3'
         options['astref_catalog'] = AstrometricPar.valid_catalog_methods()
         dtypes['astref_catalog'] = str
         descr['astref_catalog'] = 'Reference catalog  Options are: {0}'.format(
@@ -707,10 +716,13 @@ class AstrometricPar(ParSet):
         dtypes['astref_band'] = str
         descr['astref_band'] = 'Photom. band for astr.ref.magnitudes or DEFAULT, BLUEST, or REDDEST'
 
-        defaults['astrefmag_limits'] = [15.0,23.0]
+        defaults['astrefmag_limits'] = [15.0,21.0]
         dtypes['astrefmag_limits'] = [tuple, list]
-        descr['astrefmag_limits'] = 'Default background value in MANUAL'
+        descr['astrefmag_limits'] = 'magnitude limit that will be used for astrometric calibrations'
 
+        defaults['astrefsn_limits'] = [10.0,100.0]
+        dtypes['astrefsn_limits'] = [tuple, list]
+        descr['astrefsn_limits'] = 'S/N thresholds (in sigmas) for all and high-SN sample'
 
         defaults['astrefcat_name'] = 'NONE'
         dtypes['astrefcat_name'] = str
@@ -769,7 +781,7 @@ class AstrometricPar(ParSet):
         parkeys = ['skip', 'mosaic', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band', 'astrefmag_limits',
                    'astrefcat_name', 'astrefcent_keys', 'astreferr_keys', 'astrefmag_key', 'astrefmagerr_key',
-                   'posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
+                   'astrefsn_limits','posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'group', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])

@@ -242,7 +242,7 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
     return tbl, rmsmap, bkgmap
 
 def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_maxiters=10, npixels=5, fwhm=5,
-                     method='sextractor', task='sex', verbose=True):
+                     method='sextractor', conv='sex', task='sex', verbose=True):
 
     data_copy = data.copy()
     if method.lower()=='photoutils':
@@ -279,7 +279,7 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
                       'ELLIPTICITY',
                       'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_APER', 'MAGERR_APER']
         sex.sexone('{:}.fits'.format(tmp_root), task=task, config=sexconfig0, workdir='./', params=sexparams0,
-                   defaultconfig='pyphot', conv='sex', nnw=None, dual=False, delete=True, log=False, verbose=verbose)
+                   defaultconfig='pyphot', conv=conv, nnw=None, dual=False, delete=True, log=False, verbose=verbose)
         data_check = fits.getdata("{:}_check.fits".format(tmp_root))
         mask = data_check>0
         if verbose:
@@ -294,7 +294,7 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
 
 def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], Npositions=10000,
               sigclip=3, maxiters=10, back_type='median', back_size=(200,200), back_filtersize=(3, 3),
-              maskbrightstar_method='sextractor', brightstar_nsigma=5, sextractor_task='sex'):
+              maskbrightstar_method='sextractor', conv='sex', brightstar_nsigma=5, sextractor_task='sex'):
     '''
         Estimating limiting magnitude for a given fits image
     Args:
@@ -337,7 +337,8 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
     if image_type=='science':
         msgs.info('Getting limiting magnitudes from Science image {:}'.format(image))
         starmask = mask_bright_star(data, mask=flag>0, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
-                                    back_maxiters=maxiters, method=maskbrightstar_method, task=sextractor_task)
+                                    back_maxiters=maxiters, method=maskbrightstar_method, conv=conv,
+                                    task=sextractor_task)
         mask_bkg = (flag>0) | starmask
         _, rmsmap = BKG2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
                           sigclip=sigclip, back_type=back_type, back_rms_type='std',

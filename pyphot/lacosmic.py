@@ -8,7 +8,7 @@ import gc
 import numpy as np
 from scipy import ndimage
 
-from pyphot import msgs
+from pyphot import msgs, utils
 
 def lacosmic(data, contrast, cr_threshold, neighbor_threshold,
              error=None, mask=None, background=None, effective_gain=None,
@@ -140,22 +140,22 @@ def lacosmic(data, contrast, cr_threshold, neighbor_threshold,
         else:
             error_image = clean_error_image
 
-        snr_img = laplacian_img / (block_size * error_image)
+        snr_img = laplacian_img * utils.inverse(block_size * error_image)
         # this is used to remove extended structures (larger than ~5x5)
         snr_img -= ndimage.median_filter(snr_img, size=5, mode=border_mode)
 
         # used to remove compact bright objects
         med3_img = ndimage.median_filter(clean_data, size=3, mode=border_mode)
         med7_img = ndimage.median_filter(med3_img, size=7, mode=border_mode)
-        finestruct_img = ((med3_img - med7_img) / error_image).clip(min=0.01)
+        finestruct_img = ((med3_img - med7_img) * utils.inverse(error_image)).clip(min=0.01)
 
         cr_mask1 = snr_img > cr_threshold
         # NOTE: to follow the paper exactly, this condition should be
         # "> contrast * block_size".  "lacos_im.cl" uses simply "> contrast"
-        cr_mask2 = (snr_img / finestruct_img) > contrast
+        cr_mask2 = (snr_img * utils.inverse(finestruct_img)) > contrast
         cr_mask = cr_mask1 * cr_mask2
         if mask is not None:
-            cr_mask = np.logical_and(cr_mask, ~mask)
+            cr_mask = np.logical_and(cr_mask, np.invert(mask))
 
         # grow cosmic rays by one pixel and check in snr_img
         selem = np.ones((3, 3))

@@ -134,7 +134,9 @@ class KeckLRISBCamera(KeckLRISCamera):
             mincounts       = -1e10,
             numamplifiers   = 2,
             #gain            = np.atleast_1d([1.55, 1.56]),
-            gain            = np.atleast_1d([1.55, 1.533]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
+            gain            = np.atleast_1d([1.641, 1.623]), ## New gain measured by FW using flat observed on the night of March, 2022.
+            #gain            = np.atleast_1d([1.758, 1.739]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
+            #gain            = np.atleast_1d([1.55, 1.533]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
             ronoise         = np.atleast_1d([3.9, 4.2]),
             )
         # Detector 2
@@ -143,7 +145,8 @@ class KeckLRISBCamera(KeckLRISCamera):
             det=2,
             dataext=2,
             #gain=np.atleast_1d([1.63, 1.70]),
-            gain=np.atleast_1d([1.63, 1.66]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
+            gain=np.atleast_1d([1.667, 1.697]), ## New gain measured by FW using flat observed on the night of March, 2022.
+            #gain=np.atleast_1d([1.63, 1.66]), ## New gain measured by FW using flat observed on the night of Jan 27, 2022.
             ronoise=np.atleast_1d([3.6, 3.6])
         ))
 
@@ -186,22 +189,23 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['use_darkimage'] = False
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
-        par['scienceframe']['process']['use_supersky'] = False
+        par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = False
-        par['scienceframe']['process']['apply_gain'] = True
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = True
-        par['scienceframe']['process']['minimum_vig'] = 0.3
+        par['scienceframe']['process']['minimum_vig'] = 0.2
+        par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
 
         # Background type for image processing
+        par['scienceframe']['process']['use_medsky'] = True
         #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
-        par['scienceframe']['process']['back_type'] = 'median'
+        #par['scienceframe']['process']['back_type'] = 'median'
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
-        par['scienceframe']['process']['grow'] = 1.5
+        par['scienceframe']['process']['grow'] = 0.5
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -210,19 +214,23 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['calibrations']['illumflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['superskyframe']['exprng'] = [10, None]
         par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
+        ## We use dome flat for the pixel flat and thus do not need mask bright stars.
+        par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
+        par['calibrations']['illumflatframe']['process']['mask_brightstar']=False
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = False
-        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
+        par['postproc']['astrometry']['mosaic'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
         par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
-        par['postproc']['astrometry']['astrefmag_limits'] = [15, 24]
+        par['postproc']['astrometry']['astrefmag_limits'] = [17, 22.5]
+        par['postproc']['astrometry']['astrefsn_limits'] = [5, 10.0]
         par['postproc']['astrometry']['posangle_maxerr'] = 10.0
-        par['postproc']['astrometry']['position_maxerr'] = 2.0
+        par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
-        par['postproc']['astrometry']['detect_thresh'] = 20  # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 20
+        par['postproc']['astrometry']['detect_thresh'] = 15  # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 15
         par['postproc']['astrometry']['detect_minarea'] = 11
-        par['postproc']['astrometry']['crossid_radius'] = 1.0
+        par['postproc']['astrometry']['crossid_radius'] = 2.0
         #par['postproc']['astrometry']['delete'] = False
         par['postproc']['astrometry']['log'] = True
 
@@ -472,11 +480,12 @@ class KeckLRISBCamera(KeckLRISCamera):
         # header
         w = wcs.WCS(naxis=2)
         if det==1:
-            w.wcs.crpix = raw_img_trim.shape[1]/2, raw_img_trim.shape[0]
+            w.wcs.crpix = array.shape[1]/2, array.shape[0] - 100//ybin
         elif det==2:
-            w.wcs.crpix = raw_img_trim.shape[1]/2, 0
+            w.wcs.crpix = array.shape[1]/2, 0
         w.wcs.cdelt = [-detector_par['platescale'] / 3600. / xbin, detector_par['platescale'] / 3600. / ybin]
-        w.wcs.crval = [c.ra.value-float(head['DRA']), c.dec.value-float(head['DDEC'])]
+        # LRIS red pointing is about 1.3 arcmin away for the norminal imaging orientation
+        w.wcs.crval = [c.ra.value-float(head['DRA'])-0.35/60., c.dec.value-float(head['DDEC'])-1.25/60.]
         w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
         header_wcs = w.to_header()
         # remove old values
@@ -488,7 +497,7 @@ class KeckLRISBCamera(KeckLRISCamera):
             head.append(header_wcs.cards[i]) #
 
         #hdu = fits.PrimaryHDU(raw_img_trim, header=head)
-        #hdu.writeto('testr.fits', overwrite=True)
+        #hdu.writeto('testb.fits', overwrite=True)
 
         # Return
         return detector_par, array, head, exptime, rawdatasec_img, oscansec_img
@@ -694,23 +703,24 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
-        par['scienceframe']['process']['use_fringe'] = False
-        par['scienceframe']['process']['apply_gain'] = True
+        par['scienceframe']['process']['use_fringe'] = True
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = True
-        par['scienceframe']['process']['minimum_vig'] = 0.3
+        par['scienceframe']['process']['minimum_vig'] = 0.1
 
         # Background type for image processing
+        par['scienceframe']['process']['use_medsky'] = True
         #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
-        par['scienceframe']['process']['back_type'] = 'median'
+        #par['scienceframe']['process']['back_type'] = 'median'
+        par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
 
         # cosmic ray rejection
         par['scienceframe']['process']['lamaxiter'] = 1
         par['scienceframe']['process']['cr_threshold'] = 5
         par['scienceframe']['process']['neighbor_threshold'] = 2
         par['scienceframe']['process']['contrast'] = 0.5
-        par['scienceframe']['process']['grow'] = 1.5
+        par['scienceframe']['process']['grow'] = 0.5
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -719,21 +729,25 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['calibrations']['illumflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['superskyframe']['exprng'] = [10, None]
         par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
+        ## We use dome flat for the pixel flat and thus do not need mask bright stars.
+        par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
+        par['calibrations']['illumflatframe']['process']['mask_brightstar']=False
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True
-        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
+        #par['postproc']['astrometry']['scamp_second_pass'] = True
+        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
         par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
-        par['postproc']['astrometry']['astrefmag_limits'] = [17, 23]
+        par['postproc']['astrometry']['astrefmag_limits'] = [17, 22.5]
+        par['postproc']['astrometry']['astrefsn_limits'] = [7, 10.0]
         par['postproc']['astrometry']['posangle_maxerr'] = 10.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
-        par['postproc']['astrometry']['detect_thresh'] = 20  # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 20
-        par['postproc']['astrometry']['detect_minarea'] = 11
-        par['postproc']['astrometry']['crossid_radius'] = 1.0
+        par['postproc']['astrometry']['detect_thresh'] = 10  # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 10
+        par['postproc']['astrometry']['detect_minarea'] = 13
+        par['postproc']['astrometry']['crossid_radius'] = 2.0
         #par['postproc']['astrometry']['delete'] = False
-        #par['postproc']['astrometry']['log'] = True
+        par['postproc']['astrometry']['log'] = True
 
         par['postproc']['detection']['conv'] = 'sex995' # Should be set for 1x1 binning
         # photometry
@@ -821,7 +835,8 @@ class KeckLRISRCamera(KeckLRISCamera):
         w = wcs.WCS(naxis=2)
         w.wcs.crpix = raw_img_trim.shape[1]/2, raw_img_trim.shape[0]/2
         w.wcs.cdelt = [detector['platescale'] / 3600. / xbin, -detector['platescale'] / 3600. / ybin]
-        w.wcs.crval = [c.ra.value-head['DRA'], c.dec.value-head['DDEC']]
+        # LRIS red pointing is about 1.3 arcmin away for the norminal imaging orientation
+        w.wcs.crval = [c.ra.value-head['DRA'], c.dec.value-head['DDEC']-1.3/60.]
         w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
         header_wcs = w.to_header()
         # remove old values

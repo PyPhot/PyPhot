@@ -651,7 +651,7 @@ class PostProc():
         self.coadd_path = coadd_path
         self.reuse_masters = reuse_masters
         if self.ndet == 1:
-            self.mosaic = False #ToDo: Might deprecate this in the future if mosaic works good for everything.
+            self.mosaic = False #ToDo: Might deprecate this in the future since mosaic works good for everything.
         else:
             self.mosaic = self.par['postproc']['astrometry']['mosaic']
 
@@ -684,6 +684,7 @@ class PostProc():
         # Load parameters for Scamp
         self.astref_catalog = self.par['postproc']['astrometry']['astref_catalog']
         self.astrefmag_limits = self.par['postproc']['astrometry']['astrefmag_limits']
+        self.astrefsn_limits = self.par['postproc']['astrometry']['astrefsn_limits']
         crossid_radius = self.par['postproc']['astrometry']['crossid_radius']
         astref_band = self.par['postproc']['astrometry']['astref_band']
         position_maxerr = self.par['postproc']['astrometry']['position_maxerr']
@@ -714,6 +715,10 @@ class PostProc():
             ASTREFMAG_LIMITS = '{:},{:}'.format(self.astrefmag_limits[0], self.astrefmag_limits[1])
         else:
             ASTREFMAG_LIMITS = '-99.0,99.0'
+        if self.astrefsn_limits is not None:
+            SN_THRESHOLDS = '{:},{:}'.format(self.astrefsn_limits[0], self.astrefsn_limits[1])
+        else:
+            SN_THRESHOLDS = '10.0,100.0'
 
         self.scamp_supported_cat = ['USNO-A2','USNO-B1','GSC-2.3','TYCHO-2','UCAC-4','URAT-1','NOMAD-1','PPMX',
                 'CMC-15','2MASS', 'DENIS-3', 'SDSS-R9','SDSS-R12','IGSL','GAIA-DR1','GAIA-DR2','GAIA-EDR3',
@@ -724,6 +729,7 @@ class PostProc():
                                 "ASTREF_CATALOG": self.astref_catalog,
                                 "ASTREF_BAND": astref_band,
                                 "ASTREFMAG_LIMITS": ASTREFMAG_LIMITS,
+                                "SN_THRESHOLDS": SN_THRESHOLDS,
                                 "POSITION_MAXERR": position_maxerr,
                                 "PIXSCALE_MAXERR": pixscale_maxerr,
                                 "POSANGLE_MAXERR": posangle_maxerr,
@@ -1302,18 +1308,18 @@ class PostProc():
         this_ref_cat = os.path.join(self.par['calibrations']['master_dir'],
                                     'MasterAstRefCat_{:}_{:}_ID{:03d}.fits'.format(self.astref_catalog, self.setup_id, igroup))
 
-        if os.path.exists(this_ref_cat) and self.reuse_master:
+        if os.path.exists(this_ref_cat) and self.reuse_masters:
             msgs.info('Astrometric reference catalog {:} exists.'.format(this_ref_cat))
         else:
             ## ToDo: parameterize radius. Either use FGROUP_RADIUS parameter or add a new Par
             msgs.info('Querying astrometric reference catalog {:}.'.format(this_ref_cat))
             if self.astref_catalog == 'LS-DR9':
-                tbl = query_standard(ra, dec, radius=0.5, catalog='Legacy', data_release='ls_dr9')
+                tbl = query.query_standard(ra, dec, radius=0.5, catalog='Legacy', data_release='ls_dr9')
             elif self.astref_catalog == 'DES-DR2':
-                tbl = query_standard(ra, dec, radius=0.5, catalog='DES')
+                tbl = query.query_standard(ra, dec, radius=0.5, catalog='DES')
 
             hdulist = ldac.convert_table_to_ldac(tbl)
-            hdulist.writeto(outname, overwrite=True)
+            hdulist.writeto(this_ref_cat, overwrite=True)
         # mag_min=self.astrefmag_limits[0], mag_max=self.astrefmag_limits[1],
         #tbl = query.get_tbl_for_scamp(this_ref_cat, ra, dec, radius=0.5,
         #                              catalog=self.astref_catalog, reuse_master=self.reuse_masters)
