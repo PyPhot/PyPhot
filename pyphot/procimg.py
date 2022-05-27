@@ -171,6 +171,8 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
                 bpm_vig = grow_masked(bpm_vig_all, grow, verbose=verbose)
             else:
                 bpm_vig = bpm_vig_1
+            ## Set viginetting pixel to be zero
+            sci_image[bpm_vig] = 0.
         else:
             bpm_vig = np.zeros_like(sci_image, dtype=bool)
 

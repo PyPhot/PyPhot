@@ -147,6 +147,7 @@ def plotdither(ndither=12):
 #get_pos(140.9958208333333,7.896974166666666)
 #get_pos(167.64149999999998,-13.495999999999999)
 #get_pos(300.67330833333335,-30.222691666666666)
+#get_pos(140.4356667,0.1230278) # shift 6 arcmin to the east to avoid bright star
 
 '''
 one_mosaic(ccd_shape, long_gap, short_gap, xcen=-50, ycen=-400, color='dodgerblue', linestyle='-', fill_color='k', show=False)
