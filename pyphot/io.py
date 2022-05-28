@@ -101,7 +101,7 @@ def load_fits(fitsname):
     return head, data, flag
 
 
-def build_mef(rootname, detectors, img_type='SCI', returnname_only=False):
+def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, reuse_exiting=True):
 
     primary_hdu = fits.PrimaryHDU(header=initialize_header(hdr=None, primary=True))
     primary_hdu.header['IMGTYP'] = (img_type, 'PyPhot image type')
@@ -121,14 +121,16 @@ def build_mef(rootname, detectors, img_type='SCI', returnname_only=False):
     out_sci_name = rootname.replace('.fits', '_mef_{:}'.format(app))
 
     if not returnname_only:
-        for idet in detectors:
-            this_sci_file = rootname.replace('.fits', '_det{:02d}_{:}'.format(idet, app))
-            this_sci_hdr, this_sci_data, _ = load_fits(this_sci_file)
-            this_hdu_sci = fits.ImageHDU(this_sci_data, header=this_sci_hdr, name='{:}-DET{:02d}'.format(img_type, idet))
-            hdul_sci.append(this_hdu_sci)
-
-        hdul_sci.writeto(out_sci_name, overwrite=True)
-        msgs.info('MEF file saved to {:}'.format(out_sci_name))
+        if reuse_exiting and os.path.exists(out_sci_name):
+            msgs.info('Use existing MEF file {:}'.format(out_sci_name))
+        else:
+            for idet in detectors:
+                this_sci_file = rootname.replace('.fits', '_det{:02d}_{:}'.format(idet, app))
+                this_sci_hdr, this_sci_data, _ = load_fits(this_sci_file)
+                this_hdu_sci = fits.ImageHDU(this_sci_data, header=this_sci_hdr, name='{:}-DET{:02d}'.format(img_type, idet))
+                hdul_sci.append(this_hdu_sci)
+            hdul_sci.writeto(out_sci_name, overwrite=True)
+            msgs.info('MEF file saved to {:}'.format(out_sci_name))
 
     return out_sci_name
 

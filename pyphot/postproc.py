@@ -996,10 +996,14 @@ class PostProc():
             for ifile in self.scifiles:
                 # Save MEF files
                 rootname = os.path.join(self.science_path, os.path.basename(ifile))
-                sci_proc_file = io.build_mef(rootname, self.detectors, img_type='SCI', returnname_only=False)
-                ivar_proc_file = io.build_mef(rootname, self.detectors, img_type='IVAR', returnname_only=False)
-                wht_proc_file = io.build_mef(rootname, self.detectors, img_type='WEIGHT', returnname_only=False)
-                flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=False)
+                sci_proc_file = io.build_mef(rootname, self.detectors, img_type='SCI', returnname_only=False,
+                                             reuse_exiting=self.reuse_masters)
+                ivar_proc_file = io.build_mef(rootname, self.detectors, img_type='IVAR', returnname_only=False,
+                                              reuse_exiting=self.reuse_masters)
+                wht_proc_file = io.build_mef(rootname, self.detectors, img_type='WEIGHT', returnname_only=False,
+                                             reuse_exiting=self.reuse_masters)
+                flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=False,
+                                              reuse_exiting=self.reuse_masters)
 
         ## Step one: extract catalog from sciproc files
         msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
