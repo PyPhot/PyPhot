@@ -671,6 +671,7 @@ class PostProc():
         # Other parameters
         self.skip_swarp_align = self.par['postproc']['astrometry']['skip_swarp_align']
         self.scamp_second_pass = self.par['postproc']['astrometry']['scamp_second_pass']
+        self.match_flipped = self.par['postproc']['astrometry']['match_flipped']
         self.solve_photom_scamp = self.par['postproc']['astrometry']['solve_photom_scamp']
         self.group = self.par['postproc']['astrometry']['group']
         self.delete = self.par['postproc']['astrometry']['delete']
@@ -711,6 +712,10 @@ class PostProc():
             SOLVE_PHOTOM = 'Y'
         else:
             SOLVE_PHOTOM = 'N'
+        if self.match_flipped:
+            MATCH_FLIPPED = 'Y'
+        else:
+            MATCH_FLIPPED = 'N'
         if self.astrefmag_limits is not None:
             ASTREFMAG_LIMITS = '{:},{:}'.format(self.astrefmag_limits[0], self.astrefmag_limits[1])
         else:
@@ -736,6 +741,7 @@ class PostProc():
                                 "STABILITY_TYPE": stability_type,
                                 "MOSAIC_TYPE": mosaic_type,
                                 "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                                "MATCH_FLIPPED": MATCH_FLIPPED,
                                 "DISTORT_DEGREES": distort_degrees,
                                 "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
                                 "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
@@ -760,6 +766,7 @@ class PostProc():
                                 "STABILITY_TYPE": stability_type,
                                 "MOSAIC_TYPE": mosaic_type,
                                 "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                                "MATCH_FLIPPED": MATCH_FLIPPED,
                                 "DISTORT_DEGREES": distort_degrees,
                                 "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
                                 "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}
@@ -786,6 +793,7 @@ class PostProc():
                                 "STABILITY_TYPE": stability_type,
                                 "MOSAIC_TYPE": mosaic_type,
                                 "SOLVE_PHOTOM": SOLVE_PHOTOM,
+                                "MATCH_FLIPPED": MATCH_FLIPPED,
                                 "DISTORT_DEGREES": distort_degrees,
                                 "CHECKPLOT_TYPE": 'ASTR_REFERROR1D,ASTR_REFERROR2D,FGROUPS,DISTORTION',
                                 "CHECKPLOT_NAME": 'astr_referror1d,astr_referror2d,fgroups,distort'}

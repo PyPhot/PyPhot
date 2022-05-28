@@ -44,16 +44,10 @@ def parse_args(options=None, return_parser=False):
                         help='Path to directory for the reduction.  Only advised for testing')
     parser.add_argument('-m', '--do_not_reuse_masters', default=False, action='store_true',
                         help='Do not load previously generated MasterFrames, even ones made during the run.')
-    parser.add_argument('-s', '--show', default=False, action='store_true',
-                        help='Show reduction steps via plots (which will block further execution until clicked on) '
-                             'and outputs to ginga. Requires remote control ginga session via "ginga --modules=RC &"')
-    # JFH Should the default now be true with the new definition.
     parser.add_argument('-o', '--overwrite', default=False, action='store_true',
                         help='Overwrite any existing files/directories')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-d', '--detector', default=None, help='Detector to limit reductions on.  If the output files exist and -o is used, the outputs for the input detector will be replaced.')
-    parser.add_argument('-c', '--calib_only', default=False, action='store_true',
-                         help='Only run on calibrations')
 
     if return_parser:
         return parser
@@ -85,8 +79,7 @@ def main(args):
                            reuse_masters=~args.do_not_reuse_masters,
                            overwrite=args.overwrite,
                            redux_path=args.redux_path,
-                           calib_only=args.calib_only,
-                           logname=logname, show=args.show)
+                           logname=logname)
 
     # JFH I don't see why this is an optional argument here. We could allow the user to modify an infinite number of parameters
     # from the command line? Why do we have the PyPhot file then? This detector can be set in the pyphot file.
@@ -95,14 +88,8 @@ def main(args):
         msgs.info("Restricting reductions to detector={}".format(args.detector))
         Pyphot.par['rdx']['detnum'] = int(args.detector)
 
-    if args.calib_only:
-        Pyphot.calib_all()
-    else:
-        Pyphot.reduce_all()
+    Pyphot.reduce_all()
     msgs.info('Data reduction complete')
-    # QA HTML
-    msgs.info('Generating QA HTML')
-    Pyphot.build_qa()
 
     return 0
 

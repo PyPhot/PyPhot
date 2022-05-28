@@ -9,6 +9,9 @@ import gc, os
 import numpy as np
 from scipy.ndimage import gaussian_filter,median_filter
 
+import multiprocessing
+from multiprocessing import Process, Queue
+
 from astropy import stats
 from astropy.stats import sigma_clipped_stats
 from astropy.convolution import Gaussian2DKernel
@@ -244,7 +247,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
     # bpm for the flat
     stack_bpm = bpm_pixvar | bpm_nan
 
-    del images, masks
+    del images, masks, masks_vig
     gc.collect()
 
     return header, stack, stack_bpm
@@ -546,3 +549,78 @@ class MasterFrames():
             bpm_proc = np.zeros(self.raw_shape, dtype='bool')
 
         return masterbiasimg, masterdarkimg, masterillumflatimg, masterpixflatimg, bpm_proc, norm_illum, norm_pixel
+
+## Parallel functions for calling MasterFrames
+def build_masters(detectors, master_keys, raw_shapes, camera=None, par=None, biasfiles=None,
+                  darkfiles=None, illumflatfiles=None, pixflatfiles=None, reuse_masters=True):
+    '''
+    Calling MasterFrames in parallel.
+    Parameters
+    ----------
+    detectors
+    master_keys
+    raw_shapes
+    camera
+    par
+    biasfiles
+    darkfiles
+    illumflatfiles
+    pixflatfiles
+    reuse_masters
+
+    Returns
+    -------
+
+    '''
+
+    n_process = par['rdx']['n_process']
+    n_det = len(detectors)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_process > n_cpu:
+        n_process = n_cpu
+
+    if n_process > n_det:
+        n_process = n_det
+
+    if n_process == 1:
+        for ii in range(n_det):
+            Master = MasterFrames(par, camera, detectors[ii], master_keys[ii], raw_shapes[ii],
+                                  reuse_masters=reuse_masters)
+            # Build MasterFrames
+            Master.build(biasfiles=biasfiles, darkfiles=darkfiles,
+                         illumflatfiles=illumflatfiles, pixflatfiles=pixflatfiles)
+    else:
+        msgs.info('Build master files with n_process={:}'.format(n_process))
+        work_queue = Queue()
+        processes = []
+        for ii in range(n_det):
+            work_queue.put((detectors[ii], master_keys[ii], raw_shapes[ii]))
+        # creating processes
+        for w in range(n_process):
+            p = Process(target=_build_masters_worker, args=(work_queue,), kwargs={
+                'camera': camera, 'par': par, 'biasfiles': biasfiles, 'darkfiles': darkfiles,
+                'illumflatfiles': illumflatfiles, 'pixflatfiles': pixflatfiles,
+                'reuse_masters': reuse_masters})
+            processes.append(p)
+            p.start()
+
+        # completing process
+        for p in processes:
+            p.join()
+
+def _build_masters(idet, master_key, raw_shape, camera=None, par=None, biasfiles=None, darkfiles=None,
+                   illumflatfiles=None, pixflatfiles=None, reuse_masters=True):
+    # Initialize
+    Master = MasterFrames(par, camera, idet, master_key, raw_shape, reuse_masters=reuse_masters)
+    # Build MasterFrames
+    Master.build(biasfiles=biasfiles, darkfiles=darkfiles,
+                 illumflatfiles=illumflatfiles, pixflatfiles=pixflatfiles)
+
+def _build_masters_worker(work_queue, camera=None, par=None, biasfiles=None, darkfiles=None,
+                          illumflatfiles=None, pixflatfiles=None, reuse_masters=True):
+    while not work_queue.empty():
+        idet, master_key, raw_shape = work_queue.get()
+        _build_masters(idet, master_key, raw_shape, camera=camera, par=par, biasfiles=biasfiles,
+                      darkfiles=darkfiles, illumflatfiles=illumflatfiles, pixflatfiles=pixflatfiles,
+                      reuse_masters=reuse_masters)

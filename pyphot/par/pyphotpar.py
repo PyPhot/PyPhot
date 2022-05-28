@@ -418,7 +418,7 @@ class ProcessImagesPar(ParSet):
         descr['percentile'] = 'percentile range used for scaling image used byexposure.rescale_intensity.'
 
         ## bad pixel replacement methods
-        defaults['replace'] = 'zero'
+        defaults['replace'] = 'No'
         options['replace'] = ProcessImagesPar.valid_rejection_replacements()
         dtypes['replace'] = str
         descr['replace'] = 'Replace method for cosmic ray and satellite trail hitted pixels.  ' \
@@ -542,7 +542,7 @@ class ProcessImagesPar(ParSet):
         """
         Return the valid replacement methods for rejected pixels.
         """
-        return ['zero', 'min', 'max', 'mean', 'median', 'None']
+        return ['zero', 'min', 'max', 'mean', 'median', 'No']
 
     def validate(self):
         """
@@ -625,7 +625,7 @@ class AstrometricPar(ParSet):
                  crossid_radius=None, position_maxerr=None, pixscale_maxerr=None, mosaic_type=None,
                  astref_catalog=None, astref_band=None, astrefmag_limits=None,
                  astrefcat_name=None, astrefcent_keys=None, astreferr_keys=None, astrefmag_key=None, astrefmagerr_key=None,
-                 astrefsn_limits=None, weight_type=None, solve_photom_scamp=None,
+                 astrefsn_limits=None, weight_type=None, solve_photom_scamp=None, match_flipped=None,
                  posangle_maxerr=None, stability_type=None, distort_degrees=None, skip_swarp_align=None, group=None,
                  delete=None, log=None):
 
@@ -656,6 +656,10 @@ class AstrometricPar(ParSet):
         defaults['scamp_second_pass'] = False
         dtypes['scamp_second_pass'] = bool
         descr['scamp_second_pass'] = 'Perform second pass with SCAMP? Useful for instrument with large distortions.'
+
+        defaults['match_flipped'] = False
+        dtypes['match_flipped'] = bool
+        descr['match_flipped'] = 'Allow matching with flipped axes?'
 
         defaults['weight_type'] = 'MAP_WEIGHT'
         options['weight_type'] = AstrometricPar.valid_weight_type()
@@ -763,7 +767,7 @@ class AstrometricPar(ParSet):
         dtypes['delete'] = bool
         descr['delete'] = 'Deletec the configuration files for SExtractor, SCAMP, and SWARP?'
 
-        defaults['log'] = False
+        defaults['log'] = True
         dtypes['log'] = bool
         descr['log'] = 'Logging for SExtractor, SCAMP, and SWARP'
 
@@ -780,7 +784,7 @@ class AstrometricPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'mosaic', 'scamp_second_pass', 'detect_thresh', 'analysis_thresh', 'detect_minarea', 'crossid_radius',
                    'position_maxerr', 'pixscale_maxerr', 'mosaic_type', 'astref_catalog', 'astref_band', 'astrefmag_limits',
-                   'astrefcat_name', 'astrefcent_keys', 'astreferr_keys', 'astrefmag_key', 'astrefmagerr_key',
+                   'astrefcat_name', 'astrefcent_keys', 'astreferr_keys', 'astrefmag_key', 'astrefmagerr_key', 'match_flipped',
                    'astrefsn_limits','posangle_maxerr', 'stability_type', 'distort_degrees','skip_swarp_align',
                    'weight_type', 'solve_photom_scamp', 'group', 'delete', 'log']
 

@@ -227,8 +227,8 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['postproc']['astrometry']['posangle_maxerr'] = 10.0
         par['postproc']['astrometry']['position_maxerr'] = 1.0
         par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
-        par['postproc']['astrometry']['detect_thresh'] = 15  # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 15
+        par['postproc']['astrometry']['detect_thresh'] = 10  # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 11
         par['postproc']['astrometry']['crossid_radius'] = 2.0
         #par['postproc']['astrometry']['delete'] = False

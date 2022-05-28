@@ -1,6 +1,7 @@
 """ Module for image processing core methods
 
 """
+import gc
 import os
 import numpy as np
 
@@ -20,7 +21,7 @@ from pyphot.photometry import BKG2D, mask_bright_star
 def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
             masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
             maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
-            sextractor_task='sex', verbose=True):
+            sextractor_task='sex', verbose=True, overwrite=True):
 
     n_file = len(scifiles)
     n_cpu = multiprocessing.cpu_count()
@@ -41,7 +42,7 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
                         mask_vig=mask_vig, minimum_vig=minimum_vig, apply_gain=apply_gain, grow=grow,
                         maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma,
                         maskbrightstar_method=maskbrightstar_method, conv=conv,
-                        sextractor_task=sextractor_task, verbose=verbose)
+                        sextractor_task=sextractor_task, verbose=verbose, overwrite=overwrite)
             sci_fits_list.append(sci_fits_file)
             flag_fits_list.append(flag_fits_file)
     else:
@@ -60,7 +61,7 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
                 'masterdarkimg': masterdarkimg, 'masterpixflatimg': masterpixflatimg, 'masterillumflatimg': masterillumflatimg,
                 'bpm_proc': bpm_proc, 'mask_vig': mask_vig, 'minimum_vig': minimum_vig, 'apply_gain': apply_gain,
                 'maskbrightstar':maskbrightstar, 'brightstar_nsigma':brightstar_nsigma, 'maskbrightstar_method':maskbrightstar_method,
-                'conv':conv, 'grow': grow, 'sextractor_task': sextractor_task, 'verbose':False})
+                'conv':conv, 'grow': grow, 'sextractor_task': sextractor_task, 'verbose':False, 'overwrite':overwrite})
             processes.append(p)
             p.start()
 
@@ -79,7 +80,7 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
 def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
                  masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
                  maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
-                 sextractor_task='sex', verbose=True):
+                 sextractor_task='sex', verbose=True, overwrite=True):
 
     rootname = scifile.split('/')[-1]
     if science_path is not None:
@@ -96,7 +97,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
     flag_fits_file = rootname.replace('.fits','_det{:02d}_detmask.fits'.format(det))
     star_fits_file = rootname.replace('.fits','_det{:02d}_starmask.fits'.format(det))
 
-    if os.path.exists(sci_fits_file):
+    if os.path.exists(sci_fits_file) and not overwrite:
         msgs.info('The Science product {:} exists, skipping...'.format(sci_fits_file))
     else:
         msgs.info('Processing {:}'.format(scifile))
@@ -171,8 +172,6 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
                 bpm_vig = grow_masked(bpm_vig_all, grow, verbose=verbose)
             else:
                 bpm_vig = bpm_vig_1
-            ## Set viginetting pixel to be zero
-            sci_image[bpm_vig] = 0.
         else:
             bpm_vig = np.zeros_like(sci_image, dtype=bool)
 
@@ -215,8 +214,13 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             ivar_image *= masterillumflatimg**2
             wht_image *= masterillumflatimg**2
 
+        ## Set viginetting pixel to be zero
+        sci_image[bpm_vig] = 0.
+
+        ## Update header
         header['MEDSKY'] = (med_sky, 'Median Sky Value, units e-')
         header['DETPROC'] = ('TRUE', 'DETPROC is done?')
+
         # save image
         io.save_fits(sci_fits_file, sci_image, header, 'SCI', overwrite=True)
         msgs.info('Science image {:} saved'.format(sci_fits_file))
@@ -235,12 +239,17 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
         io.save_fits(star_fits_file, starmask.astype('int32'), header, 'FLAG', overwrite=True)
         msgs.info('Bright star mask image {:} saved'.format(star_fits_file))
 
+        del(rawdatasec_img, rawoscansec_img, raw_image, datasec_img, oscansec_img)
+        del(sci_image, ivar_image, wht_image, flag_image)
+        del(bpm, bpm_proc, bpm_sat, bpm_zero, bpm_nan, bpm_vig)
+        gc.collect()
+
     return sci_fits_file, flag_fits_file
 
 def _detproc_worker(work_queue, done_queue, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
                     masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
                     maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
-                    sextractor_task='sex', verbose=True):
+                    sextractor_task='sex', verbose=True, overwrite=True):
 
     """Multiprocessing worker for sciproc."""
     while not work_queue.empty():
@@ -252,7 +261,7 @@ def _detproc_worker(work_queue, done_queue, science_path=None, masterbiasimg=Non
                         apply_gain=apply_gain, grow=grow,
                         maskbrightstar=maskbrightstar, brightstar_nsigma=brightstar_nsigma, conv=conv,
                         maskbrightstar_method=maskbrightstar_method,
-                        sextractor_task=sextractor_task, verbose=verbose)
+                        sextractor_task=sextractor_task, verbose=verbose, overwrite=overwrite)
 
         done_queue.put((sci_fits_file, flag_fits_file))
 
@@ -262,7 +271,7 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
             mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
             mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
             small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0),
-            mask_negative_star=False, replace=None, verbose=True):
+            mask_negative_star=False, replace=None, verbose=True, overwrite=True):
 
     n_file = len(scifiles)
     n_cpu = multiprocessing.cpu_count()
@@ -292,7 +301,7 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
                 neighbor_threshold=neighbor_threshold, mask_sat=mask_sat, sat_sig=sat_sig, sat_buf=sat_buf,
                 sat_order=sat_order, low_thresh=low_thresh, h_thresh=h_thresh,
                 small_edge=small_edge, line_len=line_len, line_gap=line_gap, percentile=percentile,
-                mask_negative_star=mask_negative_star, replace=replace, verbose=verbose)
+                mask_negative_star=mask_negative_star, replace=replace, verbose=verbose, overwrite=overwrite)
             sci_fits_list.append(sci_fits_file)
             wht_fits_list.append(wht_fits_file)
             flag_fits_list.append(flag_fits_file)
@@ -316,7 +325,7 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
                 'neighbor_threshold': neighbor_threshold, 'mask_sat': mask_sat, 'sat_sig': sat_sig, 'sat_buf': sat_buf,
                 'sat_order': sat_order, 'low_thresh': low_thresh, 'h_thresh': h_thresh,
                 'small_edge': small_edge, 'line_len': line_len, 'line_gap': line_gap, 'percentile': percentile,
-                'mask_negative_star': mask_negative_star, 'replace': replace, 'verbose':False})
+                'mask_negative_star': mask_negative_star, 'replace': replace, 'verbose':False, 'overwrite':overwrite})
             processes.append(p)
             p.start()
 
@@ -339,7 +348,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                  mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
                  mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
                  small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0),
-                 mask_negative_star=False, replace=None, verbose=True):
+                 mask_negative_star=False, replace=None, verbose=True, overwrite=True):
 
     # prepare output names
     sci_fits_file = scifile.replace('_proc.fits','_sci.fits')
@@ -348,7 +357,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
     flag_fits_file = scifile.replace('_proc.fits','_flag.fits')
     star_fits_file = scifile.replace('_proc.fits','_starmask.fits')
 
-    if os.path.exists(sci_fits_file):
+    if os.path.exists(sci_fits_file) and not overwrite:
         msgs.info('The Science product {:} exists, skipping...'.format(sci_fits_file))
     else:
         msgs.info('Processing {:}'.format(scifile))
@@ -399,7 +408,6 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         wht_image *= header['MEDSKY']/med_sky
         # Update the medium sky value in fits header
         msgs.info('Median sky value is {:0.2f} e-'.format(med_sky))
-        header['MEDSKY'] = (med_sky, 'Median Sky Value, units e-')
 
         rms_image = utils.inverse(np.sqrt(ivar_image))
 
@@ -429,6 +437,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                                   error=rms_image, mask=bpm_for_cr, background=background_array, effective_gain=None,
                                   readnoise=None, maxiter=lamaxiter, border_mode='mirror', verbose=verbose)
             bpm_cr = grow_masked(bpm_cr_tmp, grow, verbose=verbose)
+            del bpm_cr_tmp
         else:
             if verbose:
                 msgs.warn('Skipped cosmic ray rejection process!')
@@ -442,6 +451,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                                  low_thresh=low_thresh, h_thresh=h_thresh, small_edge=small_edge,
                                  line_len=line_len, line_gap=line_gap, percentile=percentile, verbose=verbose)
             bpm_sat = grow_masked(bpm_sat_tmp, grow, verbose=verbose)
+            del bpm_sat_tmp
         else:
             bpm_sat = np.zeros_like(sci_image,dtype=bool)
 
@@ -453,6 +463,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                                                 back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task,
                                                 conv=conv, verbose=verbose)
             bpm_negative = grow_masked(bpm_negative_tmp, grow, verbose=verbose)
+            del bpm_negative_tmp
         else:
             bpm_negative = np.zeros_like(sci_image, dtype=bool)
 
@@ -485,6 +496,10 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         # Set bad pixel's weight to be zero
         wht_image[flag_image_new>0] = 0
 
+        # Update header
+        header['MEDSKY'] = (med_sky, 'Median Sky Value, units e-')
+        header['SCIPROC'] = ('TRUE', 'SCIPROC is done?')
+
         # save images
         io.save_fits(sci_fits_file, sci_image, header, 'SCI', overwrite=True)
         msgs.info('Science image {:} saved'.format(sci_fits_file))
@@ -495,6 +510,11 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
         io.save_fits(flag_fits_file, flag_image_new.astype('int32'), header, 'FLAG', overwrite=True)
         msgs.info('Flag image {:} saved'.format(flag_fits_file))
 
+        del(data, sci_image, ivar_image, wht_image, flag_image, flag_image_new, rms_image, background_array)
+        del(bpm_all, bpm, bpm_replace, bpm_saturation, bpm_zero, bpm_vig_only, bpm_vig)
+        del(bpm_for_bkg, bpm_negative, bpm_sat, bpm_for_cr, bpm_cr)
+        gc.collect()
+
     return sci_fits_file, wht_fits_file, flag_fits_file
 
 def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
@@ -503,7 +523,7 @@ def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=
                     mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
                     mask_sat=True, sat_sig=3.0, sat_buf=20, sat_order=3, low_thresh=0.1, h_thresh=0.5,
                     small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0),
-                    mask_negative_star=False, replace=None, verbose=False):
+                    mask_negative_star=False, replace=None, verbose=False, overwrite=True):
 
     """Multiprocessing worker for sciproc."""
     while not work_queue.empty():
@@ -517,7 +537,7 @@ def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=
             neighbor_threshold=neighbor_threshold, mask_sat=mask_sat, sat_sig=sat_sig, sat_buf=sat_buf,
             sat_order=sat_order, low_thresh=low_thresh, h_thresh=h_thresh,
             small_edge=small_edge, line_len=line_len, line_gap=line_gap, percentile=percentile,
-            mask_negative_star=mask_negative_star, replace=replace, verbose=verbose)
+            mask_negative_star=mask_negative_star, replace=replace, verbose=verbose, overwrite=overwrite)
 
         done_queue.put((sci_fits_file, wht_fits_file, flag_fits_file))
 
@@ -599,7 +619,7 @@ class ImageProc():
     Class for handling imaging processing
     """
 
-    def __init__(self, par, camera, det, science_path, master_key, raw_shape, reuse_masters=True):
+    def __init__(self, par, camera, det, science_path, master_key, raw_shape, reuse_masters=True, overwrite=True):
 
         self.par = par
         self.camera = camera
@@ -607,6 +627,7 @@ class ImageProc():
         self.science_path = science_path
         self.master_key = master_key
         self.reuse_masters = reuse_masters
+        self.overwrite = overwrite
         self.mastersuperskyimg = np.ones(raw_shape)
         self.masksuperskyimg = np.zeros(raw_shape, dtype='int32')
         self.masterfringeimg = np.ones(raw_shape)
@@ -653,7 +674,8 @@ class ImageProc():
                                                     minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
                                                     grow=self.par['scienceframe']['process']['grow'],
                                                     sextractor_task=self.sextask,
-                                                    n_process=self.n_process)
+                                                    n_process=self.n_process,
+                                                    overwrite=self.overwrite)
 
     def build_supersky(self, superskyrawfiles):
         '''
@@ -761,7 +783,7 @@ class ImageProc():
                                                     replace=self.par['scienceframe']['process']['replace'],
                                                     mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'],
                                                     sextractor_task=self.sextask,
-                                                    n_process=self.n_process)
+                                                    n_process=self.n_process, overwrite=self.overwrite)
 
     def build_fringe(self, fringerawfiles):
         '''

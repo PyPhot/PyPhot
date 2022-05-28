@@ -154,17 +154,29 @@ class MagellanIMACSCamera(camera.Camera):
         # Update header with an initial WCS information.
         crpix1 = 1024/xbin
         crpix2 = 2048/xbin
-        if det>4:
-            cdelt1 = detector_par['platescale'] * xbin / 3600.
-            cdelt2 = detector_par['platescale'] * ybin / 3600.
-        else:
-            cdelt1 = -detector_par['platescale'] * xbin / 3600.
-            cdelt2 = -detector_par['platescale'] * ybin / 3600.
-
         w = wcs.WCS(naxis=2)
         w.wcs.crpix = [crpix1, crpix2]
+        if (head1['DEC-D']<-29.01597) & (head1['ROTANGLE']==43.85):
+            # Need to flip the WCS
+            if det>4:
+                cdelt1 = -detector_par['platescale'] * xbin / 3600.
+                cdelt2 = -detector_par['platescale'] * ybin / 3600.
+            else:
+                cdelt1 = detector_par['platescale'] * xbin / 3600.
+                cdelt2 = detector_par['platescale'] * ybin / 3600.
+            w.wcs.crval = [head1['RA-D']-head1['CHOFFX']/np.cos(head1['DEC-D']/180.* np.pi) / 3600.,
+                           head1['DEC-D']+head1['CHOFFY']/3600.]
+        else:
+            if det>4:
+                cdelt1 = detector_par['platescale'] * xbin / 3600.
+                cdelt2 = detector_par['platescale'] * ybin / 3600.
+            else:
+                cdelt1 = -detector_par['platescale'] * xbin / 3600.
+                cdelt2 = -detector_par['platescale'] * ybin / 3600.
+            w.wcs.crval = [head1['RA-D']+head1['CHOFFX']/np.cos(head1['DEC-D']/180.*np.pi)/3600.,
+                           head1['DEC-D']-head1['CHOFFY']/3600.]
+
         w.wcs.cdelt = np.array([cdelt1, cdelt2])
-        w.wcs.crval = [head1['RA-D']+head1['CHOFFX']/np.cos(head1['DEC-D']/180.*np.pi)/3600., head1['DEC-D']-head1['CHOFFY']/3600.]
         w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
         header_wcs = w.to_header()
         for i in range(len(header_wcs)):
@@ -323,13 +335,14 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
-        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
+        par['calibrations']['superskyframe']['process']['window_size'] = [256, 256]
 
         ## We use dome flat for the pixel flat and thus do not need mask bright stars.
         par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
 
         # Skybackground
-        par['scienceframe']['process']['use_medsky'] = True
+        par['scienceframe']['process']['use_medsky'] = False
+        par['scienceframe']['process']['back_size'] = [401, 401]
 
         # Vignetting
         par['scienceframe']['process']['mask_vig'] = True
