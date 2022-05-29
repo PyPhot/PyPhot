@@ -274,9 +274,7 @@ class PyPhot(object):
                 raw_shapes = []
                 for ii, idet in enumerate(detectors):
                     master_key = self.fitstbl.master_key(grp_all[0], det=idet)
-                    _, raw, _, _, _, _ = self.camera.get_rawimage(allfiles[0], idet)
-                    raw_shape = raw.shape
-                    # raw_shape = self.camera.bpm(allfiles[0], idet, shape=None, msbias=None).astype('bool').shape
+                    raw_shape = self.camera.bpm(allfiles[0], idet, shape=None, msbias=None).astype('bool').shape
                     master_keys.append(master_key)
                     raw_shapes.append(raw_shape)
 

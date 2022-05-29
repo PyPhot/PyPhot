@@ -307,7 +307,6 @@ class LBTLBCBCamera(LBTLBCCamera):
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
-        par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
         par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images

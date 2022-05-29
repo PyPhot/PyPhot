@@ -205,7 +205,6 @@ class KeckLRISBCamera(KeckLRISCamera):
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
-        par['scienceframe']['process']['grow'] = 0.5
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -231,8 +230,6 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 11
         par['postproc']['astrometry']['crossid_radius'] = 2.0
-        #par['postproc']['astrometry']['delete'] = False
-        par['postproc']['astrometry']['log'] = True
 
         par['postproc']['detection']['conv'] = 'sex995' # Should be set for 1x1 binning
         # photometry
@@ -716,11 +713,12 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
 
         # cosmic ray rejection
+        #ToDo: Need to tweak these parameters for LRIS red.
         par['scienceframe']['process']['lamaxiter'] = 1
         par['scienceframe']['process']['cr_threshold'] = 5
         par['scienceframe']['process']['neighbor_threshold'] = 2
-        par['scienceframe']['process']['contrast'] = 0.5
-        par['scienceframe']['process']['grow'] = 0.5
+        par['scienceframe']['process']['contrast'] = 1.
+        par['scienceframe']['process']['grow'] = 1.5
 
         # Set the default exposure time ranges for the frame typing
         par['calibrations']['darkframe']['exprng'] = [None, None]
@@ -734,8 +732,6 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['calibrations']['illumflatframe']['process']['mask_brightstar']=False
 
         # astrometry
-        #par['postproc']['astrometry']['scamp_second_pass'] = True
-        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
         par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
         par['postproc']['astrometry']['astrefmag_limits'] = [17, 22.5]
         par['postproc']['astrometry']['astrefsn_limits'] = [7, 10.0]
@@ -746,8 +742,6 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 13
         par['postproc']['astrometry']['crossid_radius'] = 2.0
-        #par['postproc']['astrometry']['delete'] = False
-        par['postproc']['astrometry']['log'] = True
 
         par['postproc']['detection']['conv'] = 'sex995' # Should be set for 1x1 binning
         # photometry
