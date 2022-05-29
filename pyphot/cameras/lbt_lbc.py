@@ -304,22 +304,25 @@ class LBTLBCBCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_fringe'] = False
         par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
+        # Background type for image processing
+        par['scienceframe']['process']['use_medsky'] = False
+
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True # Need set to True for some of LBC images
         par['postproc']['astrometry']['mosaic'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
-        par['postproc']['astrometry']['astrefmag_limits'] = [18,21]
+        par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 23.5] # change the bright end limit if your image is shallow
+        par['postproc']['astrometry']['astrefsn_limits'] = [7, 10.0]
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
-        par['postproc']['astrometry']['position_maxerr'] = 1.0
-        par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
-        par['postproc']['astrometry']['detect_thresh'] = 10 # increasing this can improve the solution if your image is deep
-        par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['position_maxerr'] = 0.5
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
+        par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 20
+        par['postproc']['astrometry']['detect_minarea'] = 7
         par['postproc']['astrometry']['crossid_radius'] = 2
 
         # Set the default exposure time ranges for the frame typing
@@ -549,20 +552,23 @@ class LBTLBCRCamera(LBTLBCCamera):
         par['scienceframe']['process']['use_supersky'] = True
         par['scienceframe']['process']['use_fringe'] = True
 
+        # Background type for image processing
+        par['scienceframe']['process']['use_medsky'] = False
+
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
         par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
-        par['postproc']['astrometry']['scamp_second_pass'] = True
         par['postproc']['astrometry']['mosaic'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
-        par['postproc']['astrometry']['astrefmag_limits'] = [18, 21] # change the bright end limit if your image is shallow
+        par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 23] # change the bright end limit if your image is shallow
+        par['postproc']['astrometry']['astrefsn_limits'] = [7, 10.0]
         par['postproc']['astrometry']['posangle_maxerr'] = 5.0
-        par['postproc']['astrometry']['position_maxerr'] = 1.0
-        par['postproc']['astrometry']['pixscale_maxerr'] = 1.3
+        par['postproc']['astrometry']['position_maxerr'] = 0.5
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
         par['postproc']['astrometry']['detect_thresh'] = 10 # increasing this can improve the solution if your image is deep
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 5

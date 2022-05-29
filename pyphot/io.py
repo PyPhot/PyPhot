@@ -7,6 +7,9 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 
+import multiprocessing
+from multiprocessing import Process, Queue
+
 from pkg_resources import resource_filename
 
 import pyphot
@@ -101,7 +104,7 @@ def load_fits(fitsname):
     return head, data, flag
 
 
-def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, reuse_exiting=True):
+def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, overwrite=True):
 
     primary_hdu = fits.PrimaryHDU(header=initialize_header(hdr=None, primary=True))
     primary_hdu.header['IMGTYP'] = (img_type, 'PyPhot image type')
@@ -121,7 +124,7 @@ def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, reuse_
     out_sci_name = rootname.replace('.fits', '_mef_{:}'.format(app))
 
     if not returnname_only:
-        if reuse_exiting and os.path.exists(out_sci_name):
+        if not overwrite and os.path.exists(out_sci_name):
             msgs.info('Use existing MEF file {:}'.format(out_sci_name))
         else:
             for idet in detectors:
@@ -133,6 +136,76 @@ def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, reuse_
             msgs.info('MEF file saved to {:}'.format(out_sci_name))
 
     return out_sci_name
+
+def _build_mef_worker(work_queue, done_queue, detectors=None, img_type='SCI', returnname_only=False, overwrite=True):
+
+    """Multiprocessing worker for _build_mef"""
+    while not work_queue.empty():
+        idx, rootname = work_queue.get()
+        out_sci_name = build_mef(rootname, detectors,
+                        img_type=img_type, returnname_only=returnname_only, overwrite=overwrite)
+
+        done_queue.put((idx, out_sci_name))
+
+def build_mef_parallel(rootnames, detectors=None, img_type='SCI', returnname_only=False, overwrite=True, n_process=1):
+    '''
+    Running build_mef in parallel
+    Parameters
+    ----------
+    rootnames
+    detectors
+    img_type
+    returnname_only
+    overwrite
+    n_process
+
+    Returns
+    -------
+
+    '''
+
+    n_file = len(rootnames)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_process > n_cpu:
+        n_process = n_cpu
+
+    if n_process>n_file:
+        n_process = n_file
+
+    out_sci_names = []
+    idx_all = np.zeros(n_file)
+
+    msgs.info('Building MEF {:} files with n_process={:}'.format(img_type, n_process))
+    work_queue = Queue()
+    done_queue = Queue()
+    processes = []
+
+    for ii in range(n_file):
+        work_queue.put((ii, rootnames[ii]))
+
+    # creating processes
+    for w in range(n_process):
+        p = Process(target=_build_mef_worker, args=(work_queue, done_queue), kwargs={
+            'detectors': detectors, 'img_type': img_type,
+            'returnname_only': returnname_only, 'overwrite': overwrite})
+        processes.append(p)
+        p.start()
+
+    # completing process
+    for p in processes:
+        p.join()
+
+    # print the output
+    ii=0
+    while not done_queue.empty():
+        idx_all[ii], out_sci_name = done_queue.get()
+        out_sci_names.append(out_sci_name)
+        ii+=1
+
+    out_sci_names_sort = np.array(out_sci_names)[np.argsort(idx_all)].tolist()
+
+    return out_sci_names_sort
 
 def load_filter(filter):
     """

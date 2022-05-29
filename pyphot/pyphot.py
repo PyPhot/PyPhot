@@ -216,6 +216,8 @@ class PyPhot(object):
         #           - produce image QA for individual chips
         #           - Coadd images according to coadd_ids
         #           - Generate source catalogs
+
+        ## Step one and two are iterate over n_calib_groups
         for i in range(self.fitstbl.n_calib_groups):
             # Find all the frames in this calibration group
             in_grp = self.fitstbl.find_calib_group(i)
@@ -357,42 +359,53 @@ class PyPhot(object):
                                 Proc.build_fringe(fringefiles)
                                 # Defringing
                                 Proc.run_defringing(scifiles)
-
-                    ## Post processing
-                    # determine median pixel scale for the detectors that will be used for astrometric calibration
-                    pixscales = []
-                    for idet in detectors:
-                        detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), idet)
-                        pixscales.append(detector_par['platescale'])
-                    pixscale = np.median(pixscales)
-
-                    # Initiallize PostProc
-                    Post = postproc.PostProc(self.par, detectors, this_setup, scifiles, coadd_ids, sci_ra, sci_dec, sci_airmass,
-                                             sci_exptime, sci_filter, sci_target, pixscale, self.science_path,
-                                             self.qa_path, self.coadd_path,
-                                             reuse_masters=self.reuse_masters)
-
-                    # run astrometry
-                    if not self.par['rdx']['skip_astrometry']:
-                        Post.run_astrometry()
-
-                    # run chipcal
-                    if not self.par['rdx']['skip_chipcal']:
-                        Post.run_chip_cal()
-
-                    # Making QA image for calibrated individual chips
-                    if not self.par['rdx']['skip_img_qa']:
-                        Post.run_img_qa()
-
-                    # Run coadd
-                    if not self.par['rdx']['skip_coadd']:
-                        Post.run_coadd()
-
-                    # Extract photometric catalog
-                    if not self.par['rdx']['skip_detection']:
-                        Post.extract_catalog()
                 else:
                     msgs.info('No science images for the {:}th calibration group.'.format(i))
+
+        ## Step three is iterated over coadd_ids
+        # prepare some useful lists
+        scifiles = self.fitstbl.frame_paths(is_science)  # list for scifiles
+        sci_airmass = self.fitstbl['airmass'][is_science]
+        sci_exptime = self.fitstbl['exptime'][is_science]
+        sci_filter = self.fitstbl['filter'][is_science]
+        sci_target = self.fitstbl['target'][is_science]
+        sci_ra = self.fitstbl['ra'][is_science]
+        sci_dec = self.fitstbl['dec'][is_science]
+        coadd_ids = self.fitstbl['coadd_id'][is_science]  # coadd_ids
+
+        # determine median pixel scale for the detectors that will be used for astrometric calibration
+        pixscales = []
+        for idet in detectors:
+            detector_par = self.camera.get_detector_par(fits.open(scifiles[0]), idet)
+            pixscales.append(detector_par['platescale'])
+        pixscale = np.median(pixscales)
+
+        # Initiallize PostProc
+        Post = postproc.PostProc(self.par, detectors, this_setup, scifiles, coadd_ids, sci_ra, sci_dec, sci_airmass,
+                                 sci_exptime, sci_filter, sci_target, pixscale, self.science_path,
+                                 self.qa_path, self.coadd_path, overwrite=self.overwrite,
+                                 reuse_masters=self.reuse_masters)
+
+        # run astrometry
+        if not self.par['rdx']['skip_astrometry']:
+            Post.run_astrometry()
+
+        # run chipcal
+        if not self.par['rdx']['skip_chipcal']:
+            Post.run_chip_cal()
+
+        # Making QA image for calibrated individual chips
+        if not self.par['rdx']['skip_img_qa']:
+            Post.run_img_qa()
+
+        # Run coadd
+        if not self.par['rdx']['skip_coadd']:
+            Post.run_coadd()
+
+        # Extract photometric catalog
+        if not self.par['rdx']['skip_detection']:
+            Post.extract_catalog()
+
         # Finish
         self.print_end_time()
 

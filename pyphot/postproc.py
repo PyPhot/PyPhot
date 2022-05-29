@@ -616,7 +616,8 @@ def _cal_chip_worker(work_queue, done_queue, ZP=25.0, external_flag=True, refcat
 class PostProc():
 
     def __init__(self, par, detectors, setup_id, scifiles, coadd_ids, sci_ra, sci_dec, sci_airmass, sci_exptime,
-                 sci_filter, sci_target, pixscale, science_path='./', qa_path='./', coadd_path='./',reuse_masters=True):
+                 sci_filter, sci_target, pixscale, science_path='./', qa_path='./', coadd_path='./',
+                 overwrite=True, reuse_masters=True):
         '''
 
         Parameters
@@ -649,6 +650,7 @@ class PostProc():
         self.science_path = science_path
         self.qa_path = qa_path
         self.coadd_path = coadd_path
+        self.overwrite = overwrite
         self.reuse_masters = reuse_masters
         if self.ndet == 1:
             self.mosaic = False #ToDo: Might deprecate this in the future since mosaic works good for everything.
@@ -670,7 +672,6 @@ class PostProc():
 
         # Other parameters
         self.skip_swarp_align = self.par['postproc']['astrometry']['skip_swarp_align']
-        self.scamp_second_pass = self.par['postproc']['astrometry']['scamp_second_pass']
         self.match_flipped = self.par['postproc']['astrometry']['match_flipped']
         self.solve_photom_scamp = self.par['postproc']['astrometry']['solve_photom_scamp']
         self.group = self.par['postproc']['astrometry']['group']
@@ -951,44 +952,50 @@ class PostProc():
         -------
 
         '''
+        if not self.skip_swarp_align:
+            # Prepare list for mosaic mode
+            sci_proc_list, ivar_proc_list, wht_proc_list, flag_proc_list = [], [], [], []
+            if self.mosaic:
+                for ii, ifile in enumerate(self.scifiles):
+                    rootname = os.path.join(self.science_path, os.path.basename(ifile))
+                    for idet in self.detectors:
+                        sci_proc_file = rootname.replace('.fits', '_det{:02d}_sci.fits'.format(idet))
+                        ivar_proc_file = rootname.replace('.fits', '_det{:02d}_sci.ivar.fits'.format(idet))
+                        wht_proc_file = rootname.replace('.fits', '_det{:02d}_sci.weight.fits'.format(idet))
+                        flag_proc_file = rootname.replace('.fits', '_det{:02d}_flag.fits'.format(idet))
+                        cat_proc_file = rootname.replace('.fits', '_det{:02d}_sci_cat.fits'.format(idet))
+                        sci_proc_list.append(sci_proc_file)
+                        ivar_proc_list.append(ivar_proc_file)
+                        wht_proc_list.append(wht_proc_file)
+                        flag_proc_list.append(flag_proc_file)
+            else:
+                sci_proc_list = self.sci_proc_list
+                ivar_proc_list = self.ivar_proc_list
+                wht_proc_list = self.wht_proc_list
+                flag_proc_list = self.flag_proc_list
 
-        '''
-        self.log = True
-        self.mosaic = True
-        self.group = True
-        #self.scampconfig['MOSAIC_TYPE'] = 'LOOSE'
-        self.scampconfig['MOSAIC_TYPE'] = 'UNCHANGED'
-        #self.scampconfig['MOSAIC_TYPE'] = 'SAME_CRVAL'
-        #self.scampconfig['MOSAIC_TYPE'] = 'SHARE_PROJAXIS'
-        #self.scampconfig['MOSAIC_TYPE'] = 'FIX_FOCALPLANE'
-        self.scampconfig['ASTREF_CATALOG'] = 'PANSTARRS-1'
-        #self.scampconfig['ASTREF_CATALOG'] = 'GAIA-EDR3'
-        self.sexconfig['DETECT_THRESH'] = 30
-        self.scampconfig['ASTREF_WEIGHT'] = 0.1
-        '''
-        if not self.skip_swarp_align and not self.mosaic:
             ## This step is to align the image to N to the up and E to the left.
             ## It might be necessary if your image has a ~180 degree from the nominal orientation.
             msgs.info('Running Swarp to rotate the science image.')
             swarpconfig0 = self.swarpconfig.copy()
             swarpconfig0['RESAMPLE_SUFFIX'] = '.fits' # Replace the original image
-            swarp.run_swarp(self.sci_proc_list, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
+            swarp.run_swarp(sci_proc_list, config=swarpconfig0, workdir=self.science_path, defaultconfig='pyphot',
                             n_process=self.n_process, delete=self.delete, log=self.log, verbose=False)
             # resample inverse variance image
             msgs.info('Running Swarp to rotate the inverse variance image.')
             swarpconfig_ivar0 = self.swarpconfig_ivar.copy()
             swarpconfig_ivar0['RESAMPLE_SUFFIX'] = '.fits'
-            swarp.run_swarp(self.ivar_proc_list, config=swarpconfig_ivar0, workdir=self.science_path, defaultconfig='pyphot',
+            swarp.run_swarp(ivar_proc_list, config=swarpconfig_ivar0, workdir=self.science_path, defaultconfig='pyphot',
                             n_process=self.n_process, delete=self.delete, log=False, verbose=False)
             # resample flag image
             msgs.info('Running Swarp to rotate the flag image.')
             swarpconfig_flag0 = self.swarpconfig_flag.copy()
             swarpconfig_flag0['RESAMPLE_SUFFIX'] = '.fits'
-            swarp.run_swarp(self.flag_proc_list, config=swarpconfig_flag0, workdir=self.science_path, defaultconfig='pyphot',
+            swarp.run_swarp(flag_proc_list, config=swarpconfig_flag0, workdir=self.science_path, defaultconfig='pyphot',
                             n_process=self.n_process, delete=self.delete, log=False, verbose=False)
 
             # remove useless data and change flag image type
-            for ii, flag_fits in enumerate(self.flag_proc_list):
+            for ii, flag_fits in enumerate(flag_proc_list):
                 ## It seems swarp does not change the dtype now therefore I do not need the following.
                 #par = fits.open(flag_fits, memmap=False)
                 #par[0].data = par[0].data.astype('int32')  # change the dtype to be int32
@@ -997,21 +1004,33 @@ class PostProc():
                 #par.close()
                 #gc.collect()
                 os.system('rm {:}'.format(flag_fits.replace('.fits', '.weight.fits')))
-                os.system('rm {:}'.format(self.ivar_proc_list[ii].replace('.fits', '.weight.fits')))
+                os.system('rm {:}'.format(ivar_proc_list[ii].replace('.fits', '.weight.fits')))
 
         if self.mosaic:
             msgs.info('Build MEF format fits files')
+            rootnames = []
             for ifile in self.scifiles:
                 # Save MEF files
                 rootname = os.path.join(self.science_path, os.path.basename(ifile))
-                sci_proc_file = io.build_mef(rootname, self.detectors, img_type='SCI', returnname_only=False,
-                                             reuse_exiting=self.reuse_masters)
-                ivar_proc_file = io.build_mef(rootname, self.detectors, img_type='IVAR', returnname_only=False,
-                                              reuse_exiting=self.reuse_masters)
-                wht_proc_file = io.build_mef(rootname, self.detectors, img_type='WEIGHT', returnname_only=False,
-                                             reuse_exiting=self.reuse_masters)
-                flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=False,
-                                              reuse_exiting=self.reuse_masters)
+                rootnames.append(rootname)
+                #sci_proc_file = io.build_mef(rootname, self.detectors, img_type='SCI', returnname_only=False,
+                #                             overwrite=self.overwrite)
+                #ivar_proc_file = io.build_mef(rootname, self.detectors, img_type='IVAR', returnname_only=False,
+                #                              overwrite=self.overwrite)
+                #wht_proc_file = io.build_mef(rootname, self.detectors, img_type='WEIGHT', returnname_only=False,
+                #                             overwrite=self.overwrite)
+                #flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=False,
+                #                              overwrite=self.overwrite)
+            ## Build MEF format fits files in parallel
+            sci_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='SCI',
+                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            ivar_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='IVAR',
+                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            wht_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='WEIGHT',
+                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            flag_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='FLAG',
+                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+
 
         ## Step one: extract catalog from sciproc files
         msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
@@ -1021,6 +1040,7 @@ class PostProc():
 
         ## Step two: run scamp on extracted catalog
         #ToDo: The scamp part need to be grouped if use SCAMP non-supported reference catalogs.
+        #ToDo: Group them by calibID?
         groups = np.unique(self.coadd_ids.data)
         for igroup in groups:
             this_group = self.proc_coadd_ids == igroup

@@ -649,7 +649,7 @@ class AstrometricPar(ParSet):
         dtypes['mosaic'] = bool
         descr['mosaic'] = 'Mosaicing multiple detectors to a MEF fits before running scamp?'
 
-        defaults['skip_swarp_align'] = False
+        defaults['skip_swarp_align'] = True
         dtypes['skip_swarp_align'] = bool
         descr['skip_swarp_align'] = 'Skip aligning the image before solving the astrometric solutions?'
 
