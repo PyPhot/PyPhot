@@ -1,4 +1,4 @@
-0.5.0dev (2022-05-24)
+0.5.0 (2022-05-24)
 ----------------
 - Add inverse variance map which includes photon noise
 - Change weight map from 1/BKG to 1/(FLAT*MedianSky)
