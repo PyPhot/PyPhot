@@ -241,13 +241,6 @@ class PyPhot(object):
 
                 # science file lists
                 scifiles = self.fitstbl.frame_paths(grp_science)  # list for scifiles
-                sci_airmass = self.fitstbl[grp_science]['airmass']
-                sci_exptime = self.fitstbl[grp_science]['exptime']
-                sci_filter = self.fitstbl[grp_science]['filter']
-                sci_target = self.fitstbl[grp_science]['target']
-                coadd_ids = self.fitstbl['coadd_id'][grp_science] # coadd_ids
-                sci_ra = self.fitstbl['ra'][grp_science]
-                sci_dec = self.fitstbl['dec'][grp_science]
 
                 # calibration file lists
                 grp_bias = frame_indx[is_bias & in_grp]
@@ -285,43 +278,10 @@ class PyPhot(object):
                     masterframe.build_masters(detectors, master_keys, raw_shapes, camera=self.camera, par=self.par,
                                               biasfiles=biasfiles, darkfiles=darkfiles, pixflatfiles=pixflatfiles,
                                               illumflatfiles=illumflatfiles, reuse_masters=self.reuse_masters)
-                    ## Parallel the following
-                    #for idet in detectors:
-                    #    master_key = self.fitstbl.master_key(grp_all[0], det=idet)
-                    #    msgs.info('Identify data size for detector {:} based on BPM image.'.format(idet))
-                    #    raw_shape = self.camera.bpm(allfiles[0], idet, shape=None, msbias=None).astype('bool').shape
-                    #    Master = masterframe.MasterFrames(self.par, self.camera, idet, master_key, raw_shape,
-                    #                                      reuse_masters=self.reuse_masters)
-                    #    # Build MasterFrames
-                    #    Master.build(biasfiles=biasfiles, darkfiles=darkfiles,
-                    #                    illumflatfiles=illumflatfiles, pixflatfiles=pixflatfiles)
 
-                ## ToDo: Re-scale the Flat normalizations in different detectors?
-                #if not self.par['rdx']['skip_master']:
-                #    norm_illum_list = []
-                #    norm_pixel_list = []
-                #    for idet in detectors:
-                #        master_key = self.fitstbl.master_key(grp_all[0], det=idet)
-                #        raw_shape = self.camera.bpm(allfiles[0], idet, shape=None, msbias=None).astype('bool').shape
-                #        Master = masterframe.MasterFrames(self.par, self.camera, idet, master_key, raw_shape,
-                #                                          reuse_masters=self.reuse_masters)
-                #        # Load master frames
-                #        masterbiasimg, masterdarkimg, masterillumflatimg, masterpixflatimg, bpm_proc,\
-                #            norm_illum, norm_pixel = Master.load()
-                #        norm_illum_list.append(norm_illum)
-                #        norm_pixel_list.append(norm_pixel)
-                #    scale_illum = norm_illum_list / np.median(norm_illum_list)
-                #    scale_pixel = norm_pixel_list / np.median(norm_pixel_list)
-                #    #if self.par['scienceframe']['process']['use_illumflat']:
-                #    if self.par['scienceframe']['process']['use_pixelflat']:
-                #        for ii, idet in enumerate(detectors):
-                #            master_key = self.fitstbl.master_key(grp_science[0], det=idet)
-                #            masterpixflat_name = os.path.join(self.par['calibrations']['master_dir'],
-                #                                              'MasterPixelFlat_{:}'.format(master_key))
-                #            headerpixel, masterpixflatimg, maskpixflatimg = io.load_fits(masterpixflat_name)
-                #            headerpixel['FScale'] = scale_pixel[ii]
-                #            io.save_fits(masterpixflat_name, masterpixflatimg*scale_pixel[ii], headerpixel,
-                #                         'MasterPixelFlat', mask=maskpixflatimg, overwrite=True)
+                    ## ToDo: Re-scale the Flat normalizations in different detectors. Is this correct?
+                    if len(detectors)>1:
+                        masterframe.rescale_flat(self.camera, self.par, detectors, master_keys, raw_shapes)
 
                 if np.sum(in_grp_sci) > 0:
                     ## Data processing, including detproc and sciproc

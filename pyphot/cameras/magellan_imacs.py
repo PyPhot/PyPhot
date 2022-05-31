@@ -281,7 +281,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         detector_dict5.update(dict(
             det=5,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.58),
+            gain            = np.atleast_1d(1.67), #old:1.58, updated based NB919 observations in May 2022
             ronoise         = np.atleast_1d(5.6),
         ))
         # Detector 6
@@ -289,7 +289,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         detector_dict6.update(dict(
             det=6,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.61),
+            gain            = np.atleast_1d(1.70), #old:1.61, updated based NB919 observations in May 2022
             ronoise         = np.atleast_1d(5.9),
         ))
         # Detector 7
@@ -297,7 +297,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         detector_dict7.update(dict(
             det=7,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.59),
+            gain            = np.atleast_1d(1.47),#old:1.59, updated based NB919 observations in May 2022
             ronoise         = np.atleast_1d(6.3),
         ))
         # Detector 8
@@ -305,7 +305,7 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         detector_dict8.update(dict(
             det=8,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.65),
+            gain            = np.atleast_1d(1.53), #old:1.65, updated based NB919 observations in May 2022
             ronoise         = np.atleast_1d(6.7),
         ))
         detectors = [detector_dict1, detector_dict2, detector_dict3, detector_dict4,

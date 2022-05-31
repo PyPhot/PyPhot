@@ -134,6 +134,8 @@ def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, overwr
                 hdul_sci.append(this_hdu_sci)
             hdul_sci.writeto(out_sci_name, overwrite=True)
             msgs.info('MEF file saved to {:}'.format(out_sci_name))
+            hdul_sci.close()
+            gc.collect()
 
     return out_sci_name
 

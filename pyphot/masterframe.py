@@ -145,10 +145,6 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
                 bpm = flag_image.astype('bool')
             else:
                 bpm = mask_image.astype('bool')
-            #numamplifiers = 1
-            #gain = np.atleast_1d(1.0)
-            #datasec_img = np.ones_like(flat_image, dtype=int)
-            #oscansec_img = np.ones_like(flat_image, dtype=int)
 
         # Get Vignetting mask
         if minimum_vig is not None:
@@ -157,26 +153,6 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
             # this_bpm |= extra_bpm
         else:
             extra_bpm = np.zeros_like(flat_image, dtype='bool')
-
-        '''
-        # correct gain and get extra masks for each amplifier.
-        extra_bpm = np.zeros_like(bpm)
-        for iamp in range(numamplifiers):
-            mask = datasec_img != iamp+1
-            this_gain = gain[iamp]
-            this_array = procimg.trim_frame(array, mask) * this_gain
-
-            if minimum_vig is not None:
-                # ToDo: This is specific for LRIS, but it should work for IMACS as well
-                vig_bpm = this_array < np.percentile(this_array,95)*(1-minimum_vig) #np.percentile(this_array, minimum_vig*100)
-                #this_bpm |= vig_bpm
-            else:
-                vig_bpm = np.zeros_like(this_array, dtype='bool')
-
-            ## put sub-array back into the original one
-            array[np.invert(mask)] = this_array.flatten() #/ this_median
-            extra_bpm[np.invert(mask)] = vig_bpm.flatten()
-        '''
 
         new_bpm = np.logical_or(bpm, extra_bpm) # a new bpm for statistics
         ## Mask bright stars
@@ -222,7 +198,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
     #mean_stat, median_stat, stddev_stat = stats.sigma_clipped_stats(images, masks_vig, sigma=sigma, maxiters=maxiters,
     #                                                 cenfunc=cenfunc, stdfunc=stdfunc, axis=0)
     #norm = np.nanmedian(median_stat)
-    header['FNorm'] = np.median(norm)
+    header['FNorm'] = (np.median(norm), 'Flat normalization')
     header['UNITS'] = ('e-/e-', 'Data units')
     if cenfunc == 'median':
         stack = median #* utils.inverse(norm)
@@ -529,7 +505,7 @@ class MasterFrames():
         else:
             masterillumflatimg = np.ones(self.raw_shape)
             maskillumflatimg = np.zeros(self.raw_shape, dtype='int')
-            norm_illum = 1
+            norm_illum = 1.
 
         if self.use_pixel:
             if os.path.exists(self.masterpixflat_name):
@@ -540,7 +516,7 @@ class MasterFrames():
         else:
             masterpixflatimg = np.ones(self.raw_shape)
             maskpixflatimg = np.zeros(self.raw_shape, dtype='int')
-            norm_pixel = 1
+            norm_pixel = 1.
 
         if self.par['scienceframe']['process']['mask_proc']:
             bpm_sum = maskbiasimg + maskdarkimg + maskillumflatimg + maskpixflatimg
@@ -624,3 +600,49 @@ def _build_masters_worker(work_queue, camera=None, par=None, biasfiles=None, dar
         _build_masters(idet, master_key, raw_shape, camera=camera, par=par, biasfiles=biasfiles,
                       darkfiles=darkfiles, illumflatfiles=illumflatfiles, pixflatfiles=pixflatfiles,
                       reuse_masters=reuse_masters)
+
+def rescale_flat(camera, par, detectors, master_keys, raw_shapes):
+    '''
+    The Masterflats were build on the detector basis (i.e., normlized by different values for different detectors).
+    This function aims to rescale the normalization to ensure all detectors are normalized by the same number.
+    Parameters
+    ----------
+    camera
+    par
+    detectors
+    master_keys
+    raw_shapes
+    reuse_masters
+
+    Returns
+    -------
+
+    '''
+    norm_illum_list = []
+    norm_pixel_list = []
+    for ii, idet in enumerate(detectors):
+        Master = MasterFrames(par, camera, idet, master_keys[ii], raw_shapes[ii])
+        # Load master frames
+        _, _, masterillumflatimg, masterpixflatimg, _, norm_illum, norm_pixel = Master.load()
+        norm_illum_list.append(norm_illum)
+        norm_pixel_list.append(norm_pixel)
+
+    median_illum_scale = np.median(norm_illum_list)
+    median_pixel_scale = np.median(norm_pixel_list)
+
+    for ii, idet in enumerate(detectors):
+        Master = MasterFrames(par, camera, idet, master_keys[ii], raw_shapes[ii])
+        if Master.masterpixflat_name is not None:
+            headerpixel, masterpixflatimg, maskpixflatimg = io.load_fits(Master.masterpixflat_name)
+            if 'FNormS' not in headerpixel:
+                headerpixel['FNormS'] = (median_pixel_scale, 'Re-scaled flat normalization')
+                msgs.info('Rescale MasterPixelFlat with FNorm={:}'.format(median_pixel_scale))
+                io.save_fits(Master.masterpixflat_name, masterpixflatimg * norm_pixel_list[ii] / median_pixel_scale,
+                             headerpixel, 'MasterPixelFlat', mask=maskpixflatimg, overwrite=True)
+        if Master.masterillumflat_name is not None:
+            headerillum, masterillumflatimg, maskillumflatimg = io.load_fits(Master.masterillumflat_name)
+            if 'FNormS' not in headerillum:
+                headerillum['FNormS'] = (median_pixel_scale, 'Re-scaled flat normalization')
+                msgs.info('Rescale MasterIllumFlat with FNorm={:}'.format(median_pixel_scale))
+                io.save_fits(Master.masterillumflat_name, masterillumflatimg * norm_illum_list[ii] / median_illum_scale,
+                             headerillum, 'MasterIllumFlat', mask=maskillumflatimg, overwrite=True)
