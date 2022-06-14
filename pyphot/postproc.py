@@ -1,5 +1,7 @@
 import os,gc
 import numpy as np
+import random, string
+
 import matplotlib.pyplot as plt
 
 import multiprocessing
@@ -7,7 +9,7 @@ from multiprocessing import Process, Queue
 
 from astropy import wcs
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astropy import stats
 
 from pyphot import msgs, io, utils, caloffset
@@ -544,15 +546,18 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
     else:
         msgs.info('Start parallel processing with n_process={:}'.format(n_process))
         work_queue = Queue()
-        done_queue = Queue()
         processes = []
+        letters = string.ascii_letters
+        random_letter = ''.join(random.choice(letters) for i in range(15))
+        tmp_root = 'MasterChipZPT_tmp_{:}_{:04d}'.format(random_letter, np.random.randint(1,9999))
 
         for ii in range(n_file):
             work_queue.put((ii, cat_fits_list[ii], sci_fits_list[ii], ref_fits_list[ii], outqa_root_list[ii]))
 
         # creating processes
         for w in range(n_process):
-            p = Process(target=_cal_chip_worker, args=(work_queue, done_queue), kwargs={
+            out_tbl_name = tmp_root+'_process_{:}.fits'.format(w)
+            p = Process(target=_cal_chip_worker, args=(work_queue, out_tbl_name), kwargs={
                 'ZP': ZP, 'external_flag': external_flag,
                 'refcatalog': refcatalog, 'primary': primary, 'secondary': secondary, 'coefficients': coefficients,
                 'nstar_min': nstar_min, 'pixscale': pixscale, 'verbose': False})
@@ -564,56 +569,39 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             p.join()
         msgs.info('Finished the parallel processing with n_process={:}'.format(n_process))
 
-        # print the output
-        ii = 0
-        while not done_queue.empty():
-            idx_this, sci_fits_this, zp_this, zp_this_std, nstar, fwhm = done_queue.get()
-            idx_all[ii] = idx_this
-            sci_fits_all[ii] = sci_fits_this
-            zp_all[ii] = zp_this
-            zp_std_all[ii] = zp_this_std
-            nstar_all[ii] = nstar
-            fwhm_all[ii] = fwhm
-            print(ii)
-            ii +=1
+        # Combine the results and sort by idx
+        out_tbl = Table()
+        for w in range(n_process):
+            out_tbl_name = tmp_root+'_process_{:}.fits'.format(w)
+            this_tbl = Table.read(out_tbl_name)
+            out_tbl = vstack([out_tbl, this_tbl])
+            os.system('rm {:}'.format(out_tbl_name))
+        out_tbl_sort = out_tbl[np.argsort(out_tbl['IDX'])]
+        zp_all, zp_std_all = out_tbl_sort['ZPT'].data.data, out_tbl_sort['ZPT_Std'].data.data
+        nstar_all, fwhm_all = out_tbl_sort['NStar'].data.data, out_tbl_sort['FWHM'].data.data
 
-    # sort the data based on input. This is necessary for multiproccessing at least. I do this for both way just in case.
-    msgs.info('Sort the zeropoint array to keep it the same with input order.')
-    zp_all_sort = zp_all[np.argsort(idx_all)]
-    zp_std_all_sort = zp_std_all[np.argsort(idx_all)]
-    nstar_all_sort = nstar_all[np.argsort(idx_all)]
-    fwhm_all_sort = fwhm_all[np.argsort(idx_all)]
-    sci_fits_all_sort = sci_fits_all[np.argsort(idx_all)]
+    return zp_all, zp_std_all, nstar_all, fwhm_all
 
-    '''
-    zp_all_sort, zp_std_all_sort = np.zeros(n_file), np.zeros(n_file)
-    nstar_all_sort = np.zeros(n_file)
-    fwhm_all_sort = np.zeros(n_file)
-    sci_fits_all_sort = np.copy(sci_fits_all)
-
-    for ii, ifile in enumerate(sci_fits_list):
-        this_idx = sci_fits_all==ifile
-        sci_fits_all_sort[ii] = sci_fits_all[this_idx][0]
-        zp_all_sort[ii] = zp_all[this_idx]
-        zp_std_all_sort[ii] = zp_std_all[this_idx]
-        nstar_all_sort[ii] = nstar_all[this_idx]
-        fwhm_all_sort[ii] = fwhm_all[this_idx]
-    '''
-
-    return zp_all_sort, zp_std_all_sort, nstar_all_sort, fwhm_all_sort
-
-def _cal_chip_worker(work_queue, done_queue, ZP=25.0, external_flag=True, refcatalog='Panstarrs',
+def _cal_chip_worker(work_queue,  out_tbl_name, ZP=25.0, external_flag=True, refcatalog='Panstarrs',
                      primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10, pixscale=None, verbose=False):
 
     """Multiprocessing worker for cal_chips."""
+    out_tbl = Table()
     while not work_queue.empty():
         idx, cat_fits, sci_fits, ref_fits, outqa_root = work_queue.get()
         zp_this, zp_this_std, nstar, fwhm = _cal_chip(cat_fits, sci_fits=sci_fits, ref_fits=ref_fits, outqa_root=outqa_root,
                 ZP=ZP, external_flag=external_flag, refcatalog=refcatalog, primary=primary, secondary=secondary,
                 coefficients=coefficients, nstar_min=nstar_min, pixscale=pixscale, verbose=verbose)
-
-        done_queue.put((idx, sci_fits, zp_this, zp_this_std, nstar, fwhm))
-
+        this_tbl = Table()
+        this_tbl['IDX'] = np.array([idx])
+        this_tbl['SCI_FILE'] = np.array([sci_fits])
+        this_tbl['ZPT'] = np.array([zp_this])
+        this_tbl['ZPT_Std'] = np.array([zp_this_std])
+        this_tbl['FWHM'] = np.array([fwhm])
+        this_tbl['NStar'] = np.array([nstar]).astype('int32')
+        out_tbl = vstack([out_tbl, this_tbl])
+        #done_queue.put((idx, sci_fits, zp_this, zp_this_std, nstar, fwhm))
+    out_tbl.write(out_tbl_name, format='fits', overwrite=True)
 
 
 class PostProc():
