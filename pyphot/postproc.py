@@ -562,6 +562,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
         # completing process
         for p in processes:
             p.join()
+        msgs.info('Finished the parallel processing with n_process={:}'.format(n_process))
 
         # print the output
         ii = 0
@@ -573,6 +574,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             zp_std_all[ii] = zp_this_std
             nstar_all[ii] = nstar
             fwhm_all[ii] = fwhm
+            print(ii)
             ii +=1
 
     # sort the data based on input. This is necessary for multiproccessing at least. I do this for both way just in case.
