@@ -1407,6 +1407,7 @@ class ReduxPar(ParSet):
     """
     def __init__(self, camera=None, sextractor=None, detnum=None, sortroot=None, calwin=None, scidir=None,
                  qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None,
+                 skip_step_one=None, skip_step_two=None,
                  skip_master=None, skip_detproc=None, skip_sciproc=None, skip_astrometry=None,
                  skip_chipcal=None, skip_img_qa=None, skip_coadd=None, skip_detection=None,
                  n_process=None):
@@ -1459,6 +1460,10 @@ class ReduxPar(ParSet):
         dtypes['ignore_bad_headers'] = bool
         descr['ignore_bad_headers'] = 'Ignore bad headers (NOT recommended unless you know it is safe).'
 
+        defaults['skip_step_one'] = False
+        dtypes['skip_step_one'] = bool
+        descr['skip_step_one'] = 'Skip building all the master calibrations, detproc and scipro?'
+
         defaults['skip_master'] = False
         dtypes['skip_master'] = bool
         descr['skip_master'] = 'Skip building all the master calibrations?'
@@ -1470,6 +1475,10 @@ class ReduxPar(ParSet):
         defaults['skip_sciproc'] = False
         dtypes['skip_sciproc'] = bool
         descr['skip_sciproc'] = 'Skip sciproc for all science chips?'
+
+        defaults['skip_step_two'] = False
+        dtypes['skip_step_two'] = bool
+        descr['skip_step_two'] = 'Skip astrometry, zeropoint calibrations and coadding?'
 
         defaults['skip_astrometry'] = False
         dtypes['skip_astrometry'] = bool
@@ -1529,7 +1538,7 @@ class ReduxPar(ParSet):
 
         # Basic keywords
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
-                    'redux_path', 'ignore_bad_headers',
+                    'redux_path', 'ignore_bad_headers', 'skip_step_one', 'skip_step_two',
                     'skip_master','skip_detproc','skip_sciproc','skip_astrometry', 'skip_chipcal', 'skip_img_qa',
                     'skip_coadd', 'skip_detection','n_process']
 
