@@ -576,6 +576,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
             ii +=1
 
     # sort the data based on input. This is necessary for multiproccessing at least. I do this for both way just in case.
+    msgs.info('Sort the zeropoint array to keep it the same with input order.')
     zp_all_sort = zp_all[np.argsort(idx_all)]
     zp_std_all_sort = zp_std_all[np.argsort(idx_all)]
     nstar_all_sort = nstar_all[np.argsort(idx_all)]
