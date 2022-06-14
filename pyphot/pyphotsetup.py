@@ -238,9 +238,11 @@ class PyPhotSetup:
         # configuration lines
         cfg_lines = ['[rdx]']
         cfg_lines += ['    camera          = {0}'.format(camera)]
+        cfg_lines += ['    skip_step_one   = False']
         cfg_lines += ['    skip_master     = False']
         cfg_lines += ['    skip_detproc    = False']
         cfg_lines += ['    skip_sciproc    = False']
+        cfg_lines += ['    skip_step_two   = False']
         cfg_lines += ['    skip_astrometry = False']
         cfg_lines += ['    skip_chipcal    = False']
         cfg_lines += ['    skip_img_qa     = False']

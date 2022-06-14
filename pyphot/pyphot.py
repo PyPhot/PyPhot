@@ -329,7 +329,7 @@ class PyPhot(object):
 
 
         ## Step two is iterated over coadd_ids
-        if self.par['rdx']['skip_step_one']:
+        if self.par['rdx']['skip_step_two']:
             msgs.warn('Skipping astrometric calibration, photometric zeropoint calibration and coadd.')
         else:
             # prepare some useful lists
