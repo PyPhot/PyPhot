@@ -350,6 +350,7 @@ class PyPhot(object):
             pixscale = np.median(pixscales)
 
             # Initiallize PostProc
+            this_setup = self.fitstbl['setup'][0]
             Post = postproc.PostProc(self.par, detectors, this_setup, scifiles, coadd_ids, sci_ra, sci_dec, sci_airmass,
                                      sci_exptime, sci_filter, sci_target, pixscale, self.science_path,
                                      self.qa_path, self.coadd_path, overwrite=self.overwrite,
