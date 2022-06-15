@@ -871,7 +871,7 @@ class CoaddPar(ParSet):
         dtypes['rescale_weights'] = bool
         descr['rescale_weights'] = 'Rescale input weights/variances?'
 
-        defaults['combine_type'] = 'MEDIAN'
+        defaults['combine_type'] = 'CLIPPED'
         options['combine_type'] = CoaddPar.valid_combine_type()
         dtypes['combine_type'] = str
         descr['combine_type'] = 'Background Options are: {0}'.format(', '.join(options['combine_type']))
