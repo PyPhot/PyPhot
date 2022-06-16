@@ -100,7 +100,7 @@ def darkframe(darkfiles, camera, det, masterdark_name, masterbias=None, cenfunc=
 
 def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=None, masterdark=None, cenfunc='median',
                 stdfunc='std', sigma=5, maxiters=3, window_size=(51,51), maskpixvar=None, minimum_vig=None,
-                maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', conv='sex',
+                maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
                 sextractor_task='sex'):
 
     if masterbias is not None:
@@ -152,7 +152,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
             extra_bpm = flat_image < np.percentile(flat_image, 95) * (1-minimum_vig) #np.percentile(this_array, minimum_vig*100)
             # this_bpm |= extra_bpm
         else:
-            extra_bpm = np.zeros_like(flat_image, dtype='bool')
+            extra_bpm = flat_image == 0. # only mask zeros
 
         new_bpm = np.logical_or(bpm, extra_bpm) # a new bpm for statistics
         ## Mask bright stars
@@ -177,16 +177,26 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
         this_hotmask = flat_image > this_median + 5 * this_std
         flat_image[this_hotmask] = this_median
 
-        ## Mask zero pixels
-        this_zeromask = flat_image == 0.
-        flat_image[this_zeromask] = this_median
+        ## Mask bright star halo
+        if 'MEDSKY' in header.keys():
+            medsky = header['MEDSKY']
+            this_halo_mask = flat_image > medsky + brightstar_nsigma*this_std
+        else:
+            this_halo_mask = np.zeros_like(bpm)
+        flat_image[this_halo_mask] = this_median
+
+        #allmask = bpm | this_starmask | this_hotmask | this_zeromask | this_halo_mask
+        #from pyphot import procimg
+        #allmask = procimg.grow_masked(allmask, 1.5, verbose=True)
+        #flat_image[allmask] = 0.
+        #io.save_fits('test.fits', flat_image, header, 'MasterIllumFlat', mask=bpm, overwrite=True)
 
         ## Append the data
         #images.append(array)
         #images.append(flat_image)
         images.append(flat_image * utils.inverse(this_median))
-        masks.append(bpm | this_starmask | this_hotmask | this_zeromask)
-        masks_vig.append(new_bpm | this_starmask | this_hotmask | this_zeromask)
+        masks.append(bpm | this_starmask | this_hotmask | this_halo_mask)
+        masks_vig.append(new_bpm | this_starmask | this_hotmask | this_halo_mask)
         norm.append(this_median)
 
     msgs.info('Combing flat images')
@@ -205,8 +215,8 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
     else:
         stack = mean #* utils.inverse(norm)
 
-    bpm_nan = np.isnan(stack) | (stack==0.)
-    stack[bpm_nan] = 0. # replace bad pixels with 0
+    bpm_nan = np.isnan(stack)
+    stack[bpm_nan] = 1. # replace bad pixels with 1
 
     if maskpixvar is not None:
         # mask bad pixels based on pixelflat (i.e. pixel variance greater than XX% using maskbad)
@@ -221,7 +231,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
         bpm_pixvar = np.zeros_like(flat_image, dtype=bool)
 
     # bpm for the flat
-    stack_bpm = bpm_pixvar | bpm_nan
+    stack_bpm = bpm_pixvar | bpm_nan | (stack==0.)
 
     del images, masks, masks_vig
     gc.collect()
@@ -230,7 +240,7 @@ def combineflat(flatfiles, maskfiles=None, camera=None, det=None, masterbias=Non
 
 def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbias=None, masterdark=None,
                    cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), minimum_vig=None,
-                   maskbrightstar=False, brightstar_nsigma=5, maskbrightstar_method='sextractor',
+                   maskbrightstar=False, brightstar_nsigma=3, maskbrightstar_method='sextractor',
                    conv='sex', sextractor_task='sex'):
 
     msgs.info('Building illuminating flat')
@@ -257,7 +267,7 @@ def illumflatframe(flatfiles, camera, det, masterillumflat_name, masterbias=None
 
 def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbias=None, masterdark=None, masterillumflat=None,
                    cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51), maskpixvar=0.1, minimum_vig=None,
-                   maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', conv='sex',
+                   maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
                    sextractor_task='sex'):
 
     msgs.info('Building pixel flat')
@@ -276,7 +286,7 @@ def pixelflatframe(flatfiles, camera, det, masterpixflat_name, masterbias=None, 
 
 def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
                   cenfunc='median', stdfunc='std', sigma=3, maxiters=3, window_size=(51,51),
-                  maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor', conv='sex',
+                  maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
                   sextractor_task='sex'):
 
     msgs.info('Building super sky flat')
@@ -297,7 +307,7 @@ def superskyframe(superskyfiles, mastersupersky_name, maskfiles=None,
     io.save_fits(mastersupersky_name, flat, header, 'MasterSuperSky', mask=bpm, overwrite=True)
 
 def fringeframe(fringefiles, masterfringe_name, fringemaskfiles=None, mastersuperskyimg=None, cenfunc='median', stdfunc='std',
-                sigma=3, maxiters=3, maskbrightstar=True, brightstar_nsigma=5, maskbrightstar_method='sextractor',
+                sigma=3, maxiters=3, maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor',
                 conv='sex',sextractor_task='sex'):
 
     header, data0, mask0 = io.load_fits(fringefiles[0])

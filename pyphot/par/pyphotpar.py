@@ -312,7 +312,7 @@ class ProcessImagesPar(ParSet):
         dtypes['conv'] = str
         descr['conv'] = 'Convolution matrix, either default sex, or sex995 or you can provide the full path of your conv file'
 
-        defaults['brightstar_nsigma'] = 5
+        defaults['brightstar_nsigma'] = 3
         dtypes['brightstar_nsigma'] = [int, float]
         descr['brightstar_nsigma'] = 'Sigma level to mask bright stars.'
 

@@ -162,7 +162,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
                 #  IMACS need this since the guider moves around the detector.
                 #  Keck LIRS also need this given its weid illumination at the edge.
                 bpm_for_vig = bpm | bpm_sat | bpm_zero | bpm_proc | bpm_vig_1
-                #starmask = mask_bright_star(sci_image, mask=bpm_for_vig, brightstar_nsigma=5., back_nsigma=3.,
+                #starmask = mask_bright_star(sci_image, mask=bpm_for_vig, brightstar_nsigma=3., back_nsigma=3.,
                 #                            back_maxiters=5, method='sextractor', conv=conv,
                 #                            task=sextractor_task, verbose=verbose)
                 bkg_for_vig, _ = BKG2D(sci_image, (50,50), mask=bpm_for_vig, filter_size=(3,3),
@@ -184,6 +184,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
             starmask = mask_bright_star(sci_image, mask=bpm_for_wht, brightstar_nsigma=brightstar_nsigma,
                                         method=maskbrightstar_method, conv=conv, task=sextractor_task,
                                         verbose=verbose)
+            starmask = grow_masked(starmask, grow, verbose=verbose)
         else:
             starmask = np.zeros_like(sci_image, dtype=bool)
 
@@ -397,6 +398,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
                 starmask = mask_bright_star(data, mask=bpm_for_star, brightstar_nsigma=brightstar_nsigma, back_nsigma=sigclip,
                                             back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextractor_task,
                                             conv=conv, verbose=verbose)
+                starmask = grow_masked(starmask, grow, verbose=verbose)
                 io.save_fits(star_fits_file, starmask.astype('int32'), header, 'FLAG', overwrite=True)
                 msgs.info('Stark mask image {:} saved'.format(star_fits_file))
         else:
