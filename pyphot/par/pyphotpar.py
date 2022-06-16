@@ -841,10 +841,10 @@ class CoaddPar(ParSet):
     For a table with the current keywords, defaults, and descriptions,
     see :ref:`pyphotpar`.
     """
-    def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None,
-                 clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None, back_type=None,
-                 back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None, resampling_type=None,
-                 pixscale=None, cal_zpt=None, delete=None, log=None):
+    def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None, clip_writelog=None,
+                 clip_logname=None, clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None,
+                 back_type=None, back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
+                 resampling_type=None, pixscale=None, cal_zpt=None, delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -883,6 +883,14 @@ class CoaddPar(ParSet):
         defaults['clip_sigma'] = 4.0
         dtypes['clip_sigma'] = [int, float]
         descr['clip_sigma'] = 'RMS error multiple variation allowed with clipping'
+
+        defaults['clip_writelog'] = False
+        dtypes['clip_writelog'] = bool
+        descr['clip_writelog'] = 'Write output file with coordinates of clipped pixels?'
+
+        defaults['clip_logname'] = 'clipped.log'
+        dtypes['clip_logname'] = str
+        descr['clip_logname'] = 'Name of output file with coordinates of clipped pixels'
 
         defaults['blank_badpixels'] = False
         dtypes['blank_badpixels'] = bool
@@ -945,7 +953,7 @@ class CoaddPar(ParSet):
     @classmethod
     def from_dict(cls, cfg):
         k = numpy.array([*cfg.keys()])
-        parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type', 'clip_ampfrac', 'clip_sigma',
+        parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type','clip_writelog','clip_logname','clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
                    'back_filtthresh','resampling_type', 'pixscale', 'cal_zpt', 'delete', 'log']
 

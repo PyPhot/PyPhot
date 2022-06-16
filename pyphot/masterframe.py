@@ -595,6 +595,8 @@ def build_masters(detectors, master_keys, raw_shapes, camera=None, par=None, bia
         for p in processes:
             p.join()
 
+        work_queue = None
+
 def _build_masters(idet, master_key, raw_shape, camera=None, par=None, biasfiles=None, darkfiles=None,
                    illumflatfiles=None, pixflatfiles=None, reuse_masters=True):
     # Initialize

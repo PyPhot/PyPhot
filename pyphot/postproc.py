@@ -40,9 +40,10 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
     else:
         subtract='N'
 
-    ## parameters for coadding science images
     if np.size(back_size) == 1:
         back_size = [back_size, back_size]
+
+    ## parameters for coadding science images
     swarpconfig = {"RESAMPLE": "Y", "DELETE_TMPFILES": "Y", "CENTER_TYPE": "ALL", "RESAMPLE_SUFFIX": ".tmp.fits",
                    "PIXELSCALE_TYPE": "MANUAL", "PIXEL_SCALE": pixscale,
                    "WEIGHT_TYPE": weight_type,"RESCALE_WEIGHTS": rescale,"BLANK_BADPIXELS":blank,
@@ -50,6 +51,27 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
                    "SUBTRACT_BACK": subtract,"BACK_TYPE":back_type,"BACK_DEFAULT":back_default,
                    "BACK_SIZE": '{:},{:}'.format(back_size[0],back_size[1]),
                    "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
+
+    ## ToDo: clip pixels with Swarp. It seems clipping too many good pixels.
+    '''
+    ## Get clipped pixels with Swarp
+    swarpconfig_clip = swarpconfig.copy()
+    swarpconfig_clip["COMBINE_TYPE"] = "CLIPPED"
+    swarpconfig_clip["CLIP_WRITELOG"] = "Y"
+    swarpconfig_clip["CLIP_LOGNAME"] = os.path.join(coadddir,coaddroot+'_clipped.log')
+    msgs.info('Clipping pixels using Swarp.')
+    from IPython import embed
+    embed()
+    swarp.run_swarp(scifiles, config=swarpconfig_clip, workdir=science_path, defaultconfig='pyphot',
+                    coadddir=coadddir, coaddroot=coaddroot+'_clip_sci', delete=True, log=False)
+    clip_tbl = Table.read(os.path.join(coadddir,coaddroot+'_clipped.log'), format='ascii.no_header')
+    clip_tbl = clip_tbl[np.argsort(clip_tbl['col1'])]
+    dum_clip = clip_tbl[clip_tbl['col1'] == 0]
+    f = open('test.reg', 'w')
+    for ii in range(len(dum_clip)):
+        print('circle({:},{:},1)'.format(dum_clip[ii]['col2'], dum_clip[ii]['col3']), file=f)
+    f.close()
+    '''
     ## Run swarp for science image
     msgs.info('Coadding science images.')
     swarp.run_swarp(scifiles, config=swarpconfig, workdir=science_path, defaultconfig='pyphot',
