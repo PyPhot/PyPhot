@@ -1020,14 +1020,14 @@ class PostProc():
                 #flag_proc_file = io.build_mef(rootname, self.detectors, img_type='FLAG', returnname_only=False,
                 #                              overwrite=self.overwrite)
             ## Build MEF format fits files in parallel
-            sci_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='SCI',
-                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
-            ivar_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='IVAR',
-                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
-            wht_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='WEIGHT',
-                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
-            flag_proc_files = io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='FLAG',
-                                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='SCI',
+                                  returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='IVAR',
+                                  returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='WEIGHT',
+                                  returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
+            io.build_mef_parallel(rootnames, detectors=self.detectors, img_type='FLAG',
+                                  returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
 
 
         ## Step one: extract catalog from sciproc files

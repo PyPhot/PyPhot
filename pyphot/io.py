@@ -139,7 +139,7 @@ def build_mef(rootname, detectors, img_type='SCI', returnname_only=False, overwr
 
     return out_sci_name
 
-def _build_mef_worker(work_queue, done_queue, detectors=None, img_type='SCI', returnname_only=False, overwrite=True):
+def _build_mef_worker(work_queue, detectors=None, img_type='SCI', returnname_only=False, overwrite=True):
 
     """Multiprocessing worker for _build_mef"""
     while not work_queue.empty():
@@ -147,7 +147,7 @@ def _build_mef_worker(work_queue, done_queue, detectors=None, img_type='SCI', re
         out_sci_name = build_mef(rootname, detectors,
                         img_type=img_type, returnname_only=returnname_only, overwrite=overwrite)
 
-        done_queue.put((idx, out_sci_name))
+        #done_queue.put((idx, out_sci_name))
 
 def build_mef_parallel(rootnames, detectors=None, img_type='SCI', returnname_only=False, overwrite=True, n_process=1):
     '''
@@ -180,7 +180,7 @@ def build_mef_parallel(rootnames, detectors=None, img_type='SCI', returnname_onl
 
     msgs.info('Building MEF {:} files with n_process={:}'.format(img_type, n_process))
     work_queue = Queue()
-    done_queue = Queue()
+    #done_queue = Queue()
     processes = []
 
     for ii in range(n_file):
@@ -188,7 +188,7 @@ def build_mef_parallel(rootnames, detectors=None, img_type='SCI', returnname_onl
 
     # creating processes
     for w in range(n_process):
-        p = Process(target=_build_mef_worker, args=(work_queue, done_queue), kwargs={
+        p = Process(target=_build_mef_worker, args=(work_queue, ), kwargs={
             'detectors': detectors, 'img_type': img_type,
             'returnname_only': returnname_only, 'overwrite': overwrite})
         processes.append(p)
@@ -199,15 +199,15 @@ def build_mef_parallel(rootnames, detectors=None, img_type='SCI', returnname_onl
         p.join()
 
     # print the output
-    ii=0
-    while not done_queue.empty():
-        idx_all[ii], out_sci_name = done_queue.get()
-        out_sci_names.append(out_sci_name)
-        ii+=1
+    #ii=0
+    #while not done_queue.empty():
+    #    idx_all[ii], out_sci_name = done_queue.get()
+    #    out_sci_names.append(out_sci_name)
+    #    ii+=1
 
-    out_sci_names_sort = np.array(out_sci_names)[np.argsort(idx_all)].tolist()
+    #out_sci_names_sort = np.array(out_sci_names)[np.argsort(idx_all)].tolist()
 
-    return out_sci_names_sort
+    #return out_sci_names_sort
 
 def load_filter(filter):
     """
