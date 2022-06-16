@@ -69,6 +69,7 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
         for p in processes:
             p.join()
 
+        work_queue = None
         # print the output
         #while not done_queue.empty():
         #    sci_fits_file, flag_fits_file = done_queue.get()
@@ -333,6 +334,7 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
         for p in processes:
             p.join()
 
+        work_queue = None
         # print the output
         #while not done_queue.empty():
         #    sci_fits_file, wht_fits_file, flag_fits_file = done_queue.get()

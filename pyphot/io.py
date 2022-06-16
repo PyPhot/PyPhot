@@ -198,6 +198,7 @@ def build_mef_parallel(rootnames, detectors=None, img_type='SCI', returnname_onl
     for p in processes:
         p.join()
 
+    work_queue = None
     # print the output
     #ii=0
     #while not done_queue.empty():
