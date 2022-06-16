@@ -48,7 +48,7 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
     else:
         msgs.info('Start parallel processing with n_process={:}'.format(n_process))
         work_queue = Queue()
-        done_queue = Queue()
+        #done_queue = Queue()
         processes = []
 
         for ii in range(n_file):
@@ -56,7 +56,7 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
 
         # creating processes
         for w in range(n_process):
-            p = Process(target=_detproc_worker, args=(work_queue, done_queue), kwargs={
+            p = Process(target=_detproc_worker, args=(work_queue, ), kwargs={
                 'science_path': science_path, 'masterbiasimg': masterbiasimg,
                 'masterdarkimg': masterdarkimg, 'masterpixflatimg': masterpixflatimg, 'masterillumflatimg': masterillumflatimg,
                 'bpm_proc': bpm_proc, 'mask_vig': mask_vig, 'minimum_vig': minimum_vig, 'apply_gain': apply_gain,
@@ -70,12 +70,12 @@ def detproc(scifiles, camera, det, n_process=4, science_path=None, masterbiasimg
             p.join()
 
         # print the output
-        while not done_queue.empty():
-            sci_fits_file, flag_fits_file = done_queue.get()
-            sci_fits_list.append(sci_fits_file)
-            flag_fits_list.append(flag_fits_file)
+        #while not done_queue.empty():
+        #    sci_fits_file, flag_fits_file = done_queue.get()
+        #    sci_fits_list.append(sci_fits_file)
+        #    flag_fits_list.append(flag_fits_file)
 
-    return sci_fits_list, flag_fits_list
+    #return sci_fits_list, flag_fits_list
 
 def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
                  masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
@@ -246,7 +246,7 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
 
     return sci_fits_file, flag_fits_file
 
-def _detproc_worker(work_queue, done_queue, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
+def _detproc_worker(work_queue, science_path=None, masterbiasimg=None, masterdarkimg=None, masterpixflatimg=None,
                     masterillumflatimg=None, bpm_proc=None, mask_vig=False, minimum_vig=0.5, apply_gain=False, grow=1.5,
                     maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex',
                     sextractor_task='sex', verbose=True, overwrite=True):
@@ -263,7 +263,7 @@ def _detproc_worker(work_queue, done_queue, science_path=None, masterbiasimg=Non
                         maskbrightstar_method=maskbrightstar_method,
                         sextractor_task=sextractor_task, verbose=verbose, overwrite=overwrite)
 
-        done_queue.put((sci_fits_file, flag_fits_file))
+        #done_queue.put((sci_fits_file, flag_fits_file))
 
 def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
             back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5, grow=1.5,
@@ -308,7 +308,7 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
     else:
         msgs.info('Start parallel processing with n_process={:}'.format(n_process))
         work_queue = Queue()
-        done_queue = Queue()
+        #done_queue = Queue()
         processes = []
 
         for ii in range(n_file):
@@ -316,7 +316,7 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
 
         # creating processes
         for w in range(n_process):
-            p = Process(target=_sciproc_worker, args=(work_queue, done_queue), kwargs={
+            p = Process(target=_sciproc_worker, args=(work_queue, ), kwargs={
                 'mastersuperskyimg': mastersuperskyimg, 'coeff_airmass': coeff_airmass, 'use_medsky':use_medsky,
                 'back_type': back_type, 'back_rms_type': back_rms_type, 'back_size': back_size, 'back_filtersize': back_filtersize,
                 'back_maxiters': back_maxiters, 'grow': grow, 'maskbrightstar': maskbrightstar, 'brightstar_nsigma': brightstar_nsigma,
@@ -334,13 +334,13 @@ def sciproc(scifiles, flagfiles, n_process=4, airmass=None, coeff_airmass=0., ma
             p.join()
 
         # print the output
-        while not done_queue.empty():
-            sci_fits_file, wht_fits_file, flag_fits_file = done_queue.get()
-            sci_fits_list.append(sci_fits_file)
-            wht_fits_list.append(wht_fits_file)
-            flag_fits_list.append(flag_fits_file)
+        #while not done_queue.empty():
+        #    sci_fits_file, wht_fits_file, flag_fits_file = done_queue.get()
+        #    sci_fits_list.append(sci_fits_file)
+        #    wht_fits_list.append(wht_fits_file)
+        #    flag_fits_list.append(flag_fits_file)
 
-    return sci_fits_list, wht_fits_list, flag_fits_list
+    #return sci_fits_list, wht_fits_list, flag_fits_list
 
 def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
                  back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5, grow=1.5,
@@ -517,7 +517,7 @@ def _sciproc_one(scifile, flagfile, airmass, coeff_airmass=0., mastersuperskyimg
 
     return sci_fits_file, wht_fits_file, flag_fits_file
 
-def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
+def _sciproc_worker(work_queue, coeff_airmass=0., mastersuperskyimg=None, use_medsky=False,
                     back_type='median', back_rms_type='std', back_size=(200,200), back_filtersize=(3, 3), back_maxiters=5, grow=1.5,
                     maskbrightstar=True, brightstar_nsigma=3, maskbrightstar_method='sextractor', conv='sex', sextractor_task='sex',
                     mask_cr=True, contrast=2, lamaxiter=1, sigclip=5.0, cr_threshold=5.0, neighbor_threshold=2.0,
@@ -539,7 +539,7 @@ def _sciproc_worker(work_queue, done_queue, coeff_airmass=0., mastersuperskyimg=
             small_edge=small_edge, line_len=line_len, line_gap=line_gap, percentile=percentile,
             mask_negative_star=mask_negative_star, replace=replace, verbose=verbose, overwrite=overwrite)
 
-        done_queue.put((sci_fits_file, wht_fits_file, flag_fits_file))
+        #done_queue.put((sci_fits_file, wht_fits_file, flag_fits_file))
 
 def defringing(sci_fits_list, masterfringeimg):
 
@@ -658,24 +658,24 @@ class ImageProc():
 
         '''
 
-        proc_fits_list, detmask_fits_list = detproc(procfiles, self.camera, self.det,
-                                                    science_path=self.science_path,
-                                                    masterbiasimg=masterbiasimg,
-                                                    masterdarkimg=masterdarkimg,
-                                                    masterpixflatimg=masterpixflatimg,
-                                                    masterillumflatimg=masterillumflatimg,
-                                                    bpm_proc=bpm_proc,
-                                                    maskbrightstar=self.maskbrightstar,
-                                                    brightstar_nsigma=self.brightstar_nsigma,
-                                                    maskbrightstar_method=self.maskbrightstar_method,
-                                                    conv=self.conv,
-                                                    apply_gain=self.par['scienceframe']['process']['apply_gain'],
-                                                    mask_vig=self.par['scienceframe']['process']['mask_vig'],
-                                                    minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
-                                                    grow=self.par['scienceframe']['process']['grow'],
-                                                    sextractor_task=self.sextask,
-                                                    n_process=self.n_process,
-                                                    overwrite=self.overwrite)
+        detproc(procfiles, self.camera, self.det,
+                science_path=self.science_path,
+                masterbiasimg=masterbiasimg,
+                masterdarkimg=masterdarkimg,
+                masterpixflatimg=masterpixflatimg,
+                masterillumflatimg=masterillumflatimg,
+                bpm_proc=bpm_proc,
+                maskbrightstar=self.maskbrightstar,
+                brightstar_nsigma=self.brightstar_nsigma,
+                maskbrightstar_method=self.maskbrightstar_method,
+                conv=self.conv,
+                apply_gain=self.par['scienceframe']['process']['apply_gain'],
+                mask_vig=self.par['scienceframe']['process']['mask_vig'],
+                minimum_vig=self.par['scienceframe']['process']['minimum_vig'],
+                grow=self.par['scienceframe']['process']['grow'],
+                sextractor_task=self.sextask,
+                n_process=self.n_process,
+                overwrite=self.overwrite)
 
     def build_supersky(self, superskyrawfiles):
         '''
@@ -748,42 +748,42 @@ class ImageProc():
             scimask_fits_list.append(flag_fits_file)
 
         ## Do the sciproc
-        sci_fits_list, wht_fits_list, flag_fits_list = sciproc(sciproc_fits_list, scimask_fits_list,
-                                                    mastersuperskyimg=self.mastersuperskyimg,
-                                                    airmass=sciproc_airmass,
-                                                    coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
-                                                    use_medsky=self.par['scienceframe']['process']['use_medsky'],
-                                                    back_type=self.par['scienceframe']['process']['back_type'],
-                                                    back_rms_type=self.par['scienceframe']['process']['back_rms_type'],
-                                                    back_size=self.par['scienceframe']['process']['back_size'],
-                                                    back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
-                                                    maskbrightstar=self.maskbrightstar,
-                                                    brightstar_nsigma=self.brightstar_nsigma,
-                                                    maskbrightstar_method=self.maskbrightstar_method,
-                                                    conv=self.conv,
-                                                    sigclip=self.par['scienceframe']['process']['sigclip'],
-                                                    mask_cr=self.par['scienceframe']['process']['mask_cr'],
-                                                    lamaxiter=self.par['scienceframe']['process']['lamaxiter'],
-                                                    cr_threshold=self.par['scienceframe']['process']['cr_threshold'],
-                                                    neighbor_threshold=self.par['scienceframe']['process']['neighbor_threshold'],
-                                                    contrast=self.par['scienceframe']['process']['contrast'],
-                                                    grow=self.par['scienceframe']['process']['grow'],
-                                                    # sigfrac=self.par['scienceframe']['process']['sigfrac'],
-                                                    # objlim=self.par['scienceframe']['process']['objlim'],
-                                                    mask_sat=self.par['scienceframe']['process']['mask_sat'],
-                                                    sat_sig=self.par['scienceframe']['process']['sat_sig'],
-                                                    sat_buf=self.par['scienceframe']['process']['sat_buf'],
-                                                    sat_order=self.par['scienceframe']['process']['sat_order'],
-                                                    low_thresh=self.par['scienceframe']['process']['low_thresh'],
-                                                    h_thresh=self.par['scienceframe']['process']['h_thresh'],
-                                                    small_edge=self.par['scienceframe']['process']['small_edge'],
-                                                    line_len=self.par['scienceframe']['process']['line_len'],
-                                                    line_gap=self.par['scienceframe']['process']['line_gap'],
-                                                    percentile=self.par['scienceframe']['process']['percentile'],
-                                                    replace=self.par['scienceframe']['process']['replace'],
-                                                    mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'],
-                                                    sextractor_task=self.sextask,
-                                                    n_process=self.n_process, overwrite=self.overwrite)
+        sciproc(sciproc_fits_list, scimask_fits_list,
+                mastersuperskyimg=self.mastersuperskyimg,
+                airmass=sciproc_airmass,
+                coeff_airmass=self.par['postproc']['photometry']['coeff_airmass'],
+                use_medsky=self.par['scienceframe']['process']['use_medsky'],
+                back_type=self.par['scienceframe']['process']['back_type'],
+                back_rms_type=self.par['scienceframe']['process']['back_rms_type'],
+                back_size=self.par['scienceframe']['process']['back_size'],
+                back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
+                maskbrightstar=self.maskbrightstar,
+                brightstar_nsigma=self.brightstar_nsigma,
+                maskbrightstar_method=self.maskbrightstar_method,
+                conv=self.conv,
+                sigclip=self.par['scienceframe']['process']['sigclip'],
+                mask_cr=self.par['scienceframe']['process']['mask_cr'],
+                lamaxiter=self.par['scienceframe']['process']['lamaxiter'],
+                cr_threshold=self.par['scienceframe']['process']['cr_threshold'],
+                neighbor_threshold=self.par['scienceframe']['process']['neighbor_threshold'],
+                contrast=self.par['scienceframe']['process']['contrast'],
+                grow=self.par['scienceframe']['process']['grow'],
+                # sigfrac=self.par['scienceframe']['process']['sigfrac'],
+                # objlim=self.par['scienceframe']['process']['objlim'],
+                mask_sat=self.par['scienceframe']['process']['mask_sat'],
+                sat_sig=self.par['scienceframe']['process']['sat_sig'],
+                sat_buf=self.par['scienceframe']['process']['sat_buf'],
+                sat_order=self.par['scienceframe']['process']['sat_order'],
+                low_thresh=self.par['scienceframe']['process']['low_thresh'],
+                h_thresh=self.par['scienceframe']['process']['h_thresh'],
+                small_edge=self.par['scienceframe']['process']['small_edge'],
+                line_len=self.par['scienceframe']['process']['line_len'],
+                line_gap=self.par['scienceframe']['process']['line_gap'],
+                percentile=self.par['scienceframe']['process']['percentile'],
+                replace=self.par['scienceframe']['process']['replace'],
+                mask_negative_star=self.par['scienceframe']['process']['mask_negative_star'],
+                sextractor_task=self.sextask,
+                n_process=self.n_process, overwrite=self.overwrite)
 
     def build_fringe(self, fringerawfiles):
         '''
