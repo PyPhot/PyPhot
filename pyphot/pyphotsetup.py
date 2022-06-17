@@ -247,6 +247,7 @@ class PyPhotSetup:
         cfg_lines += ['    skip_chipcal    = False']
         cfg_lines += ['    skip_img_qa     = False']
         cfg_lines += ['    skip_coadd      = False']
+        cfg_lines += ['    skip_zptcal     = False']
         cfg_lines += ['    skip_detection  = False']
         cfg_lines += ['    n_process       = 8']
 #        cfg_lines += ['    sortroot = {0}'.format(root)]

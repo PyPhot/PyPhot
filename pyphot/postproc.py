@@ -1297,34 +1297,48 @@ class PostProc():
                                                         delete=self.par['postproc']['coadd']['delete'],
                                                         log=self.par['postproc']['coadd']['log'])
 
+    def run_zptcal(self):
+        '''
+        Calibrate the zeropoint for the final coadded image
+        Returns
+        -------
+
+        '''
+
+        # Coadd by group
+        groups = np.unique(self.coadd_ids.data)
+        for igroup in groups:
+            this_group = self.resamp_coadd_ids == igroup
+            this_coadd_root = self.coadd_root_names[np.where(np.array(self.coadd_root_ids)==igroup)[0][0]]
+            this_photref_cat = np.array(self.master_phoref_cats)[this_group].tolist()[0]
+            coadd_file = os.path.join(self.coadd_path, this_coadd_root + '_sci.fits')
+            coadd_wht_file = os.path.join(self.coadd_path, this_coadd_root + '_sci.weight.fits')
+            coadd_flag_file = os.path.join(self.coadd_path, this_coadd_root + '_flag.fits')
+            coadd_ivar_file = os.path.join(self.coadd_path, this_coadd_root + '_ivar.fits')
+
             # Extract a catalog for zero point calibration.
-            msgs.info('Extracting a catalog using SExtractor for zero-point calibration.')
+            msgs.info('Extracting a catalog for zero-point calibration.')
             sex.sexone(coadd_file, catname=coadd_file.replace('.fits', '_zptcat.fits'),
                        flag_image=coadd_flag_file, weight_image=coadd_wht_file,
                        task=self.sextask, config=self.sexconfig, workdir=self.coadd_path, params=self.sexparams,
                        defaultconfig='pyphot', dual=False, conv='sex', nnw=None, delete=True, log=False)
 
             # Calibrate zeropoint for the coadded image
-            if self.par['postproc']['coadd']['cal_zpt']:
-                msgs.info('Calcuating the zeropoint for {:}'.format(coadd_file))
-                zpt, zpt_std, nstar, matched_table = calzpt(coadd_file.replace('.fits', '_zptcat.fits'),
-                        refcatalog=self.photref_catalog, primary=self.primary, secondary=self.secondary,
-                        coefficients=self.coefficients, FLXSCALE=1.0, FLASCALE=1.0,
-                        out_refcat=this_photref_cat, external_flag=self.external_flag, nstar_min=self.nstar_min,
-                        outqaroot=os.path.join(self.qa_path, this_coadd_root))
+            msgs.info('Calcuating the zeropoint for {:}'.format(coadd_file))
+            zpt, zpt_std, nstar, matched_table = calzpt(coadd_file.replace('.fits', '_zptcat.fits'),
+                    refcatalog=self.photref_catalog, primary=self.primary, secondary=self.secondary,
+                    coefficients=self.coefficients, FLXSCALE=1.0, FLASCALE=1.0,
+                    out_refcat=this_photref_cat, external_flag=self.external_flag, nstar_min=self.nstar_min,
+                    outqaroot=os.path.join(self.qa_path, this_coadd_root))
 
-                if matched_table is not None:
-                    star_table = Table()
-                    star_table['x'] = matched_table['XWIN_IMAGE']
-                    star_table['y'] = matched_table['YWIN_IMAGE']
-                    fwhm, _, _, _ = psf.buildPSF(star_table, coadd_file, pixscale=self.pixscale,
-                                                 outroot=os.path.join(self.qa_path, this_coadd_root))
-                else:
-                    fwhm = 0.
+            if matched_table is not None:
+                star_table = Table()
+                star_table['x'] = matched_table['XWIN_IMAGE']
+                star_table['y'] = matched_table['YWIN_IMAGE']
+                fwhm, _, _, _ = psf.buildPSF(star_table, coadd_file, pixscale=self.pixscale,
+                                             outroot=os.path.join(self.qa_path, this_coadd_root))
             else:
-                zpt = self.par['postproc']['photometry']['zpt']
-                zpt_std = 0.
-                nstar = 0
+                fwhm = 0.
 
             ## Write the ZPT into fits header
             par = fits.open(coadd_file, memmap=False)

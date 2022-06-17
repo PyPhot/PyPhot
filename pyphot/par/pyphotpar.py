@@ -844,7 +844,7 @@ class CoaddPar(ParSet):
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None, clip_writelog=None,
                  clip_logname=None, clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None,
                  back_type=None, back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
-                 resampling_type=None, pixscale=None, coadd_subtract_back=None, cal_zpt=None, delete=None, log=None):
+                 resampling_type=None, pixscale=None, coadd_subtract_back=None, delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -934,9 +934,6 @@ class CoaddPar(ParSet):
         dtypes['pixscale'] = [int, float]
         descr['pixscale'] = 'pixel scale for the final coadd image'
 
-        defaults['cal_zpt'] = True
-        dtypes['cal_zpt'] = bool
-        descr['cal_zpt'] = 'Calibrating the zeropoint for coadded image'
 
         defaults['delete'] = False
         dtypes['delete'] = bool
@@ -959,7 +956,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type','clip_writelog','clip_logname','clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh','resampling_type', 'pixscale', 'coadd_subtract_back', 'cal_zpt', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'pixscale', 'coadd_subtract_back', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1421,7 +1418,7 @@ class ReduxPar(ParSet):
                  qadir=None, coadddir=None, redux_path=None, ignore_bad_headers=None,
                  skip_step_one=None, skip_step_two=None,
                  skip_master=None, skip_detproc=None, skip_sciproc=None, skip_astrometry=None,
-                 skip_chipcal=None, skip_img_qa=None, skip_coadd=None, skip_detection=None,
+                 skip_chipcal=None, skip_img_qa=None, skip_coadd=None, skip_zptcal=None, skip_detection=None,
                  n_process=None):
 
         # Grab the parameter names and values from the function
@@ -1504,6 +1501,10 @@ class ReduxPar(ParSet):
         dtypes['skip_coadd'] = bool
         descr['skip_coadd'] = 'Skip coadding and mosaiking?'
 
+        defaults['skip_zptcal'] = False
+        dtypes['skip_zptcal'] = bool
+        descr['skip_zptcal'] = 'Skip calibrating the zeropoint for coadded image?'
+
         defaults['skip_detection'] = False
         dtypes['skip_detection'] = bool
         descr['skip_detection'] = 'Skip extracting photometric catalog from coadded images'
@@ -1552,7 +1553,7 @@ class ReduxPar(ParSet):
         parkeys = [ 'camera', 'sextractor', 'detnum', 'sortroot', 'calwin', 'scidir', 'qadir', 'coadddir',
                     'redux_path', 'ignore_bad_headers', 'skip_step_one', 'skip_step_two',
                     'skip_master','skip_detproc','skip_sciproc','skip_astrometry', 'skip_chipcal', 'skip_img_qa',
-                    'skip_coadd', 'skip_detection','n_process']
+                    'skip_coadd', 'skip_zptcal', 'skip_detection','n_process']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):

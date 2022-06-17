@@ -372,6 +372,10 @@ class PyPhot(object):
             if not self.par['rdx']['skip_coadd']:
                 Post.run_coadd()
 
+            # Calibrate zero point for coadded images
+            if not self.par['rdx']['skip_zptcal']:
+                Post.run_zptcal()
+
             # Extract photometric catalog
             if not self.par['rdx']['skip_detection']:
                 Post.extract_catalog()
