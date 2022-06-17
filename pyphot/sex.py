@@ -319,3 +319,4 @@ def run_sex(imglist, flag_image_list=None, weight_image_list=None, n_process=1, 
         for p in processes:
             p.join()
 
+        work_queue = None

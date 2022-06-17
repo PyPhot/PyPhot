@@ -1150,7 +1150,7 @@ class PostProc():
                         n_process=self.n_process, delete=self.delete, log=False, verbose=False)
 
         # resample inverse variance image
-        msgs.info('Running Swarp to resample flag images.')
+        msgs.info('Running Swarp to resample ivar images.')
         # copy the .head for flag images
         for ii, icat in enumerate(self.cat_proc_list):
             os.system('cp {:} {:}'.format(icat.replace('.fits', '.head'),

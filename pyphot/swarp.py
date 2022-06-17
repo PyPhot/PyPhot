@@ -204,4 +204,5 @@ def run_swarp(imglist, config=None, workdir='./', defaultconfig='pyphot', coaddd
             for p in processes:
                 p.join()
 
+            work_queue = None
 
