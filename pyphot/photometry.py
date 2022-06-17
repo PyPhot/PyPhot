@@ -80,6 +80,8 @@ def BKG2D(data, back_size, mask=None, filter_size=(3, 3), sigclip=5, back_type='
         # configuration for the first SExtractor run
         if np.size(back_size)==1:
             back_size = [back_size, back_size]
+        if np.size(filter_size)==1:
+            filter_size = [filter_size, filter_size]
         sexconfig = {"CHECKIMAGE_TYPE": "BACKGROUND, BACKGROUND_RMS", "WEIGHT_TYPE": "NONE", "CATALOG_TYPE": "FITS_LDAC",
                       "CHECKIMAGE_NAME":"{:}_bkg.fits, {:}_rms.fits".format(tmp_root,tmp_root),
                       "DETECT_THRESH": 5, "ANALYSIS_THRESH": 5, "DETECT_MINAREA": 5,

@@ -16,14 +16,17 @@ from pyphot import msgs, io, utils, caloffset
 from pyphot import sex, scamp, swarp
 from pyphot import crossmatch
 from pyphot.query import query, ldac
-from pyphot.photometry import mask_bright_star, photutils_detect
+from pyphot.photometry import mask_bright_star, photutils_detect, BKG2D
+from pyphot.procimg import grow_masked
 from pyphot.psf import  psf
 
 
 def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=100, back_filtersize=3,
-          back_filtthresh=0.0, resampling_type='LANCZOS3', delete=True, log=True):
+          back_filtthresh=0.0, resampling_type='LANCZOS3', coadd_subtract_back=True,
+          coadd_back_type='sextractor', maskbrightstar_method='sextractor', brightstar_nsigma=3., grow=1.5,
+          back_maxiters=5, back_sigclip=3., sextask='sex', sexconv='sex', delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
     msgs.info('Coadding image for {:}'.format(os.path.join(coadddir,coaddroot)))
@@ -53,24 +56,34 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
                    "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
 
     ## ToDo: clip pixels with Swarp. It seems clipping too many good pixels.
+    # An alternative method is to use the clip_tbl to make a mask for the final image.
     '''
+    from IPython import embed
+    embed()
     ## Get clipped pixels with Swarp
     swarpconfig_clip = swarpconfig.copy()
     swarpconfig_clip["COMBINE_TYPE"] = "CLIPPED"
     swarpconfig_clip["CLIP_WRITELOG"] = "Y"
     swarpconfig_clip["CLIP_LOGNAME"] = os.path.join(coadddir,coaddroot+'_clipped.log')
     msgs.info('Clipping pixels using Swarp.')
-    from IPython import embed
-    embed()
     swarp.run_swarp(scifiles, config=swarpconfig_clip, workdir=science_path, defaultconfig='pyphot',
                     coadddir=coadddir, coaddroot=coaddroot+'_clip_sci', delete=True, log=False)
     clip_tbl = Table.read(os.path.join(coadddir,coaddroot+'_clipped.log'), format='ascii.no_header')
     clip_tbl = clip_tbl[np.argsort(clip_tbl['col1'])]
     dum_clip = clip_tbl[clip_tbl['col1'] == 0]
     f = open('test.reg', 'w')
+    print('# Region file format: DS9 version 4.1',file=f)
+    print('global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1',file=f)
+    print('image',file=f)
     for ii in range(len(dum_clip)):
         print('circle({:},{:},1)'.format(dum_clip[ii]['col2'], dum_clip[ii]['col3']), file=f)
     f.close()
+    
+    par = fits.open(coadd_file, memmap=False)
+    dum = np.zeros_like(par[0].data)
+    dum[clip_tbl['col3'],clip_tbl['col2']]=1 
+    par[0].data = dum
+    par.writeto('testflag.fits',overwrite=True)
     '''
     ## Run swarp for science image
     msgs.info('Coadding science images.')
@@ -114,7 +127,24 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
     coadd_flag_file = os.path.join(coadddir, coaddroot + '_flag.fits')
     coadd_ivar_file = os.path.join(coadddir, coaddroot + '_ivar.fits')
 
-    # ToDO: Subtract background for the final coadded image?
+    ## Subtract background for the final coadded image?
+    if coadd_subtract_back:
+        msgs.info('Subtract background from the final coadded image.')
+        par = fits.open(coadd_file, memmap=False)
+        bpm_zero = par[0].data==0.
+        bpm = np.logical_or(fits.getdata(coadd_wht_file, memmap=False)<=0., bpm_zero)
+        starmask = mask_bright_star(par[0].data, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=back_sigclip,
+                                    back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextask,
+                                    conv=sexconv, verbose=True)
+        starmask = grow_masked(starmask, grow, verbose=True)
+
+        bkg, _ = BKG2D(par[0].data, back_size, mask=np.logical_or(bpm, starmask), filter_size=back_filtersize,
+                         sigclip=back_sigclip, back_type=coadd_back_type, back_rms_type='std',
+                         back_maxiters=back_maxiters, sextractor_task=sextask)
+        sci = par[0].data - bkg
+        sci[bpm_zero] = 0.
+        par[0].data = sci
+        par.writeto(coadd_file.replace('.fits','_201.fits'), overwrite=True)
 
     return coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file
 
@@ -690,6 +720,14 @@ class PostProc():
         self.sextask = self.par['rdx']['sextractor']
         self.conv = self.par['postproc']['detection']['conv'] # convolve template used by SExtractor
 
+        # Bright star mask and background subtraction parameters that will be used for coadd image background subtraction
+        self.brightstar_nsigma = self.par['scienceframe']['process']['brightstar_nsigma']
+        self.maskbrightstar_method = self.par['scienceframe']['process']['brightstar_method']
+        self.grow = self.par['scienceframe']['process']['grow']
+        self.coadd_back_type = self.par['scienceframe']['process']['back_type']
+        self.back_maxiters = self.par['scienceframe']['process']['back_maxiters']
+        self.back_sigclip = self.par['scienceframe']['process']['sigclip']
+
         # Other parameters
         self.skip_swarp_align = self.par['postproc']['astrometry']['skip_swarp_align']
         self.match_flipped = self.par['postproc']['astrometry']['match_flipped']
@@ -1250,6 +1288,12 @@ class PostProc():
                                                         back_filtersize=self.par['postproc']['coadd']['back_filtersize'],
                                                         back_filtthresh=self.par['postproc']['coadd']['back_filtthresh'],
                                                         resampling_type=self.par['postproc']['coadd']['resampling_type'],
+                                                        coadd_subtract_back=self.par['postproc']['coadd']['coadd_subtract_back'],
+                                                        coadd_back_type=self.coadd_back_type,
+                                                        maskbrightstar_method=self.maskbrightstar_method,
+                                                        brightstar_nsigma=self.brightstar_nsigma, grow=self.grow,
+                                                        back_maxiters=self.back_maxiters, back_sigclip=self.back_sigclip,
+                                                        sextask=self.sextask, sexconv=self.conv,
                                                         delete=self.par['postproc']['coadd']['delete'],
                                                         log=self.par['postproc']['coadd']['log'])
 

@@ -440,7 +440,7 @@ class ProcessImagesPar(ParSet):
         dtypes['back_rms_type'] = str
         descr['back_rms_type'] = 'Background Options are: {0}'.format(', '.join(options['back_rms_type']))
 
-        defaults['back_size'] = (256,256)
+        defaults['back_size'] = (201,201)
         dtypes['back_size'] = [tuple, list, int, float]
         descr['back_size'] = 'Box size for background estimation'
 
@@ -844,7 +844,7 @@ class CoaddPar(ParSet):
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None, clip_writelog=None,
                  clip_logname=None, clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None,
                  back_type=None, back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
-                 resampling_type=None, pixscale=None, cal_zpt=None, delete=None, log=None):
+                 resampling_type=None, pixscale=None, coadd_subtract_back=None, cal_zpt=None, delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -876,11 +876,11 @@ class CoaddPar(ParSet):
         dtypes['combine_type'] = str
         descr['combine_type'] = 'Background Options are: {0}'.format(', '.join(options['combine_type']))
 
-        defaults['clip_ampfrac'] = 0.3
+        defaults['clip_ampfrac'] = 0.5
         dtypes['clip_ampfrac'] = [int, float]
         descr['clip_ampfrac'] = 'Fraction of flux variation allowed with clipping'
 
-        defaults['clip_sigma'] = 4.0
+        defaults['clip_sigma'] = 5
         dtypes['clip_sigma'] = [int, float]
         descr['clip_sigma'] = 'RMS error multiple variation allowed with clipping'
 
@@ -896,6 +896,10 @@ class CoaddPar(ParSet):
         dtypes['blank_badpixels'] = bool
         descr['blank_badpixels'] = 'Set to 0 pixels having a weight of 0?'
 
+        defaults['coadd_subtract_back'] = True
+        dtypes['coadd_subtract_back'] = bool
+        descr['coadd_subtract_back'] = 'Subtract skybackground for the final coadded image?'
+
         defaults['subtract_back'] = False
         dtypes['subtract_back'] = bool
         descr['subtract_back'] = 'Subtract skybackground with Swarp before coadding?'
@@ -909,7 +913,7 @@ class CoaddPar(ParSet):
         dtypes['back_default'] = [int, float]
         descr['back_default'] = 'Default background value in MANUAL'
 
-        defaults['back_size'] = 100
+        defaults['back_size'] = 101
         dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL'
 
@@ -955,7 +959,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type','clip_writelog','clip_logname','clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh','resampling_type', 'pixscale', 'cal_zpt', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'pixscale', 'coadd_subtract_back', 'cal_zpt', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):
@@ -1064,7 +1068,7 @@ class DetectionPar(ParSet):
         dtypes['back_default'] = [int, float]
         descr['back_default'] = 'Default background value in MANUAL'
 
-        defaults['back_size'] = 100
+        defaults['back_size'] = 101
         dtypes['back_size'] = [int, float, tuple, list]
         descr['back_size'] = 'Default background value in MANUAL, int for SExtractor and tuple for Others'
 

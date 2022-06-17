@@ -13,7 +13,7 @@ from astropy import stats
 from pyphot import msgs
 from pyphot import utils
 from pyphot import io
-from pyphot import masterframe, postproc
+from pyphot import masterframe
 from pyphot.lacosmic import lacosmic
 from pyphot.satdet import satdet
 from pyphot.photometry import BKG2D, mask_bright_star
@@ -761,6 +761,7 @@ class ImageProc():
                 back_rms_type=self.par['scienceframe']['process']['back_rms_type'],
                 back_size=self.par['scienceframe']['process']['back_size'],
                 back_filtersize=self.par['scienceframe']['process']['back_filtersize'],
+                back_maxiters=self.par['scienceframe']['process']['back_maxiters'],
                 maskbrightstar=self.maskbrightstar,
                 brightstar_nsigma=self.brightstar_nsigma,
                 maskbrightstar_method=self.maskbrightstar_method,
