@@ -144,7 +144,7 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
         sci = par[0].data - bkg
         sci[bpm_zero] = 0.
         par[0].data = sci
-        par.writeto(coadd_file.replace('.fits','_201.fits'), overwrite=True)
+        par.writeto(coadd_file, overwrite=True)
 
     return coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file
 
