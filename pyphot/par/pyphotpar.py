@@ -844,7 +844,8 @@ class CoaddPar(ParSet):
     def __init__(self, skip=None, weight_type=None, rescale_weights=None, combine_type=None, clip_writelog=None,
                  clip_logname=None, clip_ampfrac=None, clip_sigma=None, blank_badpixels=None, subtract_back=None,
                  back_type=None, back_default=None, back_size=None, back_filtersize=None, back_filtthresh=None,
-                 resampling_type=None, pixscale=None, coadd_subtract_back=None, delete=None, log=None):
+                 resampling_type=None, pixscale=None, coadd_subtract_back=None, reject_outlier=None,
+                 delete=None, log=None):
 
         # Grab the parameter names and values from the function
         # arguments
@@ -934,6 +935,9 @@ class CoaddPar(ParSet):
         dtypes['pixscale'] = [int, float]
         descr['pixscale'] = 'pixel scale for the final coadd image'
 
+        defaults['reject_outlier'] = True
+        dtypes['reject_outlier'] = bool
+        descr['reject_outlier'] = 'Reject outlier pixels before coadding?'
 
         defaults['delete'] = False
         dtypes['delete'] = bool
@@ -956,7 +960,7 @@ class CoaddPar(ParSet):
         k = numpy.array([*cfg.keys()])
         parkeys = ['skip', 'weight_type','rescale_weights', 'combine_type','clip_writelog','clip_logname','clip_ampfrac', 'clip_sigma',
                    'blank_badpixels','subtract_back', 'back_type', 'back_default', 'back_size','back_filtersize',
-                   'back_filtthresh','resampling_type', 'pixscale', 'coadd_subtract_back', 'delete', 'log']
+                   'back_filtthresh','resampling_type', 'pixscale', 'coadd_subtract_back', 'reject_outlier', 'delete', 'log']
 
         badkeys = numpy.array([pk not in parkeys for pk in k])
         if numpy.any(badkeys):

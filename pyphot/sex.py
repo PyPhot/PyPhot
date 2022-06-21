@@ -195,21 +195,26 @@ def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=
     ## append your configuration
     if config is None:
         config = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "NONE", "CATALOG_NAME": "dummy.cat",
-                  "CATALOG_TYPE": "FITS_LDAC", "BACK_TYPE ": "MANUAL", "BACK_VALUE": 0.0}
+                  "CHECKIMAGE_NAME":"objects.fits", "CATALOG_TYPE": "FITS_LDAC", "BACK_TYPE ": "MANUAL", "BACK_VALUE": 0.0}
+    # This is mainly used for generating objects checking images when run in parallel
+    this_config = config.copy()
+    if config["CHECKIMAGE_TYPE"] == "OBJECTS" and config["CHECKIMAGE_NAME"] is None:
+        this_config["CHECKIMAGE_NAME"] = imgname.replace('.fits','_objects.fits')
+
     if catname is None:
         if dual:
-            config['CATALOG_NAME'] =imgname[0].replace('.fits','_cat.fits')
+            this_config['CATALOG_NAME'] =imgname[0].replace('.fits','_cat.fits')
         else:
-            config['CATALOG_NAME'] =imgname.replace('.fits','_cat.fits')
+            this_config['CATALOG_NAME'] =imgname.replace('.fits','_cat.fits')
     else:
-        config['CATALOG_NAME'] = catname
+        this_config['CATALOG_NAME'] = catname
 
     if flag_image is not None:
-        config['FLAG_IMAGE'] = flag_image
+        this_config['FLAG_IMAGE'] = flag_image
     if weight_image is not None:
-        config['WEIGHT_IMAGE'] = weight_image
+        this_config['WEIGHT_IMAGE'] = weight_image
 
-    configapp = get_config(config=config, workdir=workdir, dual=dual)
+    configapp = get_config(config=this_config, workdir=workdir, dual=dual)
 
     if dual:
         comd = [task] + [os.path.join(workdir,imgname[0]) + "," + os.path.join(workdir,imgname[1])] +\
@@ -219,7 +224,7 @@ def sexone(imgname, catname=None, task='sex', config=None, workdir='./', params=
     p = subprocess.Popen(comd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     if verbose:
-        msgs.info("Catalog generated: " + config['CATALOG_NAME'])
+        msgs.info("Catalog generated: " + this_config['CATALOG_NAME'])
 
     if log:
         if dual:

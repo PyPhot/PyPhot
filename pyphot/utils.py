@@ -479,6 +479,8 @@ def showimages(fitsimages, n_process=4, outroots=None, interval_method='zscale',
         for p in processes:
             p.join()
 
+        work_queue = None
+
 def _showimage_worker(work_queue, interval_method='zscale', vmin=None, vmax=None,
               stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=False):
 

@@ -20,13 +20,108 @@ from pyphot.photometry import mask_bright_star, photutils_detect, BKG2D
 from pyphot.procimg import grow_masked
 from pyphot.psf import  psf
 
+def reject_outlier_objects(sci_files, ref_pos, n_process=1):
+    '''
+    Reject outlier pixels based on SExtractor OBJECTS check images.
+    Parameters
+    ----------
+    this_sci_file: individual exposure
+    ref_pos: coordinates of sources detected in median coadded image.
+
+    '''
+    n_file = len(sci_files)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_process > n_cpu:
+        n_process = n_cpu
+
+    if n_process>n_file:
+        n_process = n_file
+
+    work_queue = Queue()
+    processes = []
+
+    for ii in range(n_file):
+        work_queue.put((sci_files[ii]))
+
+    # creating processes
+    for w in range(n_process):
+        p = Process(target=_reject_outlier_objects_worker, args=(work_queue,), kwargs={
+            'ref_pos': ref_pos})
+        processes.append(p)
+        p.start()
+
+    # completing process
+    for p in processes:
+        p.join()
+
+    work_queue = None
+
+def reject_outlier_objects_one(this_sci_file, ref_pos):
+    '''
+    Reject outlier pixels based on SExtractor OBJECTS check images.
+    Parameters
+    ----------
+    this_sci_file: individual exposure
+    ref_pos: coordinates of sources detected in median coadded image.
+
+    '''
+    msgs.info('Identifying outlier pixels from {:}'.format(os.path.basename(this_sci_file)))
+    this_par = fits.open(this_sci_file.replace('.fits', '_objects.fits'), memmap=False)
+    this_head = this_par[0].header
+    this_wcs = wcs.WCS(this_head)
+    this_objects = this_par[0].data
+    this_yy, this_xx = np.where(this_objects > 0)
+    this_coord = this_wcs.pixel_to_world(this_xx, this_yy)
+    this_ra, this_dec = this_coord.ra.value, this_coord.dec.value
+
+    this_pos = np.zeros((len(this_ra), 2))
+    this_pos[:, 0], this_pos[:, 1] = this_ra, this_dec
+
+    ## cross-match and identify outlier pixels
+    dist, ind = crossmatch.crossmatch_angular(this_pos, ref_pos, max_distance=1.0 / 3600.)
+    this_bad = np.isinf(dist)
+    this_bad_ra, this_bad_dec = this_ra[this_bad], this_dec[this_bad]
+    this_bad_coord = this_coord[this_bad]
+    this_bad_xx, this_bad_yy = this_wcs.world_to_pixel(this_bad_coord)
+    this_bad_frac = 100.0 * np.sum(this_bad) / np.size(this_objects)
+    if this_bad_frac>2:
+        msgs.warn('Identified {:} ({:0.2f}%) outlier pixels. Seems too many!'.format(np.sum(this_bad), this_bad_frac))
+    else:
+        msgs.info('Identified {:} ({:0.2f}%) outlier pixels'.format(np.sum(this_bad), this_bad_frac))
+
+    ## Add outliers to flag and weight images
+    this_flag = fits.open(this_sci_file.replace('_sci', '_flag'), memmap=False)
+    flag_tmp = np.zeros_like(this_objects, dtype='int32')
+    flag_tmp[np.round(this_bad_yy).astype(int), np.round(this_bad_xx).astype(int)] = np.int(2 ** 10)
+    flag_tmp += this_flag[0].data
+    this_flag[0].data = flag_tmp
+    this_flag.writeto(this_sci_file.replace('_sci', '_flag'), overwrite=True)
+
+    this_wht = fits.open(this_sci_file.replace('.fits', '.weight.fits'), memmap=False)
+    wht_tmp = this_wht[0].data
+    wht_tmp[np.round(this_bad_yy).astype(int), np.round(this_bad_xx).astype(int)] = 0.
+    this_wht[0].data = wht_tmp
+    this_wht.writeto(this_sci_file.replace('.fits', '.weight.fits'), overwrite=True)
+
+    del this_flag[0].data
+    del this_wht[0].data
+    this_flag.close()
+    this_wht.close()
+    gc.collect()
+
+def _reject_outlier_objects_worker(work_queue, ref_pos):
+    while not work_queue.empty():
+        this_sci_file = work_queue.get()
+        reject_outlier_objects_one(this_sci_file, ref_pos)
 
 def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
           rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=100, back_filtersize=3,
           back_filtthresh=0.0, resampling_type='LANCZOS3', coadd_subtract_back=True,
           coadd_back_type='sextractor', maskbrightstar_method='sextractor', brightstar_nsigma=3., grow=1.5,
-          back_maxiters=5, back_sigclip=3., sextask='sex', sexconv='sex', delete=True, log=True):
+          back_maxiters=5, back_sigclip=3., sextask='sex', sexconv='sex', sexnnw='sex',
+          sexconfig=None, sexparams=None, reject_outlier=True, n_process=1, delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
     msgs.info('Coadding image for {:}'.format(os.path.join(coadddir,coaddroot)))
@@ -55,8 +150,41 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
                    "BACK_SIZE": '{:},{:}'.format(back_size[0],back_size[1]),
                    "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
 
-    ## ToDo: clip pixels with Swarp. It seems clipping too many good pixels.
-    # An alternative method is to use the clip_tbl to make a mask for the final image.
+    if reject_outlier and combine_type !='median':
+        msgs.info('Create a median image used for outlier pixel rejection.')
+        warpconfig_median = swarpconfig.copy()
+        warpconfig_median["COMBINE_TYPE"] = "MEDIAN"
+        swarp.run_swarp(scifiles, config=warpconfig_median, workdir=science_path, defaultconfig='pyphot',
+                        coadddir=coadddir, coaddroot=coaddroot + '_median', delete=True, log=False)
+        median_fits = os.path.join(coadddir, coaddroot + '_median.fits')
+
+        msgs.info('Extracting source catalog from the median image')
+        if 'IMAFLAGS_ISO' in sexparams:
+            sexparams.remove('IMAFLAGS_ISO')
+        if 'NIMAFLAGS_ISO' in sexparams:
+            sexparams.remove('NIMAFLAGS_ISO')
+        ## ToDo: Cannot detect super bright stars for some reason. Fix it.
+        sex.sexone(median_fits, catname=median_fits.replace('.fits', '_cat.fits'),
+                   flag_image=None, weight_image=median_fits.replace('.fits', '.weight.fits'),
+                   task=sextask, config=sexconfig, workdir=coadddir, params=sexparams,
+                   defaultconfig='pyphot', dual=False, conv=sexconv, nnw=sexnnw, delete=True, log=True)
+
+        ## prepare positions of median image
+        head_median = fits.getheader(median_fits.replace('.fits', '_objects.fits'), memmap=False)
+        wcs_median = wcs.WCS(head_median)
+        objects_median = fits.getdata(median_fits.replace('.fits', '_objects.fits'), memmap=False)
+        yy_median, xx_median = np.where(objects_median > 0)
+        coord_median = wcs_median.pixel_to_world(xx_median, yy_median)
+        ra_median, dec_median = coord_median.ra.value, coord_median.dec.value
+        ref_pos = np.zeros((len(ra_median), 2))
+        ref_pos[:, 0], ref_pos[:, 1] = ra_median, dec_median
+
+        ## Do it.
+        msgs.info('Clipping pixels using SExtractor OBJECTS check image.')
+        reject_outlier_objects(scifiles, ref_pos, n_process=n_process)
+
+    ## ToDo: clip pixels with Swarp. It seems clipping too many good pixels. The current algorithm is okay.
+    ## But need to fix the issue of non-detection of super bright stars from median image. Not sure why.
     '''
     from IPython import embed
     embed()
@@ -67,7 +195,7 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
     swarpconfig_clip["CLIP_LOGNAME"] = os.path.join(coadddir,coaddroot+'_clipped.log')
     msgs.info('Clipping pixels using Swarp.')
     swarp.run_swarp(scifiles, config=swarpconfig_clip, workdir=science_path, defaultconfig='pyphot',
-                    coadddir=coadddir, coaddroot=coaddroot+'_clip_sci', delete=True, log=False)
+                    coadddir=coadddir, coaddroot=coaddroot+'_clip_sci', delete=True, log=False)    
     clip_tbl = Table.read(os.path.join(coadddir,coaddroot+'_clipped.log'), format='ascii.no_header')
     clip_tbl = clip_tbl[np.argsort(clip_tbl['col1'])]
     dum_clip = clip_tbl[clip_tbl['col1'] == 0]
@@ -719,6 +847,7 @@ class PostProc():
         # SExtractor task in your terminal
         self.sextask = self.par['rdx']['sextractor']
         self.conv = self.par['postproc']['detection']['conv'] # convolve template used by SExtractor
+        self.nnw = self.par['postproc']['detection']['nnw']
 
         # Bright star mask and background subtraction parameters that will be used for coadd image background subtraction
         self.brightstar_nsigma = self.par['scienceframe']['process']['brightstar_nsigma']
@@ -727,6 +856,15 @@ class PostProc():
         self.coadd_back_type = self.par['scienceframe']['process']['back_type']
         self.back_maxiters = self.par['scienceframe']['process']['back_maxiters']
         self.back_sigclip = self.par['scienceframe']['process']['sigclip']
+
+        ## Configuration for photometric calibration
+        self.photref_catalog = self.par['postproc']['photometry']['photref_catalog']
+        self.primary = self.par['postproc']['photometry']['primary']
+        self.secondary = self.par['postproc']['photometry']['secondary']
+        self.coefficients = self.par['postproc']['photometry']['coefficients']
+        self.zeropoint = self.par['postproc']['photometry']['zpt']
+        self.nstar_min = self.par['postproc']['photometry']['nstar_min']
+        self.external_flag = self.par['postproc']['photometry']['external_flag']
 
         # Other parameters
         self.skip_swarp_align = self.par['postproc']['astrometry']['skip_swarp_align']
@@ -737,10 +875,6 @@ class PostProc():
         self.log = self.par['postproc']['astrometry']['log']
         self.verbose = True
 
-        # Load parameters for SExtractor
-        detect_thresh = self.par['postproc']['astrometry']['detect_thresh']
-        analysis_thresh = self.par['postproc']['astrometry']['analysis_thresh']
-        detect_minarea = self.par['postproc']['astrometry']['detect_minarea']
         # Load parameters for Scamp
         self.astref_catalog = self.par['postproc']['astrometry']['astref_catalog']
         self.astrefmag_limits = self.par['postproc']['astrometry']['astrefmag_limits']
@@ -757,14 +891,47 @@ class PostProc():
         weight_type = self.par['postproc']['astrometry']['weight_type']
 
         # Configuration for SExtractor
-        self.sexconfig = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_TYPE": "FITS_LDAC",
-                          "DETECT_THRESH":detect_thresh,"ANALYSIS_THRESH": analysis_thresh,"DETECT_MINAREA": detect_minarea}
+        # sexconfig_high_snr will be used for astrometry and zeropoint calibrations
+        self.sexconfig_high_snr = {"CHECKIMAGE_TYPE": "NONE", "WEIGHT_TYPE": "MAP_WEIGHT", "CATALOG_TYPE": "FITS_LDAC",
+                                   "DETECT_THRESH":self.par['postproc']['astrometry']['detect_thresh'],
+                                   "ANALYSIS_THRESH": self.par['postproc']['astrometry']['analysis_thresh'],
+                                   "DETECT_MINAREA": self.par['postproc']['astrometry']['detect_minarea']}
         # Parameters for SExtractor
-        self.sexparams = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
+        self.sexparams_high_snr = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE',
                           'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE', 'ISOAREA_IMAGE',
                           'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO', 'FLUXERR_AUTO',
                           'MAG_APER', 'MAGERR_APER', 'FLUX_RADIUS', 'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR',
                           'FLAGS', 'FLAGS_WEIGHT']
+        # sexconfig_det will be used for detection on resampled images and outlier rejection
+        phot_apertures = self.par['postproc']['detection']['phot_apertures']
+        back_size = self.par['postproc']['detection']['back_size']
+        if np.size(back_size) == 1:
+            back_size = [back_size, back_size]
+        self.sexconfig_det = {"CATALOG_TYPE": "FITS_LDAC",
+                      "MAG_ZEROPOINT": 0.,
+                      "BACK_TYPE": self.par['postproc']['detection']['back_type'],
+                      "BACK_VALUE": self.par['postproc']['detection']['back_default'],
+                      "BACK_SIZE": '{:},{:}'.format(back_size[0], back_size[1]),
+                      "BACK_FILTERSIZE": self.par['postproc']['detection']['back_filtersize'],
+                      "BACKPHOTO_TYPE": self.par['postproc']['detection']['backphoto_type'],
+                      "BACKPHOTO_THICK": self.par['postproc']['detection']['backphoto_thick'],
+                      "WEIGHT_TYPE": self.par['postproc']['detection']['weight_type'],
+                      "DETECT_THRESH": self.par['postproc']['detection']['detect_thresh'],
+                      "ANALYSIS_THRESH": self.par['postproc']['detection']['analysis_thresh'],
+                      "DETECT_MINAREA": self.par['postproc']['detection']['detect_minarea'],
+                      "DEBLEND_NTHRESH": self.par['postproc']['detection']['nlevels'],
+                      "DEBLEND_MINCONT": self.par['postproc']['detection']['contrast'],
+                      "CHECKIMAGE_TYPE": 'OBJECTS', # The objects image will be used for outlier rejections.
+                      "CHECKIMAGE_NAME": None, # need to set this to None
+                      "PHOT_APERTURES": np.array(phot_apertures) * utils.inverse(self.pixscale)}
+        self.sexparams_det = ['NUMBER', 'X_IMAGE', 'Y_IMAGE', 'XWIN_IMAGE', 'YWIN_IMAGE', 'ERRAWIN_IMAGE',
+                          'ERRBWIN_IMAGE', 'ERRTHETAWIN_IMAGE', 'ALPHA_J2000', 'DELTA_J2000', 'ISOAREAF_IMAGE',
+                          'ISOAREA_IMAGE', 'ELLIPTICITY', 'ELONGATION', 'MAG_AUTO', 'MAGERR_AUTO', 'FLUX_AUTO',
+                          'FLUXERR_AUTO', 'MAG_APER({:})'.format(len(phot_apertures)),
+                          'MAGERR_APER({:})'.format(len(phot_apertures)),
+                          'FLUX_APER({:})'.format(len(phot_apertures)),
+                          'FLUXERR_APER({:})'.format(len(phot_apertures)),
+                          'FLUX_RADIUS', 'IMAFLAGS_ISO', 'NIMAFLAGS_ISO', 'CLASS_STAR', 'FLAGS', 'FLAGS_WEIGHT']
 
         # Configuration for Scamp
         if self.solve_photom_scamp:
@@ -873,15 +1040,6 @@ class PostProc():
         # configuration for swarp the inverse variance image
         self.swarpconfig_ivar = self.swarpconfig.copy()
         self.swarpconfig_ivar['WEIGHT_TYPE'] = 'NONE'
-
-        ## Configuration for photometric calibration
-        self.photref_catalog = self.par['postproc']['photometry']['photref_catalog']
-        self.primary = self.par['postproc']['photometry']['primary']
-        self.secondary = self.par['postproc']['photometry']['secondary']
-        self.coefficients = self.par['postproc']['photometry']['coefficients']
-        self.zeropoint = self.par['postproc']['photometry']['zpt']
-        self.nstar_min = self.par['postproc']['photometry']['nstar_min']
-        self.external_flag = self.par['postproc']['photometry']['external_flag']
 
         ## Prepare lists
         self.sci_proc_list, self.ivar_proc_list, self.wht_proc_list, self.flag_proc_list = [], [], [], []
@@ -1090,11 +1248,12 @@ class PostProc():
                                   returnname_only=False, overwrite=self.overwrite, n_process=self.n_process)
 
 
-        ## Step one: extract catalog from sciproc files
+        ## Step one: extract catalog from sciproc files, it will be used for scamp.
         msgs.info('Running SExtractor for the first pass to extract catalog used for SCAMP.')
         sex.run_sex(self.sci_proc_list, flag_image_list=self.flag_proc_list, weight_image_list=self.wht_proc_list,
-                    n_process=self.n_process, task=self.sextask, config=self.sexconfig, workdir=self.science_path, params=self.sexparams,
-                    defaultconfig='pyphot', conv=self.conv, nnw=None, dual=False, delete=self.delete, log=self.log, verbose=self.verbose)
+                    n_process=self.n_process, task=self.sextask, config=self.sexconfig_high_snr,
+                    workdir=self.science_path, params=self.sexparams_high_snr, defaultconfig='pyphot',
+                    conv=self.conv, nnw=self.nnw, dual=False, delete=self.delete, log=self.log, verbose=self.verbose)
 
         ## Step two: run scamp on extracted catalog
         #ToDo: The scamp part need to be grouped if use SCAMP non-supported reference catalogs.
@@ -1182,10 +1341,10 @@ class PostProc():
             os.system('rm {:}'.format(self.ivar_proc_list[ii].replace('.fits', '_cat.head')))
 
         ## Step four: run SExtractor on resampled sciproc images
-        msgs.info('Running SExtractor for the second pass to extract catalog from resampled images.')
         sex.run_sex(self.sci_resample_list, flag_image_list=self.flag_resample_list, weight_image_list=self.wht_resample_list,
-                    n_process=self.n_process, task=self.sextask, config=self.sexconfig, workdir=self.science_path, params=self.sexparams,
-                    defaultconfig='pyphot', conv=self.conv, nnw=None, dual=False, delete=self.delete, log=self.log, verbose=self.verbose)
+                    n_process=self.n_process, task=self.sextask, config=self.sexconfig_det, workdir=self.science_path,
+                    params=self.sexparams_det, defaultconfig='pyphot', conv=self.conv, nnw=self.nnw, dual=False,
+                    delete=self.delete, log=self.log, verbose=self.verbose)
 
     def run_chip_cal(self):
         '''
@@ -1273,7 +1432,8 @@ class PostProc():
             this_photref_cat = np.array(self.master_phoref_cats)[this_group].tolist()[0]
 
             # run it
-            coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file = coadd(this_sci_list, this_flag_list, this_ivar_list, this_coadd_root,
+            coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file = coadd(this_sci_list, this_flag_list,
+                                                        this_ivar_list, this_coadd_root,
                                                         self.pixscale, self.science_path, self.coadd_path,
                                                         weight_type=self.par['postproc']['coadd']['weight_type'],
                                                         rescale_weights=self.par['postproc']['coadd']['rescale_weights'],
@@ -1293,7 +1453,10 @@ class PostProc():
                                                         maskbrightstar_method=self.maskbrightstar_method,
                                                         brightstar_nsigma=self.brightstar_nsigma, grow=self.grow,
                                                         back_maxiters=self.back_maxiters, back_sigclip=self.back_sigclip,
-                                                        sextask=self.sextask, sexconv=self.conv,
+                                                        sextask=self.sextask, sexconv=self.conv, sexnnw=self.nnw,
+                                                        sexconfig=self.sexconfig_det,sexparams=self.sexparams_det,
+                                                        reject_outlier=self.par['postproc']['coadd']['reject_outlier'],
+                                                        n_process=self.n_process,
                                                         delete=self.par['postproc']['coadd']['delete'],
                                                         log=self.par['postproc']['coadd']['log'])
 
@@ -1320,8 +1483,8 @@ class PostProc():
             msgs.info('Extracting a catalog for zero-point calibration.')
             sex.sexone(coadd_file, catname=coadd_file.replace('.fits', '_zptcat.fits'),
                        flag_image=coadd_flag_file, weight_image=coadd_wht_file,
-                       task=self.sextask, config=self.sexconfig, workdir=self.coadd_path, params=self.sexparams,
-                       defaultconfig='pyphot', dual=False, conv='sex', nnw=None, delete=True, log=False)
+                       task=self.sextask, config=self.sexconfig_high_snr, workdir=self.coadd_path, params=self.sexparams_high_snr,
+                       defaultconfig='pyphot', dual=False, conv=self.conv, nnw=self.nnw, delete=True, log=False)
 
             # Calibrate zeropoint for the coadded image
             msgs.info('Calcuating the zeropoint for {:}'.format(coadd_file))
@@ -1394,9 +1557,7 @@ class PostProc():
                                             back_nsigma=self.par['postproc']['detection']['back_nsigma'],
                                             back_maxiters=self.par['postproc']['detection']['back_maxiters'],
                                             morp_filter=self.par['postproc']['detection']['morp_filter'],
-                                            defaultconfig='pyphot', dual=False,
-                                            conv=self.par['postproc']['detection']['conv'],
-                                            nnw=self.par['postproc']['detection']['nnw'],
+                                            defaultconfig='pyphot', dual=False,conv=self.conv, nnw=self.nnw,
                                             delete=self.par['postproc']['detection']['delete'],
                                             log=self.par['postproc']['detection']['log'],
                                             phot_apertures=self.par['postproc']['detection']['phot_apertures'],
