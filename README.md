@@ -56,8 +56,8 @@ The Python Imaging and Photometry Reduction Pipeline.
 Note that this package uses many bookkeeping stuff from PyPeIt, 
 so it will look familiar to those PyPeIt funs when running the scripts. 
 Since it is not easy to import those bookkeeping related functions directly from PyPeIt, 
-we copied it into this package, however, the copyright of all these functions 
-belong to the PyPeIt team. 
+we copied and modified them into this package. The copyright of these functions 
+belongs to the PyPeIt team. 
 
 https://github.com/pypeit/PypeIt
 
