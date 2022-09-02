@@ -1,6 +1,7 @@
 """
 Module for Keck/LRIS
 
+Modified from PyPeIt.
 """
 import os
 import glob,gc

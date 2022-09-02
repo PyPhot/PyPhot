@@ -5,6 +5,9 @@
 # -*- coding: utf-8 -*-
 """
 This script generates files to setup a PyPhot run
+
+Modified from PyPeIt.
+
 """
 import os
 from pyphot.cameras import available_cameras

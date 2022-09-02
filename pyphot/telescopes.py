@@ -1,6 +1,8 @@
 # encoding: utf-8
 """
 Define the telescopes parameters used by pyphot.
+
+Bookkeeping from PyPeIt
 """
 
 from pyphot.par.pyphotpar import TelescopePar

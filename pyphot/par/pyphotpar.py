@@ -3,6 +3,8 @@
 Defines parameter sets used to set the behavior for core pyphot
 functionality.
 
+Modified from PyPeIt
+
 For more details on the full parameter hierarchy and a tabulated
 description of the keywords in each parameter set, see :ref:`pyphotpar`.
 

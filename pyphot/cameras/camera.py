@@ -1,29 +1,7 @@
 """
-Defines the abstract :class:`~pypeit.spectrographs.spectrograph.Spectrograph`
+Modified from PyPeIT :class:`~pypeit.spectrographs.spectrograph.Spectrograph`
 class, which is the parent class for all instruments served by ``PypeIt``.
 
-The key functionality of this base class and its derived classes are to
-provide instrument-specific:
-
-    - file I/O routines
-    - detector properties (see
-      :class:`~pypeit.images.detector_container.DetectorContainer`)
-    - telescope properties (see :class:`~pyphot.par.pyphotpar.TelescopePar`)
-    - fits header keywords that are collated and injested into a metadata
-      table that it uses throughout the reduction (see
-      :class:`~pypeit.metadata.PypeItMetaData`)
-    - header keyword values to check to confirm a fits file has been taken
-      with the selected instrument
-    - default methods for automatically determining the type of each exposure
-      that ``PypeIt`` was asked to reduce
-    - header keywords to use when matching calibration frames to science
-      frames
-    - methods used to generate and/or read bad-pixel masks for an exposure
-    - default parameters for the reduction algorithms
-    - methods to access an archival sky spectrum
-
-.. include common links, assuming primary doc root is up one directory
-.. include:: ../include/links.rst
 """
 
 from abc import ABCMeta

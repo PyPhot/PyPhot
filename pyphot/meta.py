@@ -3,9 +3,7 @@ Provides methods common to :class:`pypeit.metadata.PypeItMetaData` and
 :class:`pypeit.spectographs.spectrograph.Spectrograph` that define the
 common metadata used for all specrographs.
 
-.. include common links, assuming primary doc root is up one directory
-.. include:: ../include/links.rst
-
+Bookkeeping from PyPeIt.
 """
 
 import numpy as np

@@ -1,7 +1,7 @@
 """
 Routines for matching frames to certain types or each other.
 
-.. include:: ../include/links.rst
+Bookkeeping from PyPeIt.
 """
 
 

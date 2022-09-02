@@ -1,8 +1,7 @@
 """
 Provides a class that handles the fits metadata required by PyPhot.
 
-.. include common links, assuming primary doc root is up one directory
-.. include:: ../include/links.rst
+Bookkeeping from PyPeIt.
 """
 import os
 import io

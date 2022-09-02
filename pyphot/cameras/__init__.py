@@ -1,3 +1,6 @@
+'''
+Bookkeeping from PyPeIt.
+'''
 
 from pyphot.cameras import camera
 
