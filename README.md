@@ -1,6 +1,6 @@
 # PyPhot
 
-The Python Imaging and Photometry Reduction Pipeline.
+The Python Imaging and Photometry Reduction Pipeline. 
 
 # Instruments Served
 * CFHT/WIRCam
@@ -53,12 +53,17 @@ The Python Imaging and Photometry Reduction Pipeline.
 * photutils
 * scipy
 
+Note that this package uses many bookkeeping stuff from PyPeIt, 
+so it will look familiar to those PyPeIt funs when running the scripts. 
+Since it is not easy to import those bookkeeping related functions directly from PyPeIt, 
+we copied and modified them into this package. The copyright of these functions 
+belongs to the PyPeIt team. 
+
+https://github.com/pypeit/PypeIt
 
 # License (BSD-3)
 
-(see `LICENSE.rst`)
-
-Copyright (c) 2018-2019, PyPhot Developers All rights reserved.
+Copyright (c) 2021-2022, PyPhot Developers All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -71,7 +76,7 @@ met:
    notice, this list of conditions and the following disclaimer in the
    documentation and/or other materials provided with the distribution.
 
- - Neither the name of the Astropy Team nor the names of its
+ - Neither the name of the Team nor the names of its
    contributors may be used to endorse or promote products derived from
    this software without specific prior written permission.
 

@@ -1,5 +1,6 @@
 """
 Camera utility methods.
+Bookkeeping from PyPeIt.
 """
 
 from pyphot import cameras

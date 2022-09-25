@@ -1,7 +1,7 @@
 """
 Module for Keck NIRES slit view camera
 
-.. include:: ../include/links.rst
+Modified from PyPeIt.
 """
 import glob
 

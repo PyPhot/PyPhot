@@ -5,6 +5,8 @@
 # -*- coding: utf-8 -*-
 """
 This script enables the viewing of a raw FITS file
+
+Modified from PyPeIt.
 """
 
 def parse_args(options=None, return_parser=False):

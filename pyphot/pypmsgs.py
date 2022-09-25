@@ -1,9 +1,7 @@
 """
 Module for terminal and file logging.
 
-.. todo::
-    Why not use pythons native logging package?
-
+Bookkeeping from PyPeIt.
 """
 import sys
 import getpass

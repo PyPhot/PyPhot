@@ -5,6 +5,8 @@
 # -*- coding: utf-8 -*-
 """
 This script runs PyPhot
+
+Modified from PyPeIt.
 """
 
 from pyphot import msgs

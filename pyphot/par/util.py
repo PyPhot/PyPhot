@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Utility functions for PyPhot parameter sets
+
+Bookkeeping from PyPeIt.
 """
 import os
 import time

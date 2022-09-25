@@ -1,3 +1,7 @@
+"""
+Bookkeeping from PyPeIt.
+"""
+
 import inspect
 
 

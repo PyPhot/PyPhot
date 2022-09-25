@@ -3,16 +3,9 @@
 """
 Base class for handling bit masks.
 
-Class usage examples
---------------------
+Bookkeeping from PyPeIt.
 
-.. include:: ../include/bitmask_usage.rst
-
-----
-
-.. include common links, assuming primary doc root is up one directory
-.. include:: ../include/links.rst
-
+ToDo: Not used at this moment
 """
 from IPython import embed
 import numpy

@@ -1,9 +1,7 @@
 """
 Class for organizing PyPhot setup
 
-.. include common links, assuming primary doc root is up one directory
-.. include:: ../include/links.rst
-
+Bookkeeping from PyPeIt.
 """
 import os
 import inspect

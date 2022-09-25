@@ -3,8 +3,7 @@
 """
 Define a utility base class used to hold parameters.
 
-.. include common links, assuming primary doc root is up one directory
-.. include:: ../include/links.rst
+Bookkeeping from PyPeIt.
 """
 import os
 import warnings

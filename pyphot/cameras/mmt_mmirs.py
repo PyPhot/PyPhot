@@ -1,7 +1,7 @@
 """
 Module for MMT MMIRS
 
-.. include:: ../include/links.rst
+Modified from PyPeIt
 """
 import glob
 

@@ -1,4 +1,8 @@
 """ Module for image combining
+
+Modified from PyPeIt.
+
+ToDo: Not used at this moment.
 """
 import numpy as np
 
