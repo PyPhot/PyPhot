@@ -170,7 +170,7 @@ class ProcessImagesPar(ParSet):
                  comb_cenfunc=None, comb_stdfunc=None, clip=None, comb_maxiter=None,comb_sigrej=None,
                  satpix=None, mask_proc=None, window_size=None, maskpixvar=None, mask_negative_star=None,
                  mask_vig=None, minimum_vig=None, mask_brightstar=None, brightstar_nsigma=None,brightstar_method=None,
-                 conv=None, mask_cr=None, contrast=None, use_medsky=None,
+                 erosion=None, dilation=None, conv=None, mask_cr=None, contrast=None, use_medsky=None,
                  cr_threshold=None, neighbor_threshold=None,
                  n_lohi=None, replace=None, lamaxiter=None, grow=None,
                  rmcompact=None, sigclip=None, sigfrac=None, objlim=None,
@@ -291,7 +291,7 @@ class ProcessImagesPar(ParSet):
         dtypes['mask_proc'] = bool
         descr['mask_proc'] = 'Mask bad pixels identified from detector processing'
 
-        defaults['window_size'] = (51,51)
+        defaults['window_size'] = (51, 51)
         dtypes['window_size'] = [tuple, list]
         descr['window_size'] = 'Box size for estimating large scale patterns, i.e. used for illuminating flat.'
 
@@ -303,6 +303,14 @@ class ProcessImagesPar(ParSet):
         defaults['mask_brightstar'] = True
         dtypes['mask_brightstar'] = bool
         descr['mask_brightstar'] = 'Mask bright stars?'
+
+        defaults['erosion'] = 11
+        dtypes['erosion'] = int
+        descr['erosion'] = 'erosion used for find bright star halo.'
+
+        defaults['dilation'] = 50
+        dtypes['dilation'] = int
+        descr['dilation'] = 'dilation used for mask bright star halo.'
 
         defaults['brightstar_method'] = 'sextractor'
         options['brightstar_method'] = ProcessImagesPar.valid_brightstar_methods()
@@ -472,8 +480,9 @@ class ProcessImagesPar(ParSet):
         parkeys = ['trim', 'apply_gain', 'orient',
                    'use_biasimage', 'use_overscan', 'overscan_method', 'overscan_par', 'use_darkimage',
                    'use_illumflat', 'use_pixelflat', 'use_supersky', 'use_fringe', 'mask_negative_star',
-                   'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc', 'mask_vig','minimum_vig',
-                   'window_size', 'maskpixvar', 'mask_brightstar', 'brightstar_nsigma', 'brightstar_method', 'conv',
+                   'comb_cenfunc', 'comb_stdfunc', 'comb_maxiter', 'satpix', 'n_lohi', 'replace', 'mask_proc',
+                   'mask_vig','minimum_vig', 'window_size', 'maskpixvar', 'mask_brightstar',
+                   'brightstar_nsigma', 'brightstar_method', 'erosion', 'dilation', 'conv',
                    'mask_cr','contrast','lamaxiter', 'grow', 'clip', 'comb_sigrej',
                    'rmcompact', 'sigclip', 'sigfrac', 'objlim','cr_threshold','neighbor_threshold',
                    'mask_sat', 'sat_sig', 'sat_buf', 'sat_order', 'low_thresh', 'h_thresh',

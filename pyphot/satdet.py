@@ -26,6 +26,7 @@ from skimage.feature import canny
 
 from pyphot import msgs
 
+
 def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh=0.5,
            small_edge=60, line_len=200, line_gap=75, percentile=(4.5, 93.0), verbose=True):
 
@@ -194,7 +195,7 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
                             x_low, x_high = np.min(xx), np.max(xx)
                         y_low, y_high = np.min(yy), np.max(yy)
                         this_mask_rotate[y_low:y_high+1, x_low:x_high+1] = True
-                        n_satellite +=1
+                        n_satellite += 1
                     else:
                         # ToDo: Currently I assume that one trail per group.
                         # and simply copyed the above codes here.
@@ -209,7 +210,7 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
                             x_low, x_high = np.min(xx), np.max(xx)
                         y_low, y_high = np.min(yy), np.max(yy)
                         this_mask_rotate[y_low:y_high+1, x_low:x_high+1] = True
-                        n_satellite +=1
+                        n_satellite += 1
 
                         ## ToDo: developing should start from here.
                         #msgs.work('TBD.')
@@ -219,7 +220,8 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
                         #this_result_rotate = this_result_rotate[this_sort,:,:]
 
                     ## rotate the mask back and return
-                    this_mask = transform.rotate(this_mask_rotate, -this_deg, resize=True, order=order)
+                    this_mask = transform.rotate(this_mask_rotate.astype(int), -this_deg, resize=True, order=order)
+                    this_mask = this_mask.astype(bool)
 
                     ix0 = (this_mask.shape[1] - image.shape[1]) / 2
                     iy0 = (this_mask.shape[0] - image.shape[0]) / 2
@@ -241,6 +243,7 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
         if verbose:
             msgs.info('No satellite trail was identified.')
         return np.zeros_like(image, dtype='bool')
+
 
 def _get_valid_indices(shape, ix0, ix1, iy0, iy1):
     """Give array shape and desired indices, return indices that are
@@ -326,4 +329,4 @@ def _rotate_point(point, angle, ishape, rshape, reverse=False):
     newx = newx + xrhalf
     newy = newy + yrhalf
 
-    return (newx, newy)
+    return newx, newy

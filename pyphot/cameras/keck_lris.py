@@ -93,6 +93,7 @@ class KeckLRISCamera(camera.Camera):
         msgs.warn('Cannot determine if frames are of type {0}.'.format(ftype))
         return np.zeros(len(fitstbl), dtype=bool)
 
+
 class KeckLRISBCamera(KeckLRISCamera):
     """
     Child to handle LBC_B specific code
@@ -199,7 +200,8 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
 
         # Background type for image processing
-        par['scienceframe']['process']['use_medsky'] = True
+        par['scienceframe']['process']['use_medsky'] = False
+        par['scienceframe']['process']['back_size'] = (51, 51)
         #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
         #par['scienceframe']['process']['back_type'] = 'median'
 
@@ -537,6 +539,7 @@ class KeckLRISBCamera(KeckLRISCamera):
 
         return bpm_img
 
+
 class KeckLRISRCamera(KeckLRISCamera):
     """
     Child to handle Keck LRIS Red specific code
@@ -708,7 +711,8 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['minimum_vig'] = 0.1
 
         # Background type for image processing
-        par['scienceframe']['process']['use_medsky'] = True
+        par['scienceframe']['process']['use_medsky'] = False
+        par['scienceframe']['process']['back_size'] = (51, 51)
         #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
         #par['scienceframe']['process']['back_type'] = 'median'
         par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
@@ -879,7 +883,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det={:} on LBCB".format(det))
+        msgs.info("Using hard-coded BPM for det={:} on LRIS-Red".format(det))
 
         return bpm_img
 
@@ -970,6 +974,7 @@ def lris_read_amp(inp, ext):
         postdata = np.fliplr(postdata)
 
     return data, predata, postdata, x1, y1
+
 
 def loadjson(filename):
     """ Load a python object saved with savejson."""

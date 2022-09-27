@@ -1,3 +1,7 @@
+0.6.0dev (2022-09-52)
+---------------------
+- Improve bright star mask using scipy.ndimage
+
 0.5.0 (2022-05-24)
 ------------------
 - Add inverse variance map which includes photon noise

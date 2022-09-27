@@ -20,6 +20,7 @@ from pyphot.photometry import mask_bright_star, photutils_detect, BKG2D
 from pyphot.procimg import grow_masked
 from pyphot.psf import  psf
 
+
 def reject_outlier_objects(sci_files, ref_pos, n_process=1):
     '''
     Reject outlier pixels based on SExtractor OBJECTS check images.
@@ -56,6 +57,7 @@ def reject_outlier_objects(sci_files, ref_pos, n_process=1):
         p.join()
 
     work_queue = None
+
 
 def reject_outlier_objects_one(this_sci_file, ref_pos):
     '''
@@ -110,17 +112,19 @@ def reject_outlier_objects_one(this_sci_file, ref_pos):
     this_wht.close()
     gc.collect()
 
+
 def _reject_outlier_objects_worker(work_queue, ref_pos):
     while not work_queue.empty():
         this_sci_file = work_queue.get()
         reject_outlier_objects_one(this_sci_file, ref_pos)
 
+
 def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coadddir, weight_type='MAP_WEIGHT',
-          rescale_weights=False, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
+          rescale_weights=True, combine_type='median', clip_ampfrac=0.3, clip_sigma=4.0, blank_badpixels=False,
           subtract_back= False, back_type='AUTO', back_default=0.0, back_size=100, back_filtersize=3,
           back_filtthresh=0.0, resampling_type='LANCZOS3', coadd_subtract_back=True,
           coadd_back_type='sextractor', maskbrightstar_method='sextractor', brightstar_nsigma=3., grow=1.5,
-          back_maxiters=5, back_sigclip=3., sextask='sex', sexconv='sex', sexnnw='sex',
+          erosion=11, dilation=50, back_maxiters=5, back_sigclip=3., sextask='sex', sexconv='sex', sexnnw='sex',
           sexconfig=None, sexparams=None, reject_outlier=True, n_process=1, delete=True, log=True):
 
     ## configuration for the Swarp run and do the coadd with Swarp
@@ -263,7 +267,7 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
         bpm = np.logical_or(fits.getdata(coadd_wht_file, memmap=False)<=0., bpm_zero)
         starmask = mask_bright_star(par[0].data, mask=bpm, brightstar_nsigma=brightstar_nsigma, back_nsigma=back_sigclip,
                                     back_maxiters=back_maxiters, method=maskbrightstar_method, task=sextask,
-                                    conv=sexconv, verbose=True)
+                                    conv=sexconv, erosion=erosion, dilation=dilation, verbose=True)
         starmask = grow_masked(starmask, grow, verbose=True)
 
         bkg, _ = BKG2D(par[0].data, back_size, mask=np.logical_or(bpm, starmask), filter_size=back_filtersize,
@@ -275,6 +279,7 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
         par.writeto(coadd_file, overwrite=True)
 
     return coadd_file, coadd_wht_file, coadd_flag_file, coadd_ivar_file
+
 
 def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_image=None, rms_image=None,
            workdir='./', detection_method='sextractor', zpt=0.,
@@ -417,6 +422,7 @@ def detect(sci_image, outroot=None, flag_image=None, weight_image=None, bkg_imag
         phot_table, phot_rmsmap, phot_bkgmap =  None, None, None
 
     return phot_table, phot_rmsmap, phot_bkgmap
+
 
 def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.],
            oversize=1.0, external_flag=True, FLXSCALE=1.0, FLASCALE=1.0,
@@ -598,6 +604,7 @@ def calzpt(catalogfits, refcatalog='Panstarrs', primary='i', secondary='z', coef
 
     return zp, zp_std, nstar, catalog[matched]
 
+
 def _cal_chip(cat_fits, sci_fits=None, ref_fits=None, outqa_root=None, ZP=25.0, external_flag=True,
               refcatalog='Panstarrs', primary='i', secondary='z', coefficients=[0.,0.,0.],
               nstar_min=10, pixscale=None, verbose=True):
@@ -674,6 +681,7 @@ def _cal_chip(cat_fits, sci_fits=None, ref_fits=None, outqa_root=None, ZP=25.0, 
         fwhm = 0
 
     return zp_this, zp_this_std, nstar, fwhm
+
 
 def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_list=None, n_process=4,
               ZP=25.0, external_flag=True, refcatalog='Panstarrs', primary='i', secondary='z',
@@ -769,6 +777,7 @@ def cal_chips(cat_fits_list, sci_fits_list=None, ref_fits_list=None, outqa_root_
 
     return zp_all, zp_std_all, nstar_all, fwhm_all
 
+
 def _cal_chip_worker(work_queue,  out_tbl_name, ZP=25.0, external_flag=True, refcatalog='Panstarrs',
                      primary='i', secondary='z', coefficients=[0.,0.,0.], nstar_min=10, pixscale=None, verbose=False):
 
@@ -852,6 +861,8 @@ class PostProc():
         # Bright star mask and background subtraction parameters that will be used for coadd image background subtraction
         self.brightstar_nsigma = self.par['scienceframe']['process']['brightstar_nsigma']
         self.maskbrightstar_method = self.par['scienceframe']['process']['brightstar_method']
+        self.erosion = self.par['scienceframe']['process']['erosion']
+        self.dilation = self.par['scienceframe']['process']['dilation']
         self.grow = self.par['scienceframe']['process']['grow']
         self.coadd_back_type = self.par['scienceframe']['process']['back_type']
         self.back_maxiters = self.par['scienceframe']['process']['back_maxiters']
@@ -1451,7 +1462,8 @@ class PostProc():
                                                         coadd_subtract_back=self.par['postproc']['coadd']['coadd_subtract_back'],
                                                         coadd_back_type=self.coadd_back_type,
                                                         maskbrightstar_method=self.maskbrightstar_method,
-                                                        brightstar_nsigma=self.brightstar_nsigma, grow=self.grow,
+                                                        brightstar_nsigma=self.brightstar_nsigma,
+                                                        erosion=self.erosion, dilation=self.dilation, grow=self.grow,
                                                         back_maxiters=self.back_maxiters, back_sigclip=self.back_sigclip,
                                                         sextask=self.sextask, sexconv=self.conv, sexnnw=self.nnw,
                                                         sexconfig=self.sexconfig_det,sexparams=self.sexparams_det,

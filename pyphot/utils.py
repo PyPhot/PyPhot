@@ -20,8 +20,8 @@ from astropy.visualization import AsinhStretch, HistEqStretch, LinearStretch, Lo
 from astropy.visualization import PowerDistStretch, PowerStretch, SinhStretch, SqrtStretch
 from astropy.visualization import ImageNormalize
 
-
 from pyphot import msgs, io
+
 
 def pyplot_rcparams():
     """
@@ -46,6 +46,7 @@ def pyplot_rcparams():
     plt.rcParams["legend.fontsize"] = 12
     plt.rcParams["font.family"] = "Times New Roman"
     plt.rcParams["mathtext.default"] = "regular"
+
 
 def pyplot_rcparams_default():
     """
@@ -201,6 +202,7 @@ def fast_running_median(seq, window_size):
     result = np.roll(result, -window_size//2 + 1)
     return result[window_size:-window_size]
 
+
 def subsample(frame):
     """
     Used by LACosmic
@@ -217,6 +219,7 @@ def subsample(frame):
     coordinates = np.mgrid[slices]
     indices = coordinates.astype('i')
     return frame[tuple(indices)]
+
 
 def rebin(a, newshape):
     """
@@ -247,6 +250,7 @@ def rebin(a, newshape):
     indices = coordinates.astype('i')  # choose the biggest smaller integer index
     return a[tuple(indices)]
 
+
 # TODO This function is only used by procimg.lacosmic. Can it be replaced by above?
 def rebin_evlist(frame, newshape):
     # This appears to be from
@@ -259,6 +263,7 @@ def rebin_evlist(frame, newshape):
              [')'] + ['.sum(%d)' % (i+1) for i in range(lenShape)] + \
              ['/factor[%d]' % i for i in range(lenShape)]
     return eval(''.join(evList))
+
 
 def gain_correct(data, datasec_img, gain):
     '''
@@ -280,6 +285,7 @@ def gain_correct(data, datasec_img, gain):
         data[this_amp] *= gain[iamp]
 
     return data
+
 
 def pixel_stats(pixels, bpm=None, sigclip=3, n_clip=10, min_pix=50):
     """
@@ -305,6 +311,7 @@ def pixel_stats(pixels, bpm=None, sigclip=3, n_clip=10, min_pix=50):
         if np.sum(gpm) < min_pix or clip_iter >= n_clip:
             break
     return sky, rms
+
 
 def gauss1D(x, amplitude, mean, stddev, offset):
     return amplitude * np.exp(-((x - mean)**2 / (2*stddev**2))) + offset
@@ -360,6 +367,7 @@ def robust_curve_fit(func, xx, yy, niters=5, sigclip=3, maxiters_sigclip=5, cenf
         ii +=1
 
     return popt, pcov
+
 
 def showimage(image, header=None, outroot=None, interval_method='zscale', vmin=None, vmax=None,
               stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=False):
@@ -436,6 +444,7 @@ def showimage(image, header=None, outroot=None, interval_method='zscale', vmin=N
         plt.show()
     plt.close()
 
+
 def showimages(fitsimages, n_process=4, outroots=None, interval_method='zscale', vmin=None, vmax=None,
                stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=True):
 
@@ -480,6 +489,7 @@ def showimages(fitsimages, n_process=4, outroots=None, interval_method='zscale',
             p.join()
 
         work_queue = None
+
 
 def _showimage_worker(work_queue, interval_method='zscale', vmin=None, vmax=None,
               stretch_method='linear', cmap='gist_yarg_r', plot_wcs=True, show=False, verbose=False):
