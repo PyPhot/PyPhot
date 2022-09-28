@@ -200,10 +200,12 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
 
         # Background type for image processing
-        par['scienceframe']['process']['use_medsky'] = False
-        par['scienceframe']['process']['back_size'] = (51, 51)
+        par['scienceframe']['process']['use_medsky'] = True
+        par['scienceframe']['process']['back_size'] = (101, 101)
         #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
         #par['scienceframe']['process']['back_type'] = 'median'
+        par['scienceframe']['process']['erosion'] = 11
+        par['scienceframe']['process']['dilation'] = 61
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -711,11 +713,14 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['scienceframe']['process']['minimum_vig'] = 0.1
 
         # Background type for image processing
-        par['scienceframe']['process']['use_medsky'] = False
-        par['scienceframe']['process']['back_size'] = (51, 51)
+        par['scienceframe']['process']['use_medsky'] = True
+        par['scienceframe']['process']['back_size'] = (101, 101)
         #par['scienceframe']['process']['back_type'] = 'GlobalMedian'
         #par['scienceframe']['process']['back_type'] = 'median'
         par['scienceframe']['process']['conv'] = 'sex995' # Used for bright star mask
+        par['scienceframe']['process']['erosion'] = 11
+        par['scienceframe']['process']['dilation'] = 61
+
 
         # cosmic ray rejection
         #ToDo: Need to tweak these parameters for LRIS red.
