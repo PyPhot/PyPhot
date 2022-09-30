@@ -375,13 +375,13 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
     yy = np.random.randint(0,ny,Npositions)
     positions = wcs_info.pixel_to_world(xx, yy)
 
-    apertures = [SkyCircularAperture(positions, r= d/2*u.arcsec) for d in phot_apertures]
+    apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
     tbl_aper = aperture_photometry(variancemap, apertures, error=None, mask=None, method='exact', wcs=wcs_info)
 
     maglims = np.zeros(len(phot_apertures))
     for ii in range(len(phot_apertures)):
         flux = tbl_aper['aperture_sum_{:d}'.format(ii)]
-        mask = np.isnan(flux) | (flux==0.)
+        mask = np.isnan(flux) | (flux == 0.)
         mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
                                                          cenfunc='median', stdfunc='std')
         maglims[ii] = round(zpt - 2.5*np.log10(np.sqrt(median)*Nsigma),2)

@@ -87,6 +87,9 @@ def load_fits(fitsname):
         msgs.info('Loading HST drizzled images')
         head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
         del par[0].data
+    elif 'TELESCOP'  in par[0].header.keys():
+        if par[0].header['TELESCOP'] == 'JWST':
+            head, data, flag = par['SCI'].header, par['SCI'].data, (par['SCI'].data == 0.).astype(int)
     else:
         if len(par)==1:
             head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
