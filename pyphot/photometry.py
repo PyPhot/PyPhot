@@ -304,9 +304,9 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
 
 
 def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], Npositions=10000,
-              sigclip=3, maxiters=10, back_type='median', back_size=(200,200), back_filtersize=(3, 3),
-              maskbrightstar_method='sextractor', conv='sex', brightstar_nsigma=5, erosion=11, dilation=50,
-              sextractor_task='sex'):
+              sigclip=3, maxiters=50, back_type='median', back_size=(50, 50), back_filtersize=(3, 3),
+              maskbrightstar_method='sextractor', conv='sex', brightstar_nsigma=2, erosion=11, dilation=50,
+              sextractor_task='sex', use_sci=True):
     '''
         Estimating limiting magnitude for a given fits image
     Args:
@@ -324,6 +324,8 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
         maskbrightstar_method (str): Method for masking bright stars. Only used for science image_type
         brightstar_nsigma (int or float): Nsigma used for masking bright star. Only used for science image_type
         sextractor_task (str): how to call your sextractor, sex or sextractor? Only used for science image_type
+        use_sci (bool): do you want to use science image for estimating limit, if False it will use varinace map which seems
+        does not include correlated noise.
     Returns:
         maglims (1D numpy array): limiting magnitudes for the given apertures.
     '''
@@ -352,10 +354,11 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
                                     back_maxiters=maxiters, method=maskbrightstar_method, conv=conv,
                                     erosion=erosion, dilation=dilation, task=sextractor_task)
         mask_bkg = (flag>0) | starmask
-        _, rmsmap = BKG2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
+        bkg_map, rmsmap = BKG2D(data, back_size, mask=mask_bkg, filter_size=back_filtersize,
                           sigclip=sigclip, back_type=back_type, back_rms_type='std',
                           back_maxiters=maxiters, sextractor_task=sextractor_task)
         variancemap = rmsmap**2
+        data -= bkg_map
     elif image_type=='rms':
         msgs.info('Getting limiting magnitudes from RMS image {:}'.format(image))
         variancemap = data**2
@@ -376,7 +379,10 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
     positions = wcs_info.pixel_to_world(xx, yy)
 
     apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
-    tbl_aper = aperture_photometry(variancemap, apertures, error=None, mask=None, method='exact', wcs=wcs_info)
+    if use_sci:
+        tbl_aper = aperture_photometry(data, apertures, error=None, mask=starmask, method='exact', wcs=wcs_info)
+    else:
+        tbl_aper = aperture_photometry(variancemap, apertures, error=None, mask=None, method='exact', wcs=wcs_info)
 
     maglims = np.zeros(len(phot_apertures))
     for ii in range(len(phot_apertures)):
@@ -384,7 +390,10 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
         mask = np.isnan(flux) | (flux == 0.)
         mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
                                                          cenfunc='median', stdfunc='std')
-        maglims[ii] = round(zpt - 2.5*np.log10(np.sqrt(median)*Nsigma),2)
+        if use_sci:
+            maglims[ii] = round(zpt - 2.5*np.log10(stddev*Nsigma), 2)
+        else:
+            maglims[ii] = round(zpt - 2.5*np.log10(np.sqrt(median)*Nsigma), 2)
         msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude'.format(Nsigma, phot_apertures[ii], maglims[ii]))
 
     return maglims
