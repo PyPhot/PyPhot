@@ -86,7 +86,7 @@ class KeckLRISCamera(camera.Camera):
             return framematch.check_frame_exptime(fitstbl['exptime'], [-0.01, 0.01])
         if ftype in ['pixelflat', 'illumflat']:
             return good_exp #& (fitstbl['idname'] == 'flat') & flats
-        if ftype in ['science','supersky']:
+        if ftype in ['science','supersky', 'fringe']:
             return good_exp #& (fitstbl['idname'] == 'object')
         if ftype == 'dark':
             return good_exp & (fitstbl['idname'] == 'dark')
@@ -217,6 +217,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         par['calibrations']['pixelflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['illumflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['superskyframe']['exprng'] = [10, None]
+        par['calibrations']['fringeframe']['exprng'] = [10, None]
         par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
         ## We use dome flat for the pixel flat and thus do not need mask bright stars.
         par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
@@ -736,6 +737,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         par['calibrations']['pixelflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['illumflatframe']['exprng'] = [0.1, 10]
         par['calibrations']['superskyframe']['exprng'] = [10, None]
+        par['calibrations']['fringeframe']['exprng'] = [10, None]
         par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
         ## We use dome flat for the pixel flat and thus do not need mask bright stars.
         par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
