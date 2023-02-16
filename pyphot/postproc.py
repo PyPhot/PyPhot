@@ -150,7 +150,7 @@ def coadd(scifiles, flagfiles, ivarfiles, coaddroot, pixscale, science_path, coa
                    "BACK_SIZE": '{:},{:}'.format(back_size[0],back_size[1]),
                    "BACK_FILTERSIZE":back_filtersize,"BACK_FILTTHRESH":back_filtthresh, "RESAMPLING_TYPE":resampling_type}
 
-    if reject_outlier and combine_type !='median':
+    if reject_outlier and combine_type.upper() !='MEDIAN':
         msgs.info('Create a median image used for outlier pixel rejection.')
         warpconfig_median = swarpconfig.copy()
         warpconfig_median["COMBINE_TYPE"] = "MEDIAN"
