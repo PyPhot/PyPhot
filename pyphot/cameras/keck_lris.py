@@ -594,7 +594,7 @@ class KeckLRISRCamera(KeckLRISCamera):
         # Date of Mark4 installation
         t2021_upgrade = Time("2021-04-15", format='isot')
         # TODO -- Update with the date we transitioned to the correct ones
-        t_gdhead = Time("2023-01-01", format='isot')
+        t_gdhead = Time("2025-01-01", format='isot')
         date = Time(hdu[0].header['MJD'], format='mjd')
 
         if date < t2021_upgrade:
