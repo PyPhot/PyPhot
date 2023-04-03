@@ -243,6 +243,7 @@ def photutils_detect(data, wcs_info=None, rmsmap=None, bkgmap=None, mask=None,
 
     return tbl, rmsmap, bkgmap
 
+
 def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_maxiters=10, npixels=5, fwhm=5,
                      method='sextractor', conv='sex', task='sex', verbose=True):
 
@@ -293,6 +294,7 @@ def mask_bright_star(data, mask=None, brightstar_nsigma=3, back_nsigma=3, back_m
         gc.collect()
 
     return mask
+
 
 def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], Npositions=10000,
               sigclip=3, maxiters=10, back_type='median', back_size=(200,200), back_filtersize=(3, 3),
@@ -377,7 +379,20 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
         maglims[ii] = round(zpt - 2.5*np.log10(np.sqrt(median)*Nsigma),2)
         msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude'.format(Nsigma, phot_apertures[ii], maglims[ii]))
 
+    # measure the limit based on science image
+    if image_type == 'science':
+        tbl_aper = aperture_photometry(data, apertures, error=None, mask=mask_bkg, method='exact', wcs=wcs_info)
+        maglims_sci = np.zeros(len(phot_apertures))
+        for ii in range(len(phot_apertures)):
+            flux = tbl_aper['aperture_sum_{:d}'.format(ii)]
+            mask = np.isnan(flux) | (flux==0.)
+            mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
+                                                             cenfunc='median', stdfunc='std')
+            maglims_sci[ii] = round(zpt - 2.5*np.log10(np.sqrt(stddev)*Nsigma), 2)
+            msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude from SCI'.format(Nsigma, phot_apertures[ii], maglims[ii]))
+
     return maglims
+
 
 def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
 
@@ -458,6 +473,7 @@ def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
         Table_Merged.write(outfile, format='fits', overwrite=True)
 
     return Table_Merged
+
 
 def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], image_ids=None,
                    flux_no_flagpix=False, effective_gains=None, zero_points=None, outfile=None):
@@ -611,6 +627,7 @@ def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertu
         Table_Forced.write(outfile,format='fits', overwrite=True)
 
     return Table_Forced
+
 
 def ForcedAperPhot_OLD(catalogs, images, rmsmaps, flagmaps, outfile=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], cat_ids=None, unique_dist=1.0):
 
