@@ -389,7 +389,7 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
             mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
                                                              cenfunc='median', stdfunc='std')
             maglims_sci[ii] = round(zpt - 2.5*np.log10(np.sqrt(stddev)*Nsigma), 2)
-            msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude from SCI'.format(Nsigma, phot_apertures[ii], maglims[ii]))
+            msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude from SCI'.format(Nsigma, phot_apertures[ii], maglims_sci[ii]))
 
     return maglims
 
