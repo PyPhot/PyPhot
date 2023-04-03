@@ -380,16 +380,16 @@ def mag_limit(image, Nsigma=5, image_type='science', zero_point=None, phot_apert
         msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude'.format(Nsigma, phot_apertures[ii], maglims[ii]))
 
     # measure the limit based on science image
-    if image_type == 'science':
-        tbl_aper = aperture_photometry(data, apertures, error=None, mask=mask_bkg, method='exact', wcs=wcs_info)
-        maglims_sci = np.zeros(len(phot_apertures))
-        for ii in range(len(phot_apertures)):
-            flux = tbl_aper['aperture_sum_{:d}'.format(ii)]
-            mask = np.isnan(flux) | (flux==0.)
-            mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
-                                                             cenfunc='median', stdfunc='std')
-            maglims_sci[ii] = round(zpt - 2.5*np.log10(np.sqrt(stddev)*Nsigma), 2)
-            msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude from SCI'.format(Nsigma, phot_apertures[ii], maglims_sci[ii]))
+    #if image_type == 'science':
+    #    tbl_aper = aperture_photometry(data, apertures, error=None, mask=mask_bkg, method='exact', wcs=wcs_info)
+    #    maglims_sci = np.zeros(len(phot_apertures))
+    #    for ii in range(len(phot_apertures)):
+    #        flux = tbl_aper['aperture_sum_{:d}'.format(ii)]
+    #        mask = np.isnan(flux) | (flux==0.)
+    #        mean, median, stddev = stats.sigma_clipped_stats(flux, mask=mask, sigma=sigclip, maxiters=maxiters,
+    #                                                         cenfunc='median', stdfunc='std')
+    #        maglims_sci[ii] = round(zpt - 2.5*np.log10(np.sqrt(stddev)*Nsigma), 2)
+    #        msgs.info('The {:}-sigma limit for {:} arcsec diameter aperture is {:0.2f} magnitude from SCI'.format(Nsigma, phot_apertures[ii], maglims_sci[ii]))
 
     return maglims
 
