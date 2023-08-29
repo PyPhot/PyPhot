@@ -476,7 +476,7 @@ def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
 
 
 def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertures=[1.0,2.0,3.0,4.0,5.0], image_ids=None,
-                   flux_no_flagpix=False, effective_gains=None, zero_points=None, outfile=None):
+                   flux_no_flagpix=False, effective_gains=None, zero_points=None, outfile=None, total_err=True):
 
 
     # If images is a string name, make it to a list
@@ -560,7 +560,10 @@ def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertu
             mask = error<=0.
 
         ## Get the total error, i.e. including both background noise and photon noise
-        total_error = calc_total_error(data, error, gain)
+        if total_err:
+            total_error = calc_total_error(data, error, gain)
+        else:
+            total_error = error
 
         ## Set up apertures
         apertures = [SkyCircularAperture(positions, r=d/2*u.arcsec) for d in phot_apertures]
