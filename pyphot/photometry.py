@@ -560,7 +560,11 @@ def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertu
             mask = error<=0.
 
         ## Get the total error, i.e. including both background noise and photon noise
-        if total_err:
+        if isinstance(total_err, bool):
+            this_total = total_err
+        else:
+            this_total = total_err[ii]
+        if this_total:
             total_error = calc_total_error(data, error, gain)
         else:
             total_error = error
