@@ -406,14 +406,17 @@ def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
     Table0 = Table.read(catalogs[0], 2)
     Table_Merged = Table()
     Table_Merged['DET_CAT_ID'] = [cat_ids[0]]*len(Table0)
-    try:
+    if 'RA' in Table0.keys() and 'DEC' in Table0.keys():
+        Table_Merged['RA'] = Table0['RA']
+        Table_Merged['DEC'] = Table0['DEC']
+    elif 'ALPHA_J2000' in Table0.keys() and 'DELTA_J2000' in Table0.keys():
         Table_Merged['RA'] = Table0['ALPHA_J2000']
         Table_Merged['DEC'] = Table0['DELTA_J2000']
-    except:
+    else:
         Table_Merged['RA'] = Table0['sky_centroid_icrs.ra']
         Table_Merged['DEC'] = Table0['sky_centroid_icrs.dec']
 
-    for icat in range(1,ncat):
+    for icat in range(1, ncat):
         table_icat = Table.read(catalogs[icat], 2)
         table_icat['DET_CAT_ID'] = cat_ids[icat]
 
@@ -421,10 +424,15 @@ def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
         pos1[:, 0], pos1[:, 1] = Table_Merged['RA'],Table_Merged['DEC']
 
         pos2 = np.zeros((len(table_icat), 2))
-        try:
-            pos2[:, 0], pos2[:, 1] = table_icat['ALPHA_J2000'],table_icat['DELTA_J2000']
-        except:
-            pos2[:, 0], pos2[:, 1] = table_icat['sky_centroid_icrs.ra'],table_icat['sky_centroid_icrs.dec']
+        if 'RA' in table_icat.keys() and 'DEC' in table_icat.keys():
+            pos2[:, 0] = table_icat['RA']
+            pos2[:, 1] = table_icat['DEC']
+        elif 'ALPHA_J2000' in table_icat.keys() and 'DELTA_J2000' in table_icat.keys():
+            pos2[:, 0] = table_icat['ALPHA_J2000']
+            pos2[:, 1] = table_icat['DELTA_J2000']
+        else:
+            pos2[:, 0] = table_icat['sky_centroid_icrs.ra']
+            pos2[:, 1] = table_icat['sky_centroid_icrs.dec']
 
         ## cross-match with pos2 as the left table and pos1 as the right table
         ## i.e. For every pos2 target, we will check whether it has a counterpart in pos1
@@ -448,10 +456,15 @@ def mergecat(catalogs, outfile=None, cat_ids=None, unique_dist=1.0):
     for icat in range(ncat):
         table_icat = Table.read(catalogs[icat], 2)
         pos2 = np.zeros((len(table_icat), 2))
-        try:
-            pos2[:, 0], pos2[:, 1] = table_icat['ALPHA_J2000'],table_icat['DELTA_J2000']
-        except:
-            pos2[:, 0], pos2[:, 1] = table_icat['sky_centroid_icrs.ra'],table_icat['sky_centroid_icrs.dec']
+        if 'RA' in table_icat.keys() and 'DEC' in table_icat.keys():
+            pos2[:, 0] = table_icat['RA']
+            pos2[:, 1] = table_icat['DEC']
+        elif 'ALPHA_J2000' in table_icat.keys() and 'DELTA_J2000' in table_icat.keys():
+            pos2[:, 0] = table_icat['ALPHA_J2000']
+            pos2[:, 1] = table_icat['DELTA_J2000']
+        else:
+            pos2[:, 0] = table_icat['sky_centroid_icrs.ra']
+            pos2[:, 1] = table_icat['sky_centroid_icrs.dec']
 
         ## cross-match with unique_dist, we will use pos1 as the left table and pos2 as the right table this time
         ## i.e. we will check  for every targets in pos1 to see whether it has a counterparts in pos2
