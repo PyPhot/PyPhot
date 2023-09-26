@@ -6,6 +6,8 @@ import astropy
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
+from astropy.wcs import WCS
+from astropy import units as u
 
 import multiprocessing
 from multiprocessing import Process, Queue
@@ -83,7 +85,17 @@ def save_fits(fitsname, data, header, img_type, mask=None, overwrite=True):
 
 def load_fits(fitsname):
     par = fits.open(fitsname, memmap=False)
-    if 'PROD_VER' in par[0].header.keys():
+    if 'TELESCOP' in par[0].header.keys():
+        if 'JWST' in par[0].header['TELESCOP']:
+            head = par[1].header
+            wcsinfo = WCS(head)
+            pix_area = wcsinfo.proj_plane_pixel_area().to('arcsec^2').value
+            # calculate zeropoint directly
+            zpt = -2.5 * np.log10(pix_area / u.steradian.to('arcsec^2') * 1e6) + 8.9
+            head['ZP'] = zpt
+            data = par[1].data
+            flag = (par[2].data<=0).astype('int32')
+    elif 'PROD_VER' in par[0].header.keys():
         msgs.info('Loading HST drizzled images')
         head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
         del par[0].data
