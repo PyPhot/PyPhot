@@ -95,6 +95,10 @@ def load_fits(fitsname):
             head['ZP'] = zpt
             data = par[1].data
             flag = (par[2].data<=0).astype('int32')
+        elif 'HST' in par[0].header['TELESCOP']:
+            msgs.info('Loading HST drizzled images')
+            head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data, dtype='int32')
+            del par[0].data
     elif 'PROD_VER' in par[0].header.keys():
         msgs.info('Loading HST drizzled images')
         head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
