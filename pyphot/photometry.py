@@ -13,17 +13,17 @@ from astropy.convolution import Gaussian2DKernel
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 
-from photutils import detect_sources
-from photutils import deblend_sources
+from photutils.segmentation import detect_sources
+from photutils.segmentation import deblend_sources
 #from photutils import source_properties
 from photutils.utils import calc_total_error
-from photutils import SkyCircularAperture
-from photutils import aperture_photometry
+from photutils.aperture import SkyCircularAperture
+from photutils.aperture import aperture_photometry
 from photutils.segmentation import SourceCatalog
 
-from photutils import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgroundRMS
-from photutils import Background2D, MeanBackground, MedianBackground, SExtractorBackground
-from photutils import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
+from photutils.background import StdBackgroundRMS, MADStdBackgroundRMS, BiweightScaleBackgroundRMS
+from photutils.background import Background2D, MeanBackground, MedianBackground, SExtractorBackground
+from photutils.background import MMMBackground, BiweightLocationBackground, ModeEstimatorBackground
 
 from pyphot import msgs, sex, io, utils
 from pyphot import crossmatch
