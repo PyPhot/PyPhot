@@ -190,8 +190,11 @@ class MagellanLDSS3Camera(camera.Camera):
         par['scienceframe']['process']['objlim'] = 2.0
 
         # astrometry
-        par['postproc']['astrometry']['mosaic'] = True
-        par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
+        # Set group to False given the uncertain RA/DEC in fits header (i.e., the RA/DEC is not updated
+        # the operator doing some manual telescope offset for getting a good guide star).
+        par['postproc']['astrometry']['group'] = False
+        par['postproc']['astrometry']['mosaic'] = False
+        par['postproc']['astrometry']['mosaic_type'] = 'LOOSE'
         par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
         par['postproc']['astrometry']['astrefmag_limits'] = [18, 21]
         par['postproc']['astrometry']['detect_thresh'] = 10
@@ -426,6 +429,8 @@ class MagellanLDSS3Camera(camera.Camera):
             head1.append(header_wcs.cards[i])
 
         #
+        head1.pop('DATASEC')
+        head1.pop('BIASSEC')
         #hdu = fits.PrimaryHDU(header=header_wcs, data=array)
         #hdu.writeto('test.fits', overwrite=True)
 
