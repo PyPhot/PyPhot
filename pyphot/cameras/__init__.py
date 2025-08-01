@@ -11,6 +11,7 @@ from pyphot.cameras import keck_nires
 from pyphot.cameras import keck_lris
 from pyphot.cameras import lbt_lbc
 from pyphot.cameras import magellan_imacs
+from pyphot.cameras import magellan_ldss3
 from pyphot.cameras import mmt_mmirs
 
 # Build the list of names for the available cameras
