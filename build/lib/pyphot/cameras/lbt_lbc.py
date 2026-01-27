@@ -1,9 +1,8 @@
 """
-Module for Magellan IMACS
+Module for LBT/LBC
 
 """
-import glob
-
+import glob,gc
 import numpy as np
 
 from astropy import wcs
@@ -14,17 +13,16 @@ from pyphot import msgs
 from pyphot import parse
 from pyphot import telescopes
 from pyphot.par import framematch
-
 from pyphot.cameras import camera
 
 
-class MagellanIMACSCamera(camera.Camera):
+class LBTLBCCamera(camera.Camera):
     """
     Child to handle Magellan/IMACS specific code
     """
-    ndet = 8
-    name = 'magellan_imacs'
-    telescope = telescopes.MagellanTelescopePar()
+    ndet = 4
+    name = 'lbt_lbc'
+    telescope = telescopes.LBTTelescopePar()
     supported = True
 
     def init_meta(self):
@@ -36,17 +34,18 @@ class MagellanIMACSCamera(camera.Camera):
         """
         self.meta = {}
         # Required (core)
-        self.meta['ra'] = dict(ext=0, card='RA')
-        self.meta['dec'] = dict(ext=0, card='DEC')
+        self.meta['ra'] = dict(ext=0, card='OBSRA')
+        self.meta['dec'] = dict(ext=0, card='OBSDEC')
         self.meta['target'] = dict(ext=0, card='OBJECT')
         self.meta['filter'] = dict(ext=0, card='FILTER')
-        self.meta['binning'] = dict(ext=0, card='BINNING', default='1x1')
+        self.meta['binning'] = dict(ext=0, card='LBCBIN', default='1x1')
 
-        self.meta['mjd'] = dict(ext=0, card=None, compound=True)
+        #self.meta['mjd'] = dict(ext=0, card=None, compound=True)
+        self.meta['mjd'] = dict(ext=0, card='MJD_OBS')
         self.meta['exptime'] = dict(ext=0, card='EXPTIME')
         self.meta['airmass'] = dict(ext=0, card='AIRMASS')
         # Extras for config and frametyping
-        self.meta['idname'] = dict(ext=0, card='EXPTYPE')
+        self.meta['idname'] = dict(ext=0, card='IMAGETYP')
 
     def compound_meta(self, headarr, meta_key):
         """
@@ -95,20 +94,21 @@ class MagellanIMACSCamera(camera.Camera):
         ## a specific column indicates whether its flat or not
         flats = np.zeros(len(fitstbl),dtype='bool')
         for i in range(len(fitstbl)):
-            if 'flat' in fitstbl[i]['idname'].lower():
+            if 'flat' in fitstbl[i]['target'].lower():
                 flats[i] = True
 
         good_exp = framematch.check_frame_exptime(fitstbl['exptime'], exprng)
+        copoint_exp = (fitstbl['target'] == 'Co-point')
         if ftype == 'bias':
-            return good_exp & (fitstbl['idname'] == 'Bias')
+            return good_exp & (fitstbl['idname'] == 'zero') & np.invert(copoint_exp)
         if ftype in ['pixelflat', 'illumflat']:
-            return good_exp  & flats #& (fitstbl['idname'] == 'Object')
-        #if ftype == 'standard':
-        #    return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
-        if ftype in ['science','supersky','fringe']:
-            return good_exp & (fitstbl['idname'] == 'Object') & np.invert(flats)
+            return good_exp & (fitstbl['idname'] == 'flat') & flats & np.invert(copoint_exp)
+        if ftype == 'standard':
+            return good_exp & (fitstbl['idname'] == 'standard') & np.invert(copoint_exp)
+        if ftype in ['science','supersky']:
+            return good_exp & (fitstbl['idname'] == 'object') & np.invert(copoint_exp)
         if ftype == 'dark':
-            return good_exp & (fitstbl['idname'] == 'Dark')
+            return good_exp & (fitstbl['idname'] == 'dark') & np.invert(copoint_exp)
         msgs.warn('Cannot determine if frames are of type {0}.'.format(ftype))
         return np.zeros(len(fitstbl), dtype=bool)
 
@@ -136,86 +136,86 @@ class MagellanIMACSCamera(camera.Camera):
             Exposure time read from the file header
         """
         # Check for file; allow for extra .gz, etc. suffix
-        raw_file = raw_file.replace('c1.fits','c{:01d}.fits'.format(det))
         fil = glob.glob(raw_file + '*')
         if len(fil) != 1:
             msgs.error("Found {:d} files matching {:s}".format(len(fil)))
 
         # Read
-        msgs.info("Reading IMACS F2 file: {:s}".format(fil[0]))
+        msgs.info("Reading LBT LBC file: {:s}".format(fil[0]))
         hdu = fits.open(fil[0], memmap=False)
-        head1 = fits.getheader(fil[0], 0)
+        head = hdu[0].header
+        head_det = hdu[det].header
 
-        # get the x and y binning factors...
         detector_par = self.get_detector_par(hdu, det if det is not None else 1)
-        ## ToDo: Need to tweak with binned data
-        xbin, ybin = parse.parse_binning(detector_par['binning'])
-
-        # Update header with an initial WCS information.
-        crpix1 = 1024/xbin
-        crpix2 = 2048/xbin
-        w = wcs.WCS(naxis=2)
-        w.wcs.crpix = [crpix1, crpix2]
-        if (head1['DEC-D']<-29.01597) & (head1['ROTANGLE']==43.85):
-            # Need to flip the WCS
-            if det>4:
-                cdelt1 = -detector_par['platescale'] * xbin / 3600.
-                cdelt2 = -detector_par['platescale'] * ybin / 3600.
-            else:
-                cdelt1 = detector_par['platescale'] * xbin / 3600.
-                cdelt2 = detector_par['platescale'] * ybin / 3600.
-            w.wcs.crval = [head1['RA-D']-head1['CHOFFX']/np.cos(head1['DEC-D']/180.* np.pi) / 3600.,
-                           head1['DEC-D']+head1['CHOFFY']/3600.]
+        '''
+        # get the x and y binning factors...
+        msgs.work('Need to tweak with binned data.')
+        if len(detector_par['binning'])<=1:
+            binning = '1,1'
         else:
-            if det>4:
-                cdelt1 = detector_par['platescale'] * xbin / 3600.
-                cdelt2 = detector_par['platescale'] * ybin / 3600.
-            else:
-                cdelt1 = -detector_par['platescale'] * xbin / 3600.
-                cdelt2 = -detector_par['platescale'] * ybin / 3600.
-            w.wcs.crval = [head1['RA-D']+head1['CHOFFX']/np.cos(head1['DEC-D']/180.*np.pi)/3600.,
-                           head1['DEC-D']-head1['CHOFFY']/3600.]
+            binning = detector_par['binning']
+        xbin, ybin = parse.parse_binning(binning)
+        '''
 
-        w.wcs.cdelt = np.array([cdelt1, cdelt2])
-        w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+        w = wcs.WCS(head_det)
         header_wcs = w.to_header()
         for i in range(len(header_wcs)):
-            head1.append(header_wcs.cards[i])
+            head.append(header_wcs.cards[i])
 
         # First read over the header info to determine the size of the output array...
-        #head1.pop('BZERO')
-        #head1.pop('BSCALE')
-        datasec = head1['DATASEC']
-        x1, x2, y1, y2 = np.array(parse.load_sections(datasec, fmt_iraf=False)).flatten()
+        datasec = head_det['DATASEC']
+        x1, x2, y1, y2 = np.array(parse.load_sections(datasec, fmt_iraf=True)).flatten()
 
-        data = hdu[detector_par['dataext']].data*1.0
-        array = data[y1-1:y2, x1-1:x2]
+        if x2>4608: # LBC occationally has reading out problem and would result in some bad rows.
+            x2=4608
+
+        ## ToDo: Check whether all data need to do the trim. It seems most of the data have problem at the edges.
+        ## Trim some edge pixels for LBT. This can be improved by providing BPM mask or mask using pixelflat,
+        ##  i.e. with maskpixvar=0.03
+        #x1, x2, y1, y2 = x1+15, x2-10, y1+5, y2-10
+        x1, x2, y1, y2 = x1+10, x2-10, y1+10, y2-10
+
+        data = hdu[det].data*1.0
+        array = data[x1:x2,y1:y2]
 
         # datasec_img and oscansec_img
         rawdatasec_img = np.ones_like(array) #* detector_par['gain'][0]
         oscansec_img = np.ones_like(array) #* detector_par['ronoise'][0]
 
+        #from IPython import embed
+        #embed()
         #from pyphot import io
-        #io.save_fits('test_c{:01d}.fits'.format(det), data, head1, 'Science', overwrite=True)
+        #head = io.initialize_header(hdr=None, primary=False)
+        #head1.pop('DATASEC')
+        #head1.pop('TRIMSEC')
+        #io.save_fits('test_c{:01d}.fits'.format(det), array, head, 'Science', overwrite=True)
 
         # Need the exposure time
         try:
             exptime = hdu[self.meta['exptime']['ext']].header[self.meta['exptime']['card']]
         except:
-            exptime = head1[self.meta['exptime']['card']]
+            exptime = head_det[self.meta['exptime']['card']]
+
+        # release the memory
+        del hdu[1].data
+        del hdu[2].data
+        del hdu[3].data
+        del hdu[4].data
+        hdu.close()
+        gc.collect()
 
         # Return, transposing array back to orient the overscan properly
-        return detector_par, array, head1, exptime, rawdatasec_img, oscansec_img
+        return detector_par, array, head, exptime, rawdatasec_img, oscansec_img
 
 
-class MagellanIMACSF2Camera(MagellanIMACSCamera):
+class LBTLBCBCamera(LBTLBCCamera):
     """
-    Child to handle IMACS/F2 specific code
+    Child to handle LBC_B specific code
     """
-    name = 'magellan_imacsf2'
-    camera = 'IMACS'
+    name = 'lbt_lbcb'
+    camera = 'LBC'
     supported = True
-    comment = 'IMACS f2 camera'
+    comment = 'LBC blue camera'
 
     def get_detector_par(self, hdu, det):
         """
@@ -243,77 +243,43 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             specaxis        = 0,
             specflip        = False,
             spatflip        = False,
-            platescale      = 0.2,
-            darkcurr        = 2.28,
+            platescale      = 0.224,
+            darkcurr        = 0.01,
             saturation      = 65535., # ADU
             nonlinear       = 0.95,
             mincounts       = -1e10,
             numamplifiers   = 1,
-            gain            = np.atleast_1d(1.56),
-            ronoise         = np.atleast_1d(5.4),
+            gain            = np.atleast_1d(1.96),
+            ronoise         = np.atleast_1d(5.2),
             )
         # Detector 2
         detector_dict2 = detector_dict1.copy()
         detector_dict2.update(dict(
             det=2,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.56),
-            ronoise         = np.atleast_1d(5.6),
+            gain            = np.atleast_1d(2.09),
+            ronoise         = np.atleast_1d(4.8),
         ))
         # Detector 3
         detector_dict3 = detector_dict1.copy()
         detector_dict3.update(dict(
             det=3,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.68),
-            ronoise         = np.atleast_1d(5.4),
+            gain            = np.atleast_1d(2.06),
+            ronoise         = np.atleast_1d(4.8),
         ))
         # Detector 4
         detector_dict4 = detector_dict1.copy()
         detector_dict4.update(dict(
             det=4,
             darkcurr=1.,
-            gain            = np.atleast_1d(1.59),
-            ronoise         = np.atleast_1d(6.8),
+            gain            = np.atleast_1d(1.98),
+            ronoise         = np.atleast_1d(5.0),
         ))
-        # Detector 5
-        detector_dict5 = detector_dict1.copy()
-        detector_dict5.update(dict(
-            det=5,
-            darkcurr=1.,
-            gain            = np.atleast_1d(1.67), #old:1.58, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(5.6),
-        ))
-        # Detector 6
-        detector_dict6 = detector_dict1.copy()
-        detector_dict6.update(dict(
-            det=6,
-            darkcurr=1.,
-            gain            = np.atleast_1d(1.70), #old:1.61, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(5.9),
-        ))
-        # Detector 7
-        detector_dict7 = detector_dict1.copy()
-        detector_dict7.update(dict(
-            det=7,
-            darkcurr=1.,
-            gain            = np.atleast_1d(1.47),#old:1.59, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(6.3),
-        ))
-        # Detector 8
-        detector_dict8 = detector_dict1.copy()
-        detector_dict8.update(dict(
-            det=8,
-            darkcurr=1.,
-            gain            = np.atleast_1d(1.53), #old:1.65, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(6.7),
-        ))
-        detectors = [detector_dict1, detector_dict2, detector_dict3, detector_dict4,
-                     detector_dict5, detector_dict6, detector_dict7, detector_dict8]
+        detectors = [detector_dict1, detector_dict2, detector_dict3, detector_dict4]
         # Return
         return detectors[det-1]
         #return dict('det{:02d}'.format(det) = detectors[det-1] )
-
 
     @classmethod
     def default_pyphot_par(cls):
@@ -335,21 +301,11 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
-        par['calibrations']['superskyframe']['process']['window_size'] = [256, 256]
+        par['scienceframe']['process']['use_fringe'] = False
+        par['calibrations']['superskyframe']['process']['window_size'] = [101, 101]
 
-        ## We use dome flat for the pixel flat and thus do not need mask bright stars.
-        par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
-
-        # Skybackground
+        # Background type for image processing
         par['scienceframe']['process']['use_medsky'] = False
-        par['scienceframe']['process']['back_size'] = [401, 401]
-
-        # Vignetting
-        par['scienceframe']['process']['mask_vig'] = True
-        par['scienceframe']['process']['minimum_vig'] = 0.3
-        #par['scienceframe']['process']['replace'] = 'zero'
-        # sometimes the guider introduce vignetting regions that cannot be fully masked with mask_vig
-        par['scienceframe']['process']['mask_negative_star'] = True
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
@@ -358,17 +314,21 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         # astrometry
         par['postproc']['astrometry']['mosaic'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
-        par['postproc']['astrometry']['astrefmag_limits'] = [18, 21]
-        par['postproc']['astrometry']['detect_thresh'] = 10
-        par['postproc']['astrometry']['analysis_thresh'] = 10
-        par['postproc']['astrometry']['detect_minarea'] = 5
+        par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 23.5] # change the bright end limit if your image is shallow
+        par['postproc']['astrometry']['astrefsn_limits'] = [7, 10.0]
+        par['postproc']['astrometry']['posangle_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 0.5
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
+        par['postproc']['astrometry']['detect_thresh'] = 20 # increasing this can improve the solution if your image is deep
+        par['postproc']['astrometry']['analysis_thresh'] = 20
+        par['postproc']['astrometry']['detect_minarea'] = 7
         par['postproc']['astrometry']['crossid_radius'] = 2
 
         # Set the default exposure time ranges for the frame typing
-        par['calibrations']['superskyframe']['exprng'] = [10, None]
-        par['calibrations']['fringeframe']['exprng'] = [10, None]
-        par['scienceframe']['exprng'] = [None, None]
+        par['calibrations']['standardframe']['exprng'] = [None, 10]
+        par['calibrations']['darkframe']['exprng'] = [None, None]
+        par['scienceframe']['exprng'] = [10, None]
 
         return par
 
@@ -392,60 +352,60 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
 
-        if self.get_meta_value(scifile, 'filter') == 'NB919':
-            # There is no need to subtract fringing for NB919.
-            # ToDo: measure the color-term using PS1 z and y bands.
-            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
-            par['postproc']['photometry']['primary'] = 'z'
-            par['postproc']['photometry']['secondary'] = 'y'
-            #par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050 on UT 03/09/2021
-            par['postproc']['photometry']['zpt'] = 24.45 # Meausred from the observations of J1526-2050 on UT 07/28/2021
-                                                         # this is the average of the mosaic. det08 has zeropoint of 24.55
-                                                         # and a range of 24.36-24.55 for all detectors
-            # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
-            # pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
-            par['postproc']['photometry']['coefficients'] = [0.015,-0.618,0.]
-            # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-            # I use z-band as a proximation for NB919. It actually does not matter since
-            # PyPhot calibrates individual chip of each exposure to the ZPT first and then coadds all chips and exposures.
-            par['postproc']['photometry']['coeff_airmass'] = 0.02
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_u':
+        # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
+        # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
+        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
+        if self.get_meta_value(scifile, 'filter') == 'SDT_Uspec':
             par['postproc']['photometry']['photref_catalog'] = 'SDSS'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 23.55
+            par['postproc']['photometry']['zpt'] = 28.13 #2.5*np.log10(2.09)+27.33
             par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.48
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_g':
+            par['postproc']['photometry']['coeff_airmass'] = 0.47 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'U-BESSEL':
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            par['postproc']['photometry']['primary'] = 'u'
+            par['postproc']['photometry']['secondary'] = 'g'
+            par['postproc']['photometry']['zpt'] = 27.03 #2.5*np.log10(2.09)+26.23
+            # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
+            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.48 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'B-BESSEL':
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            par['postproc']['photometry']['primary'] = 'g'
+            par['postproc']['photometry']['secondary'] = 'r'
+            par['postproc']['photometry']['zpt'] = 28.73 #2.5*np.log10(2.09)+27.93
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.22 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'V-BESSEL':
+            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            par['postproc']['photometry']['primary'] = 'r'
+            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['zpt'] = 28.93 #2.5*np.log10(2.09)+28.13
+            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.15 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'g-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'g'
+            #par['postproc']['photometry']['secondary'] = 'r'
+            #par['postproc']['photometry']['coefficients'] = [0., -0.086, 0.]
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'g'
             par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 27.72
             par['postproc']['photometry']['coefficients'] = [0.016, 0.160, 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.18
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_r':
+            par['postproc']['photometry']['zpt'] = 29.11 #2.5*np.log10(2.09)+28.31
+            par['postproc']['photometry']['coeff_airmass'] = 0.17 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'r'
+            #par['postproc']['photometry']['secondary'] = 'g'
+            #par['postproc']['photometry']['coefficients'] = [0., 0.016, 0.]
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 27.77
             par['postproc']['photometry']['coefficients'] = [0.002, 0.024, 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.10
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_i':
-            # There is no need to subtract fringing for i-band and other bands
-            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
-            par['postproc']['photometry']['primary'] = 'i'
-            par['postproc']['photometry']['secondary'] = 'z'
-            par['postproc']['photometry']['zpt'] = 27.53
-            par['postproc']['photometry']['coefficients'] = [0.,0.058,0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.04
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_z':
-            par['scienceframe']['process']['use_fringe'] = True # Subtract fringing if using z-band
-            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
-            par['postproc']['photometry']['primary'] = 'z'
-            par['postproc']['photometry']['secondary'] = 'y'
-            par['postproc']['photometry']['zpt'] = 26.97
-            par['postproc']['photometry']['coefficients'] = [-0.011,-0.258,0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.02
+            par['postproc']['photometry']['zpt'] = 28.55 #2.5*np.log10(2.09)+27.75, consistent with J0100, 27.67 for 1ADU/s
+            par['postproc']['photometry']['coeff_airmass'] = 0.11 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
 
         return par
 
@@ -477,9 +437,10 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
             0.
         """
         # Call the base-class method to generate the empty bpm
+        # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det={:} on IMACS".format(det))
+        msgs.info("Using hard-coded BPM for det={:} on LBCB".format(det))
 
         # Get the binning
         #hdu = fits.open(filename)
@@ -492,15 +453,14 @@ class MagellanIMACSF2Camera(MagellanIMACSCamera):
 
         return bpm_img
 
-### work in progress; add Magellan f4 
-class MagellanIMACSF4Camera(MagellanIMACSCamera):
+class LBTLBCRCamera(LBTLBCCamera):
     """
-    Child to handle IMACS/F4 specific code
+    Child to handle LBC_Rspecific code
     """
-    name = 'magellan_imacsf4'
-    camera = 'IMACS'
+    name = 'lbt_lbcr'
+    camera = 'LBC'
     supported = True
-    comment = 'IMACS f4 camera'
+    comment = 'LBC red camera'
 
     def get_detector_par(self, hdu, det):
         """
@@ -528,77 +488,43 @@ class MagellanIMACSF4Camera(MagellanIMACSCamera):
             specaxis        = 0,
             specflip        = False,
             spatflip        = False,
-            platescale      = 0.111,
-            darkcurr        = 2.28,
+            platescale      = 0.224,
+            darkcurr        = 0.01,
             saturation      = 65535., # ADU
             nonlinear       = 0.95,
             mincounts       = -1e10,
             numamplifiers   = 1,
-            gain            = np.atleast_1d(0.85),
-            ronoise         = np.atleast_1d(3.5),
+            gain            = np.atleast_1d(2.08),
+            ronoise         = np.atleast_1d(5.0),
             )
         # Detector 2
         detector_dict2 = detector_dict1.copy()
         detector_dict2.update(dict(
             det=2,
             darkcurr=1.,
-            gain            = np.atleast_1d(0.85),
-            ronoise         = np.atleast_1d(3.4),
+            gain            = np.atleast_1d(2.14),
+            ronoise         = np.atleast_1d(5.0),
         ))
         # Detector 3
         detector_dict3 = detector_dict1.copy()
         detector_dict3.update(dict(
             det=3,
             darkcurr=1.,
-            gain            = np.atleast_1d(0.81),
-            ronoise         = np.atleast_1d(3.2),
+            gain            = np.atleast_1d(2.13),
+            ronoise         = np.atleast_1d(5.3),
         ))
         # Detector 4
         detector_dict4 = detector_dict1.copy()
         detector_dict4.update(dict(
             det=4,
             darkcurr=1.,
-            gain            = np.atleast_1d(0.83),
-            ronoise         = np.atleast_1d(3.2),
+            gain            = np.atleast_1d(2.09),
+            ronoise         = np.atleast_1d(4.8),
         ))
-        # Detector 5
-        detector_dict5 = detector_dict1.copy()
-        detector_dict5.update(dict(
-            det=5,
-            darkcurr=1.,
-            gain            = np.atleast_1d(0.84), #old:1.58, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(3.5),
-        ))
-        # Detector 6
-        detector_dict6 = detector_dict1.copy()
-        detector_dict6.update(dict(
-            det=6,
-            darkcurr=1.,
-            gain            = np.atleast_1d(0.82), #old:1.61, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(3.2),
-        ))
-        # Detector 7
-        detector_dict7 = detector_dict1.copy()
-        detector_dict7.update(dict(
-            det=7,
-            darkcurr=1.,
-            gain            = np.atleast_1d(0.82),#old:1.59, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(3.2),
-        ))
-        # Detector 8
-        detector_dict8 = detector_dict1.copy()
-        detector_dict8.update(dict(
-            det=8,
-            darkcurr=1.,
-            gain            = np.atleast_1d(0.86), #old:1.65, updated based NB919 observations in May 2022
-            ronoise         = np.atleast_1d(3.5),
-        ))
-        detectors = [detector_dict1, detector_dict2, detector_dict3, detector_dict4,
-                     detector_dict5, detector_dict6, detector_dict7, detector_dict8]
+        detectors = [detector_dict1, detector_dict2, detector_dict3, detector_dict4]
         # Return
         return detectors[det-1]
         #return dict('det{:02d}'.format(det) = detectors[det-1] )
-
 
     @classmethod
     def default_pyphot_par(cls):
@@ -611,6 +537,10 @@ class MagellanIMACSF4Camera(MagellanIMACSCamera):
         """
         par = super().default_pyphot_par()
 
+        # Calibrations
+        # PyPhot default is 0.1. Use 0.03 to remove more bad pixels
+        #par['calibrations']['pixelflatframe']['process']['maskpixvar'] =0.03 # This masks too many pixels. Not set maskpixvar
+
         # Image processing steps
         turn_off = dict(use_illumflat=False, use_biasimage=False, use_overscan=False,
                         use_darkimage=False)
@@ -620,40 +550,34 @@ class MagellanIMACSF4Camera(MagellanIMACSCamera):
         par['scienceframe']['process']['use_pixelflat'] = True
         par['scienceframe']['process']['use_illumflat'] = False
         par['scienceframe']['process']['use_supersky'] = True
-        par['calibrations']['superskyframe']['process']['window_size'] = [256, 256]
+        par['scienceframe']['process']['use_fringe'] = True
 
-        ## We use dome flat for the pixel flat and thus do not need mask bright stars.
-        par['calibrations']['pixelflatframe']['process']['mask_brightstar']=False
-
-        # Skybackground
+        # Background type for image processing
         par['scienceframe']['process']['use_medsky'] = False
-        par['scienceframe']['process']['back_size'] = [401, 401]
-
-        # Vignetting
-        par['scienceframe']['process']['mask_vig'] = True
-        par['scienceframe']['process']['minimum_vig'] = 0.3
-        #par['scienceframe']['process']['replace'] = 'zero'
-        # sometimes the guider introduce vignetting regions that cannot be fully masked with mask_vig
-        par['scienceframe']['process']['mask_negative_star'] = True
 
         # cosmic ray rejection
         par['scienceframe']['process']['sigclip'] = 5.0
         par['scienceframe']['process']['objlim'] = 2.0
+        par['scienceframe']['process']['grow'] = 0.5
 
         # astrometry
         par['postproc']['astrometry']['mosaic'] = True
         par['postproc']['astrometry']['mosaic_type'] = 'UNCHANGED'
-        par['postproc']['astrometry']['astref_catalog'] = 'GAIA-EDR3'
-        par['postproc']['astrometry']['astrefmag_limits'] = [18, 21]
-        par['postproc']['astrometry']['detect_thresh'] = 10
+        par['postproc']['astrometry']['astref_catalog'] = 'PANSTARRS-1'
+        par['postproc']['astrometry']['astrefmag_limits'] = [18, 23] # change the bright end limit if your image is shallow
+        par['postproc']['astrometry']['astrefsn_limits'] = [7, 10.0]
+        par['postproc']['astrometry']['posangle_maxerr'] = 5.0
+        par['postproc']['astrometry']['position_maxerr'] = 0.5
+        par['postproc']['astrometry']['pixscale_maxerr'] = 1.1
+        par['postproc']['astrometry']['detect_thresh'] = 10 # increasing this can improve the solution if your image is deep
         par['postproc']['astrometry']['analysis_thresh'] = 10
         par['postproc']['astrometry']['detect_minarea'] = 5
         par['postproc']['astrometry']['crossid_radius'] = 2
 
         # Set the default exposure time ranges for the frame typing
-        par['calibrations']['superskyframe']['exprng'] = [10, None]
-        par['calibrations']['fringeframe']['exprng'] = [10, None]
-        par['scienceframe']['exprng'] = [None, None]
+        par['calibrations']['standardframe']['exprng'] = [None, 10]
+        par['calibrations']['darkframe']['exprng'] = [None, None]
+        par['scienceframe']['exprng'] = [10, None]
 
         return par
 
@@ -677,62 +601,115 @@ class MagellanIMACSF4Camera(MagellanIMACSCamera):
         """
         par = super().config_specific_par(scifile, inp_par=inp_par)
 
-        if self.get_meta_value(scifile, 'filter') == 'NB919':
-            # There is no need to subtract fringing for NB919.
-            # ToDo: measure the color-term using PS1 z and y bands.
-            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
-            par['postproc']['photometry']['primary'] = 'z'
-            par['postproc']['photometry']['secondary'] = 'y'
-            #par['postproc']['photometry']['zpt'] = 24.30 # Meausred from the observations of J1526-2050 on UT 03/09/2021
-            par['postproc']['photometry']['zpt'] = 24.45 # Meausred from the observations of J1526-2050 on UT 07/28/2021
-                                                         # this is the average of the mosaic. det08 has zeropoint of 24.55
-                                                         # and a range of 24.36-24.55 for all detectors
-            # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
-            # pyphot_colorterm IMACSF2-NB919 PS1-Z PS1-Y --path /Volumes/Work/Imaging/all_dr2_fits
-            par['postproc']['photometry']['coefficients'] = [0.015,-0.618,0.]
-            # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
-            # I use z-band as a proximation for NB919. It actually does not matter since
-            # PyPhot calibrates individual chip of each exposure to the ZPT first and then coadds all chips and exposures.
-            par['postproc']['photometry']['coeff_airmass'] = 0.02
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_u':
-            par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+        # https://sites.google.com/a/lbto.org/lbc/phase-ii-guidelines/sensitivities
+        # LBT gives ZP for 1 ADU/s, PyPhot use 1 e/s
+        # ZP_ADU = ZP_e - 2.5*np.log10(gain)
+        if self.get_meta_value(scifile, 'filter') == 'V-BESSEL':
+            par['postproc']['photometry']['photref_catalog'] = 'Sloan'
             par['postproc']['photometry']['primary'] = 'u'
             par['postproc']['photometry']['secondary'] = 'g'
-            par['postproc']['photometry']['zpt'] = 23.55
-            par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.48
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_g':
-            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
-            par['postproc']['photometry']['primary'] = 'g'
-            par['postproc']['photometry']['secondary'] = 'r'
-            par['postproc']['photometry']['zpt'] = 27.72
-            par['postproc']['photometry']['coefficients'] = [0.016, 0.160, 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.18
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_r':
+            par['postproc']['photometry']['zpt'] = 28.77 #2.5*np.log10(2.14)+27.94
+            # Color-term coefficients, i.e. mag = primary+c0+c1*(primary-secondary)+c1*(primary-secondary)**2
+            par['postproc']['photometry']['coefficients'] = [0.,0.,0.]
+            par['postproc']['photometry']['coeff_airmass'] = 0.16 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'R-BESSEL':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'r'
+            #par['postproc']['photometry']['secondary'] = 'g'
+            #par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'r'
             par['postproc']['photometry']['secondary'] = 'i'
-            par['postproc']['photometry']['zpt'] = 27.77
-            par['postproc']['photometry']['coefficients'] = [0.002, 0.024, 0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.10
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_i':
-            # There is no need to subtract fringing for i-band and other bands
+            par['postproc']['photometry']['coefficients'] = [-0.010,-0.218, 0.]
+            par['postproc']['photometry']['zpt'] = 28.69 #2.5*np.log10(2.14)+27.86
+            par['postproc']['photometry']['coeff_airmass'] = 0.13 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'I-BESSEL':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'i'
+            #par['postproc']['photometry']['secondary'] = 'r'
+            #par['postproc']['photometry']['coefficients'] = [0., 0., 0.]
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'i'
             par['postproc']['photometry']['secondary'] = 'z'
-            par['postproc']['photometry']['zpt'] = 27.53
+            par['postproc']['photometry']['coefficients'] = [-0.003,-0.411,0.]
+            #par['postproc']['photometry']['zpt'] = 28.42 #2.5*np.log10(2.14)+27.59
+            par['postproc']['photometry']['zpt'] = 28.56 #measured from 2020A observations of J0706
+            par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'r-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'r'
+            #par['postproc']['photometry']['secondary'] = 'i'
+            #par['postproc']['photometry']['coefficients'] = [0., -0.014, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'r'
+            par['postproc']['photometry']['secondary'] = 'i'
+            par['postproc']['photometry']['coefficients'] = [0.002, 0.024, 0.]
+            par['postproc']['photometry']['zpt'] = 28.86 #2.5*np.log10(2.14)+28.03
+            par['postproc']['photometry']['coeff_airmass'] = 0.09 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'i-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'i'
+            #par['postproc']['photometry']['secondary'] = 'z'
+            #par['postproc']['photometry']['coefficients'] = [0.,0.072, 0.]
+            par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
+            par['postproc']['photometry']['primary'] = 'i'
+            par['postproc']['photometry']['secondary'] = 'z'
             par['postproc']['photometry']['coefficients'] = [0.,0.058,0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.04
-        elif self.get_meta_value(scifile, 'filter') == 'Sloan_z':
-            par['scienceframe']['process']['use_fringe'] = True # Subtract fringing if using z-band
+            par['postproc']['photometry']['zpt'] = 28.66 #2.5*np.log10(2.14)+27.83, measured from J0100 observations
+            par['postproc']['photometry']['coeff_airmass'] = 0.03 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
+        elif self.get_meta_value(scifile, 'filter') == 'z-SLOAN':
+            #par['postproc']['photometry']['photref_catalog'] = 'SDSS'
+            #par['postproc']['photometry']['primary'] = 'z'
+            #par['postproc']['photometry']['secondary'] = 'i'
+            #par['postproc']['photometry']['coefficients'] = [0., 0.020, 0.]
             par['postproc']['photometry']['photref_catalog'] = 'Panstarrs'
             par['postproc']['photometry']['primary'] = 'z'
             par['postproc']['photometry']['secondary'] = 'y'
-            par['postproc']['photometry']['zpt'] = 26.97
+            par['postproc']['photometry']['zpt'] = 28.03 # For 1 e/s, 2.5*np.log10(2.14)+27.2, consistent with J0100, 27.25 for 1ADU/s
             par['postproc']['photometry']['coefficients'] = [-0.011,-0.258,0.]
-            par['postproc']['photometry']['coeff_airmass'] = 0.02
+            par['postproc']['photometry']['coeff_airmass'] = 0.04 # extinction, i.e. mag_real=mag_obs-coeff_airmass*(airmass-1)
 
         return par
+
+    def check_frame_type(self, ftype, fitstbl, exprng=None):
+        """
+        Check for frames of the provided type.
+
+        Args:
+            ftype (:obj:`str`):
+                Type of frame to check. Must be a valid frame type; see
+                frame-type :ref:`frame_type_defs`.
+            fitstbl (`astropy.table.Table`_):
+                The table with the metadata for one or more frames to check.
+            exprng (:obj:`list`, optional):
+                Range in the allowed exposure time for a frame of type
+                ``ftype``. See
+                :func:`pypeit.core.framematch.check_frame_exptime`.
+
+        Returns:
+            `numpy.ndarray`_: Boolean array with the flags selecting the
+            exposures in ``fitstbl`` that are ``ftype`` type frames.
+        """
+        ## a specific column indicates whether its flat or not
+        flats = np.zeros(len(fitstbl),dtype='bool')
+        for i in range(len(fitstbl)):
+            if 'flat' in fitstbl[i]['target'].lower():
+                flats[i] = True
+
+        good_exp = framematch.check_frame_exptime(fitstbl['exptime'], exprng)
+        copoint_exp = (fitstbl['target'] == 'Co-point')
+        if ftype == 'bias':
+            return good_exp & (fitstbl['idname'] == 'zero') & np.invert(copoint_exp)
+        if ftype in ['pixelflat', 'illumflat']:
+            return good_exp & (fitstbl['idname'] == 'flat') & flats & np.invert(copoint_exp)
+        if ftype == 'standard':
+            return good_exp & (fitstbl['idname'] == 'standard') & np.invert(copoint_exp)
+        if ftype in ['science','supersky','fringe']:
+            return good_exp & (fitstbl['idname'] == 'object') & np.invert(copoint_exp)
+        if ftype == 'dark':
+            return good_exp & (fitstbl['idname'] == 'dark') & np.invert(copoint_exp)
+        msgs.warn('Cannot determine if frames are of type {0}.'.format(ftype))
+        return np.zeros(len(fitstbl), dtype=bool)
 
     def bpm(self, filename, det, shape=None, msbias=None):
         """
@@ -762,9 +739,10 @@ class MagellanIMACSF4Camera(MagellanIMACSCamera):
             0.
         """
         # Call the base-class method to generate the empty bpm
+        # Call the base-class method to generate the empty bpm
         bpm_img = super().bpm(filename, det, shape=shape, msbias=msbias)
 
-        msgs.info("Using hard-coded BPM for det={:} on IMACS".format(det))
+        msgs.info("Using hard-coded BPM for det={:} on LBCR".format(det))
 
         # Get the binning
         #hdu = fits.open(filename)
@@ -776,4 +754,3 @@ class MagellanIMACSF4Camera(MagellanIMACSCamera):
         #bpm_img[:, 187 // ybin] = 1
 
         return bpm_img
-    
