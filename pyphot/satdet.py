@@ -51,7 +51,7 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
 
     # clean up the small objects, will make less noise
     morph.remove_small_objects(edge, min_size=small_edge, connectivity=8,
-                               in_place=True)
+                               out=edge)
 
     # create an array of angles from 0 to 180, exactly 0 will get bad columns
     # but it is unlikely that a satellite will be exactly at 0 degrees, so
