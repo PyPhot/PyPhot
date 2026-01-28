@@ -219,7 +219,7 @@ def satdet(image, bpm=None, sigma=3.0, buf=20, order=3, low_thresh=0.1, h_thresh
                         #this_result_rotate = this_result_rotate[this_sort,:,:]
 
                     ## rotate the mask back and return
-                    this_mask = transform.rotate(this_mask_rotate, -this_deg, resize=True, order=order)
+                    this_mask = transform.rotate(this_mask_rotate.astype(np.int32), -this_deg, resize=True, order=order)
 
                     ix0 = (this_mask.shape[1] - image.shape[1]) / 2
                     iy0 = (this_mask.shape[0] - image.shape[0]) / 2
