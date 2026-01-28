@@ -91,6 +91,8 @@ def load_fits(fitsname):
         if len(par)==1:
             head, data, flag = par[0].header, par[0].data, np.zeros_like(par[0].data,dtype='int32')
             del par[0].data
+        elif len(par) ==2:
+            head, data, flag = par[1].header, par[1].data, np.isnan(par[1].data)
         elif len(par)==3:
             head, data, flag = par[1].header, par[1].data, par[2].data
             del par[1].data

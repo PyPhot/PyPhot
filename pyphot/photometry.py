@@ -564,8 +564,8 @@ def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertu
             mag_aper[:,jj] =  -2.5*np.log10(tbl_aper['aperture_sum_{:d}'.format(jj)])
             magerr_aper[:,jj] = 2.5/np.log(10)*tbl_aper['aperture_sum_err_{:d}'.format(jj)]/tbl_aper['aperture_sum_{:d}'.format(jj)]
 
-        Table_Forced['FORCED_XCENTER_{:}'.format(image_ids[ii])] = tbl_aper['xcenter']+1*u.pix # to be consistent with SExtractor and ds9
-        Table_Forced['FORCED_YCENTER_{:}'.format(image_ids[ii])] = tbl_aper['ycenter']+1*u.pix
+        Table_Forced['FORCED_XCENTER_{:}'.format(image_ids[ii])] = tbl_aper['xcenter']+1 # to be consistent with SExtractor and ds9
+        Table_Forced['FORCED_YCENTER_{:}'.format(image_ids[ii])] = tbl_aper['ycenter']+1
         Table_Forced['FORCED_MAG_APER_{:}'.format(image_ids[ii])] = mag_aper + zpt
         Table_Forced['FORCED_MAGERR_APER_{:}'.format(image_ids[ii])] = magerr_aper
         Table_Forced['FORCED_FLUX_APER_{:}'.format(image_ids[ii])] = flux_aper
