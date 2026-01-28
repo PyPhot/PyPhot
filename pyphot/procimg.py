@@ -231,8 +231,8 @@ def _detproc_one(scifile, camera, det, science_path=None, masterbiasimg=None, ma
         io.save_fits(wht_fits_file, wht_image, header, 'WEIGHT', overwrite=True)
         msgs.info('Weight image {:} saved'.format(wht_fits_file))
         # save flag image
-        flag_image = bpm*np.int(2**0) + bpm_proc*np.int(2**1) + bpm_sat*np.int(2**2) + \
-                     bpm_zero * np.int(2**3) + bpm_nan*np.int(2**4) + bpm_vig*np.int(2**5)
+        flag_image = bpm*np.int64(2**0) + bpm_proc*np.int64(2**1) + bpm_sat*np.int64(2**2) + \
+                     bpm_zero * np.int64(2**3) + bpm_nan*np.int64(2**4) + bpm_vig*np.int64(2**5)
         io.save_fits(flag_fits_file, flag_image.astype('int32'), header, 'FLAG', overwrite=True)
         msgs.info('Flag image {:} saved'.format(flag_fits_file))
         # I save star mask here to avoid running maskbrightstar again in the future

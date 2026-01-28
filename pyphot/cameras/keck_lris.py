@@ -410,7 +410,7 @@ class KeckLRISBCamera(KeckLRISCamera):
         if det in [1, 2]:
             nx = nx // 2
             n_ext = n_ext // 2
-            det_idx = np.arange(n_ext, dtype=np.int) + (det - 1) * n_ext
+            det_idx = np.arange(n_ext, dtype=np.int64) + (det - 1) * n_ext
         elif det is None:
             det_idx = np.arange(n_ext).astype(int)
         else:

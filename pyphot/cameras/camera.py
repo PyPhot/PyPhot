@@ -271,7 +271,7 @@ class Camera:
 
         # Generate
         # TODO: Why isn't this a boolean array?
-        return np.zeros(_shape, dtype=np.int8)
+        return np.zeros(_shape, dtype=np.int64)
 
     # TODO: This both edits and returns bpm_img. Is that the behavior we want?
     def bpm_frombias(self, msbias, det, bpm_img):

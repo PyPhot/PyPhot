@@ -142,7 +142,7 @@ class MagellanIMACSCamera(camera.Camera):
             msgs.error("Found {:d} files matching {:s}".format(len(fil)))
 
         # Read
-        msgs.info("Reading IMACS F2 file: {:s}".format(fil[0]))
+        msgs.info("Reading IMACS file: {:s}".format(fil[0]))
         hdu = fits.open(fil[0], memmap=False)
         head1 = fits.getheader(fil[0], 0)
 

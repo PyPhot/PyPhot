@@ -49,6 +49,9 @@ def main(args):
     if args.camera == 'mmt_mmirs':
         gen_mmirs = mmt_mmirs.MMTMMIRSCamera()
         img = gen_mmirs.get_rawimage(args.file, args.det)[1]
+    elif args.camera == 'magellan_imacsf4':
+        gen_imacs = magellan_imacs.MagellanIMACSF4Camera()
+        img = gen_imacs.get_rawimage(args.file, args.det)[1]
     elif args.camera == 'magellan_imacsf2':
         gen_imacs = magellan_imacs.MagellanIMACSF2Camera()
         img = gen_imacs.get_rawimage(args.file, args.det)[1]
