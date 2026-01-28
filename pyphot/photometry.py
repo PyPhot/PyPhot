@@ -587,7 +587,7 @@ def ForcedAperPhot(input_table, images, rmsmaps=None, flagmaps=None, phot_apertu
             bpm_zeros = (data==0.)
             if error is not None:
                 bpm_zeros = bpm_zeros | (error==0.)
-            flag += bpm_zeros*np.int64(2**3) ## flag additional zero pixels. Not that this is consistent with the flag bit in procimg
+            flag += bpm_zeros*np.int32(2**3) ## flag additional zero pixels. Not that this is consistent with the flag bit in procimg
             ## Get the FLAG 'flux'
             flag_tbl_aper = aperture_photometry(flag, apertures, error=None, mask=None, method='center', wcs=wcs_info)
             flag_aper = np.zeros((len(tbl_aper), np.size(phot_apertures)), dtype='int32')
